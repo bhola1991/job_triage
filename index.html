@@ -1,0 +1,2260 @@
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+  :root{
+    --ink:#131A21; --panel:#19222B; --panel2:#1F2A34; --line:#2B3945;
+    --text:#E2E8ED; --muted:#7D8C99; --dim:#56656F;
+    --signal:#E8B04B; --cool:#5FA8C7; --warn:#C4634A; --good:#6FB98F;
+    /* Two channel families. Posted roles are amber, cold approaches teal.
+       Reachability moves to neutral grey so it stops competing with them. */
+    --posted:#E8B04B; --posted-dim:#4a3d22;
+    --cold:#4FB3A5;   --cold-dim:#1f3f3b;
+    --neutral:#6B7A87;
+    --live:#7FA9E8;   /* an active conversation - the most valuable state */
+    --disp:'Space Grotesk',system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,monospace;
+  }
+  *{box-sizing:border-box}
+  #app{background:var(--ink);color:var(--text);font-family:var(--disp);
+    font-size:14px;line-height:1.5;min-height:100vh;margin:0}
+  #app h1,#app h2,#app h3{margin:0;font-weight:500;letter-spacing:-0.01em}
+  .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--dim)}
+  .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
+  .spacer{flex:1}
+
+  .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+    padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
+  .topbar h1{font-size:18px}
+  .who{display:flex;align-items:center;gap:9px}
+  .av{width:30px;height:30px;border-radius:50%;background:var(--panel2);
+    border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
+    font-family:var(--mono);font-size:12px;color:var(--signal);flex-shrink:0}
+  .who .nm{font-size:13px;line-height:1.2}
+  .who .lc{font-size:11px;color:var(--muted);line-height:1.2}
+  .pill{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;
+    border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+  .pill.on{color:var(--good);border-color:#31513f}
+
+  button{font-family:var(--disp);font-size:13px;cursor:pointer;border-radius:3px;
+    border:1px solid var(--line);background:var(--panel2);color:var(--text);
+    padding:8px 13px;transition:.14s}
+  button:hover:not(:disabled){border-color:var(--signal);color:var(--signal)}
+  button:disabled{opacity:.38;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--cool);outline-offset:2px}
+  .btn-go{background:var(--signal);color:#16202a;border-color:var(--signal);font-weight:700}
+  .btn-go:hover:not(:disabled){background:#f0c163;color:#16202a;border-color:#f0c163}
+  .btn-sm{padding:5px 9px;font-size:12px}
+  .btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+
+  textarea,input[type=text],select{width:100%;background:var(--ink);color:var(--text);
+    border:1px solid var(--line);border-radius:3px;padding:9px;font-family:var(--mono);
+    font-size:12px;resize:vertical}
+  textarea:focus,input:focus,select:focus{outline:none;border-color:var(--cool)}
+  select{font-family:var(--disp);font-size:13px}
+  label.lab{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
+
+  .drop{border:1px dashed var(--line);border-radius:4px;padding:20px 14px;text-align:center;
+    color:var(--muted);font-size:12px;cursor:pointer;transition:.14s}
+  .drop:hover,.drop.over{border-color:var(--signal);color:var(--signal)}
+
+  /* ── onboarding ── */
+  .onb{max-width:680px;margin:0 auto;padding:48px 22px 80px}
+  .onb .lede{font-size:26px;line-height:1.25;margin:14px 0 10px;letter-spacing:-.02em}
+  .onb .say{color:var(--muted);margin:0 0 26px;font-size:14px}
+  .steps{display:flex;gap:0;margin-bottom:30px;border-bottom:1px solid var(--line)}
+  .stp{flex:1;padding:0 0 9px;font-size:11.5px;color:var(--dim);border-bottom:2px solid transparent;
+    font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
+  .stp.on{color:var(--signal);border-bottom-color:var(--signal)}
+  .stp.did{color:var(--good)}
+
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px}
+  .card + .card{margin-top:12px}
+  .kv{display:grid;grid-template-columns:132px 1fr;gap:8px 14px;font-size:13px}
+  .kv .k{color:var(--muted);font-size:12px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{font-size:11.5px;padding:3px 8px;border-radius:2px;background:var(--panel2);
+    border:1px solid var(--line);color:var(--muted)}
+  .chip.g{color:var(--good);border-color:#31513f}
+  .chip.r{color:var(--warn);border-color:#4d3129}
+
+  .trk{border:1px solid var(--line);border-radius:4px;padding:15px;cursor:pointer;
+    transition:.14s;background:var(--panel);margin-bottom:10px}
+  .trk:hover{border-color:var(--cool)}
+  .trk.sel{border-color:var(--signal);background:var(--panel2)}
+  .trk .tl{font-size:15px;font-weight:500;margin-bottom:4px;display:flex;align-items:center;gap:9px}
+  .trk .tw{color:var(--muted);font-size:12.5px;margin:0}
+  .tag{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;padding:2px 6px;
+    border-radius:2px;background:var(--ink);color:var(--dim);text-transform:uppercase}
+  .tag.easy{color:var(--good)} .tag.hard{color:var(--warn)} .tag.mid{color:var(--cool)}
+
+  /* ── main app ── */
+  .wrap{display:grid;grid-template-columns:288px 1fr}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  .side{border-right:1px solid var(--line);padding:18px;background:var(--panel);
+    min-height:calc(100vh - 60px)}
+  @media(max-width:900px){.side{border-right:none;border-bottom:1px solid var(--line);min-height:0}}
+  .main{padding:20px 22px 60px;min-width:0}
+  .block{margin-bottom:22px}
+  .block > .eyebrow{display:block;margin-bottom:9px}
+
+  .plotwrap{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px}
+  .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
+  svg.plot{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
+  .dot{cursor:pointer}
+  .quadlabel{font-family:var(--mono);font-size:8px;fill:var(--dim);letter-spacing:.1em}
+
+  .stats{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 22px}
+  .stat .k{font-family:var(--mono);font-size:24px;color:var(--signal);line-height:1}
+  .stat .l{font-size:11px;color:var(--muted);margin-top:3px}
+
+  .job{border:1px solid var(--line);border-left:2px solid var(--dim);border-radius:3px;
+    background:var(--panel);padding:13px 15px;margin-bottom:9px}
+  .job.hi{border-left-color:var(--signal)}
+  .job.ch-posted{border-left-color:var(--posted)}
+  .job.ch-cold{border-left-color:var(--cold)}
+  .job.ch-cold .jscore .big{color:var(--cold)}
+  .job.st-live{border-left-color:var(--live);background:linear-gradient(90deg,rgba(127,169,232,.06),transparent 40%)}
+  .job.st-due{border-left-color:var(--warn)}
+  .stage{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 7px;border-radius:2px;border:1px solid var(--line);color:var(--muted)}
+  .stage.s-new{color:var(--muted)}
+  .stage.s-sent{color:var(--neutral);border-color:#3a464f}
+  .stage.s-due{color:var(--warn);border-color:#4d3129}
+  .stage.s-live{color:var(--live);border-color:#33445f}
+  .stage.s-closed{color:var(--dim)}
+  .chn{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 7px;border-radius:2px}
+  .chn.posted{color:var(--posted);background:var(--posted-dim)}
+  .chn.cold{color:var(--cold);background:var(--cold-dim)}
+  .btn-cold{background:var(--cold);color:#0d1f1d;border-color:var(--cold);font-weight:700}
+  .btn-cold:hover:not(:disabled){background:#63c7b8;color:#0d1f1d;border-color:#63c7b8}
+
+  /* ── daily dashboard ── */
+  .sect{margin-bottom:26px}
+  .sect-h{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+  .sect-h h3{font-size:15px}
+  .sect-h .ct{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .sect-sub{color:var(--muted);font-size:12px;margin:0 0 12px}
+  .sect.live .sect-h h3{color:var(--live)}
+  .sect.due .sect-h h3{color:var(--warn)}
+
+  /* ── contacts ── */
+  .ct-row{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
+  .ct-row:first-of-type{border-top:none}
+  .ct-nm{font-size:13px}
+  .ct-meta{font-size:11px;color:var(--muted);font-family:var(--mono);word-break:break-all}
+  .ct-none{color:var(--dim);font-size:12px;padding:8px 0}
+  .log{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding:2px 0 2px 10px;margin:7px 0}
+  .log b{color:var(--text);font-weight:500}
+  .log .when{font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .job.done{opacity:.42}
+  .jrow{display:flex;gap:12px;align-items:flex-start}
+  .jt{font-size:15px;font-weight:500;margin-bottom:2px}
+  .jc{color:var(--muted);font-size:12px}
+  .jscore{text-align:right;flex-shrink:0;font-family:var(--mono)}
+  .jscore .big{font-size:19px;color:var(--signal);line-height:1}
+  .jscore .sm{font-size:10px;color:var(--dim);margin-top:2px}
+  .jreason{font-size:12px;color:var(--muted);margin:8px 0 0;font-style:italic}
+  .flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .flag{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:2px;
+    background:var(--panel2);color:var(--muted);letter-spacing:.04em}
+  .flag.g{color:var(--good)} .flag.r{color:var(--warn)}
+  .jacts{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  a.lnk{color:var(--cool);text-decoration:none;font-size:12px;font-family:var(--mono)}
+  a.lnk:hover{text-decoration:underline}
+  .bar{height:3px;background:var(--panel2);border-radius:2px;overflow:hidden;margin-top:5px}
+  .bar i{display:block;height:100%}
+
+  .empty{border:1px dashed var(--line);border-radius:4px;padding:34px 20px;text-align:center;color:var(--muted)}
+  .empty b{display:block;color:var(--text);font-size:15px;font-weight:500;margin-bottom:6px}
+  .prog{height:2px;background:var(--panel2);border-radius:1px;overflow:hidden;margin-top:8px}
+  .prog i{display:block;height:100%;background:var(--signal);transition:width .3s}
+
+  .modal{position:fixed;inset:0;background:rgba(8,12,16,.82);display:flex;
+    align-items:center;justify-content:center;padding:20px;z-index:50}
+  .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:5px;
+    max-width:620px;width:100%;max-height:84vh;overflow:auto;padding:22px}
+
+  .tabs{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--line)}
+  .tab{padding:8px 14px;font-size:13px;color:var(--muted);cursor:pointer;
+    border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab.on{color:var(--signal);border-bottom-color:var(--signal)}
+  .tab:hover{color:var(--text)}
+
+  .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
+  .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
+    border-top-color:var(--signal);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+  @keyframes sp{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div id="app"><div id="root"></div></div>
+
+<script>
+(function(){
+const $ = s => document.querySelector(s);
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const today = () => new Date().toISOString().slice(0,10);
+
+const COLS = ["title","company","location","url","description","status","date_applied",
+  "follow_up_date","hr_contact","pitch_sent","notes","source","query",
+  "ai_score","ai_reason","ai_flags","ai_confidence","ai_reachability","channel",
+  "stage","last_touch","contacts","events"];
+
+/* Pipeline stages. Deliberately few — every extra state is one more decision
+   the person has to make about a row instead of acting on it.
+     new    scored, untouched
+     sent   applied or messaged, waiting
+     live   they replied. the only state where a human is on the other end
+     closed rejected, withdrawn, or given up on
+   'due' is not stored. It is derived: sent, and the follow-up date has passed.
+   Storing it would mean rewriting rows on a timer just to keep them honest. */
+const STAGES = ["new","sent","live","closed"];
+const FOLLOWUP_DAYS = 7;
+
+/* ═══ state ═══
+   Multi-profile. Each person who uses this gets their own entry:
+   their parsed profile, their chosen track, their own job list. */
+let DB = { profiles:{}, current:null };
+let KEY  = '';           // LLM key (DeepSeek or Anthropic)
+let PROV = 'deepseek';   // 'deepseek' | 'anthropic'
+let APIFY= '';           // Apify token for live LinkedIn search
+let CHFILT = 'all';      // 'all' | 'posted' | 'cold'
+let VIEW = 'onb';        // 'onb' | 'app'
+let ONB  = { step:0, raw:'', fileName:'', parsed:null, track:null, error:'',
+             assessing:false, assessed:null, assessErr:'', wantText:'' };
+let RANGE = null, TAB = 'map', busy = false;
+
+const P = () => DB.profiles[DB.current] || null;
+
+/* ═══ storage ═══
+   Two homes. Inside Claude's artifact viewer window.storage exists and is the
+   only thing that works. Opened as a downloaded file there is no window.storage,
+   so fall back to localStorage, which works there and is blocked in the viewer.
+   Use whichever is actually available. */
+const HAS_WS = typeof window.storage !== 'undefined' && window.storage
+               && typeof window.storage.get === 'function';
+async function put(k,v){
+  if(HAS_WS){ try{ await window.storage.set(k,v); return; }catch(e){} }
+  try{ localStorage.setItem(k,v); }catch(e){ console.error('save failed',e); }
+}
+async function get(k){
+  if(HAS_WS){ try{ const r=await window.storage.get(k); return r?r.value:null; }catch(e){ return null; } }
+  try{ return localStorage.getItem(k); }catch(e){ return null; }
+}
+async function save(){ await put('triage:db', JSON.stringify(DB)); }
+async function load(){
+  try{
+    const v = await get('triage:db');
+    if(v){ const d=JSON.parse(v); DB.profiles=d.profiles||{}; DB.current=d.current||null; }
+  }catch(e){}
+  KEY   = (await get('triage:key'))   || '';
+  PROV  = (await get('triage:prov'))  || 'deepseek';
+  APIFY = (await get('triage:apify')) || '';
+}
+
+/* ═══ Apify: live LinkedIn search ═══
+   Ported from the Python scanner, same actor and same confirmed input schema.
+   Apify's REST API does send CORS headers, so this runs from the browser.
+   The token is stored locally and sent only to Apify — but it is a real
+   credential, so this file should not be shared with the token saved in it. */
+const APIFY_ACTOR = "curious_coder~linkedin-jobs-scraper";
+const APIFY_BASE  = "https://api.apify.com/v2";
+
+function buildLiUrl(query){
+  const parts = String(query).split("|");
+  const kw = encodeURIComponent(parts[0].trim());
+  const loc = (parts[1]||"").trim();
+  if(loc.toLowerCase()==="remote"){
+    // geoId 92000000 + Worldwide is LinkedIn's real "remote, any country" scope.
+    // f_WT=2 on its own has no location context and silently resolves to
+    // wherever the request appears to come from, which is why remote searches
+    // used to come back US-only.
+    return "https://www.linkedin.com/jobs/search?keywords="+kw+"&f_WT=2&geoId=92000000&location=Worldwide";
+  }
+  return "https://www.linkedin.com/jobs/search?keywords="+kw+"&location="+
+         encodeURIComponent(loc+", India");
+}
+const pick = (item,keys,contains) => {
+  const map={}; Object.keys(item).forEach(k=>map[k.toLowerCase()]=k);
+  for(const c of keys){ const k=map[c.toLowerCase()]; if(k&&item[k]) return item[k]; }
+  if(contains){ for(const lk in map){ if(lk.includes(contains)&&item[map[lk]]) return item[map[lk]]; } }
+  return "";
+};
+
+/* ═══ ATS feeds ═══
+   The best data source in the app, and the only one that costs nothing.
+
+   Most companies' careers pages are a thin shell over one of a handful of
+   applicant tracking systems, and those systems publish the underlying jobs as
+   public JSON. No key, no token, no proxy, no Apify run. These are the same
+   endpoints the careers page itself calls, so they are complete, live, and do
+   not break when someone redesigns the site.
+
+   They also solve the confidence problem: Google gives a two-line snippet, an
+   ATS feed gives the entire job description. Every row pulled this way scores
+   high-confidence instead of thin_data.
+
+   CORS: these endpoints are built to be called from customer career sites, so
+   they send permissive headers and work from the browser. If one is ever
+   blocked, it will fail as a network error, not a 4xx. */
+
+const ATS = {
+  greenhouse:{
+    label:"Greenhouse",
+    host:/(?:job-)?boards\.greenhouse\.io\/([^/?#]+)/i,
+    url:s=>`https://boards-api.greenhouse.io/v1/boards/${encodeURIComponent(s)}/jobs?content=true`,
+    parse:(d,slug)=>(d.jobs||[]).map(x=>({
+      title:x.title||"", location:(x.location&&x.location.name)||"",
+      url:x.absolute_url||"", posted:(x.updated_at||"").slice(0,10),
+      // Greenhouse returns the description HTML-encoded inside a JSON string.
+      desc:decodeHTML(String(x.content||"")), dept:((x.departments||[])[0]||{}).name||""
+    }))
+  },
+  lever:{
+    label:"Lever",
+    host:/jobs\.lever\.co\/([^/?#]+)/i,
+    url:s=>`https://api.lever.co/v0/postings/${encodeURIComponent(s)}?mode=json`,
+    parse:d=>(Array.isArray(d)?d:[]).map(x=>({
+      title:x.text||"", location:(x.categories&&x.categories.location)||"",
+      url:x.hostedUrl||x.applyUrl||"",
+      posted:x.createdAt?new Date(x.createdAt).toISOString().slice(0,10):"",
+      desc:stripTags(String(x.descriptionPlain||x.description||"")),
+      dept:(x.categories&&(x.categories.team||x.categories.department))||""
+    }))
+  },
+  ashby:{
+    label:"Ashby",
+    host:/jobs\.ashbyhq\.com\/([^/?#]+)/i,
+    url:s=>`https://api.ashbyhq.com/posting-api/job-board/${encodeURIComponent(s)}?includeCompensation=true`,
+    parse:d=>(d.jobs||[]).map(x=>({
+      title:x.title||"", location:x.location||"",
+      url:x.jobUrl||x.applyUrl||"", posted:(x.publishedAt||"").slice(0,10),
+      desc:stripTags(String(x.descriptionPlain||x.descriptionHtml||"")),
+      dept:x.department||"",
+      // Ashby is the one feed with reliable pay data, so keep it when present.
+      pay:x.compensation&&x.compensation.compensationTierSummary||""
+    }))
+  }
+};
+
+function decodeHTML(str){
+  const t=document.createElement("textarea"); t.innerHTML=str;
+  return stripTags(t.value);
+}
+const stripTags = h => String(h).replace(/<[^>]*>/g," ").replace(/\s+/g," ").trim();
+
+/* Turning a company NAME into an ATS slug is the whole difficulty of this
+   feature. A URL is unambiguous; a name is not. "Deployment Inc" could be
+   deploymentinc, deployment-inc, deployment, or something unrelated.
+
+   Rather than make the person go and find each careers page by hand, try the
+   handful of forms companies actually use. Each miss is a cheap 404, and we
+   stop at the first hit. Anything still unfound falls through to a Google
+   lookup afterwards, which is what a person would have done manually anyway. */
+function slugVariants(name){
+  const base=String(name).toLowerCase().trim()
+    // Drop the corporate suffixes almost nobody puts in a board slug.
+    .replace(/\b(inc|llc|ltd|limited|corp|corporation|co|gmbh|pvt|private|technologies|technology|labs|ai)\b\.?/g,' ')
+    .replace(/[^a-z0-9 -]/g,' ').replace(/\s+/g,' ').trim();
+  const squashed=base.replace(/[\s-]/g,'');
+  const hyphen=base.replace(/\s+/g,'-');
+  const firstWord=base.split(' ')[0]||'';
+  // Keep the AI suffix version too: plenty of companies do use it (sarvamai).
+  const withAi=String(name).toLowerCase().replace(/[^a-z0-9]/g,'');
+  return [...new Set([squashed,hyphen,firstWord,withAi].filter(x=>x&&x.length>1))].slice(0,4);
+}
+
+/* Accepts a careers URL, "platform:slug", or a bare company name. */
+function parseAtsTarget(line){
+  const t=String(line).trim(); if(!t) return [];
+  for(const k in ATS){
+    const m=t.match(ATS[k].host);
+    if(m) return [{platform:k,slug:m[1],exact:true}];
+  }
+  const explicit=t.match(/^(greenhouse|lever|ashby)\s*[:/]\s*(.+)$/i);
+  if(explicit) return [{platform:explicit[1].toLowerCase(),slug:explicit[2].trim(),exact:true}];
+  if(/^https?:\/\//i.test(t)) return [];        // some other careers page; Google will have to find it
+  const out=[];
+  slugVariants(t).forEach(sl=>Object.keys(ATS).forEach(k=>out.push({platform:k,slug:sl,name:t})));
+  return out;
+}
+
+/* Last resort: ask Google where this company's board lives. This is exactly the
+   manual step it saves — one search per company, and the slug falls out of the
+   URL. Needs the Apify token; without it, unfound companies are just reported. */
+async function findBoardsViaGoogle(names, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) return {};
+  const qs=names.slice(0,10).map(n=>
+    `"${n}" (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)`);
+  if(!qs.length) return {};
+  if(onStatus) onStatus(`looking up ${qs.length} careers page${qs.length>1?'s':''}\u2026`);
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  const payload={queries:qs.join("\n"),languageCode:"en",maxPagesPerQuery:1,resultsPerPage:5,mobileResults:false};
+  let r;
+  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  catch(e){ return {}; }
+  if(!r.ok) return {};
+  const d=(await r.json()).data||{};
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,6000)); waited+=6;
+    if(waited>300) return {};
+    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(onStatus) onStatus(`looking up careers pages \u2014 ${status.toLowerCase()}, ${waited}s`);
+    if(status==="SUCCEEDED") break;
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) return {};
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
+  const items=await dr.json();
+  const map={};
+  (items||[]).forEach(item=>{
+    const term=((item.searchQuery||{}).term)||"";
+    const name=(term.match(/^"([^"]+)"/)||[])[1];
+    if(!name || map[name]) return;
+    for(const res of (item.organicResults||[])){
+      for(const k in ATS){
+        const m=String(res.url||"").match(ATS[k].host);
+        if(m){ map[name]={platform:k,slug:m[1],exact:true}; return; }
+      }
+    }
+  });
+  return map;
+}
+
+async function atsPull(platform, slug){
+  const cfg=ATS[platform]; if(!cfg) return null;
+  let r;
+  try{ r=await fetch(cfg.url(slug),{headers:{"Accept":"application/json"}}); }
+  catch(e){ throw new Error("network"); }
+  if(r.status===404||r.status===400) return null;   // wrong slug or wrong platform
+  if(!r.ok) throw new Error(cfg.label+" returned "+r.status);
+  let d; try{ d=await r.json(); }catch(e){ return null; }
+  const rows=cfg.parse(d,slug)||[];
+  if(!rows.length) return null;
+  return {platform,slug,label:cfg.label,rows};
+}
+
+async function atsSearch(lines, onStatus){
+  const found=[], unresolved=[];
+  const tryCands=async(cands,label)=>{
+    for(const c of cands){
+      if(onStatus) onStatus(`checking ${c.slug} on ${ATS[c.platform].label}\u2026`);
+      try{
+        const res=await atsPull(c.platform,c.slug);
+        if(res){ res.name=label||res.slug; return res; }
+      }catch(e){
+        if(e.message==="network") throw new Error(
+          "The ATS feed was blocked by the browser. This normally works \u2014 try again, or add these by hand.");
+      }
+    }
+    return null;
+  };
+
+  // Pass one: URLs resolve immediately; names get their likely slugs tried.
+  for(const line of lines){
+    const cands=parseAtsTarget(line);
+    if(!cands.length){ unresolved.push(line); continue; }
+    const hit=await tryCands(cands,line);
+    if(hit) found.push(hit); else unresolved.push(line);
+  }
+
+  // Pass two: whatever is left, ask Google to locate. This is the step that
+  // means nobody has to go hunting for careers URLs by hand.
+  const misses=[];
+  if(unresolved.length){
+    let map={};
+    try{ map=await findBoardsViaGoogle(unresolved,onStatus); }catch(e){ map={}; }
+    for(const line of unresolved){
+      const c=map[line];
+      if(!c){ misses.push(line); continue; }
+      const hit=await tryCands([c],line);
+      if(hit){ hit.viaGoogle=true; found.push(hit); } else misses.push(line);
+    }
+  }
+  return {found,misses};
+}
+
+/* Hiring velocity. Posting counts over time say more about whether a cold
+   approach will land than any static company attribute: a team adding roles is
+   building, a team that stopped is not. Snapshot on every pull so the delta is
+   there next time. */
+async function recordVelocity(slug, count){
+  const p=P(); if(!p) return;
+  p.velocity = p.velocity || {};
+  const hist = p.velocity[slug] || [];
+  if(!hist.length || hist[0].on !== today()) hist.unshift({on:today(),count});
+  else hist[0].count = count;
+  p.velocity[slug] = hist.slice(0,12);
+}
+function velocityNote(slug){
+  const p=P(); const h=(p&&p.velocity&&p.velocity[slug])||[];
+  if(h.length<2) return "";
+  const d=h[0].count-h[1].count;
+  if(d>0) return `+${d} since ${h[1].on} \u2014 they're building`;
+  if(d<0) return `${d} since ${h[1].on}`;
+  return `flat since ${h[1].on}`;
+}
+
+/* ═══ Apify: board search via Google ═══
+   LinkedIn is one pipe, and for most careers it is the wrong one. Academic
+   posts live on registries like linguistlist.org and academicjobsonline.org and
+   are essentially never on LinkedIn; startup roles cluster on YC and Ashby;
+   every field has its own. None of those have a dedicated scraper worth paying
+   for, but the profile already knows which domains matter, so site: queries
+   through the Google actor reach all of them with one component.
+
+   Same actor, same polling shape as the Python backfill. The only difference is
+   what we do with the results: each organic hit becomes a new row instead of
+   patching an existing one. */
+const APIFY_GOOGLE = "apify~google-search-scraper";
+
+function buildBoardQueries(titles, boards, where){
+  const qs=[];
+  (boards||[]).slice(0,8).forEach(b=>{
+    (titles||[]).slice(0,4).forEach(t=>{
+      qs.push(`site:${b} "${t}"` + (where?` ${where}`:''));
+    });
+  });
+  return qs.slice(0,32);
+}
+
+async function apifyBoardSearch(queries, countryCode, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  // Schema confirmed against apify.com/apify/google-search-scraper:
+  // queries is a newline-separated STRING, not an array.
+  const payload={queries:queries.join("\n"),countryCode:countryCode||"",
+    languageCode:"en",maxPagesPerQuery:1,resultsPerPage:10,mobileResults:false};
+  let r;
+  try{
+    r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
+  }catch(e){ throw new Error("Couldn't reach Apify."); }
+  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+  if(!r.ok) throw new Error("Apify returned "+r.status);
+  const d=(await r.json()).data||{};
+  const runId=d.id, dsId=d.defaultDatasetId;
+  if(!runId) throw new Error("Apify wouldn't start the run.");
+
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,6000)); waited+=6;
+    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
+    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+runId,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(onStatus) onStatus(`searching ${queries.length} board queries — ${status.toLowerCase()}, ${waited}s`);
+    if(status==="SUCCEEDED") break;
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
+  const items=await dr.json();
+
+  const out=[];
+  (items||[]).forEach(item=>{
+    const term=((item.searchQuery||{}).term)||"";
+    (item.organicResults||[]).forEach(res=>{
+      const u=String(res.url||"");
+      if(!u) return;
+      const j=blank();
+      // Google's title is usually "Job Title - Employer - Board". Take the first
+      // segment as the title and the second as the employer when it looks right;
+      // the scorer sees the full snippet either way, so a bad split is survivable.
+      const raw=String(res.title||"").trim();
+      const bits=raw.split(/\s+[\u2013\u2014|-]\s+/);
+      j.title = (bits[0]||raw).slice(0,180) || "[No Title]";
+      j.company = (bits.length>1 ? bits[1] : "").slice(0,120) || "[from search — verify]";
+      j.url = u;
+      j.description = String(res.description||"").slice(0,900);
+      j.source = "Board search"; j.query = term; j.status="New"; j.channel="posted";
+      j.notes = "Found via "+ (u.replace(/^https?:\/\//,'').split('/')[0]);
+      out.push(j);
+    });
+  });
+  return out;
+}
+
+async function apifySearch(query, count, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  const payload={urls:[buildLiUrl(query)],count:Math.max(count||10,10),scrapeCompany:true};
+  let r;
+  try{
+    r = await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
+  }catch(e){ throw new Error("Couldn't reach Apify."); }
+  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+  if(!r.ok) throw new Error("Apify returned "+r.status);
+  const d=(await r.json()).data||{};
+  const runId=d.id, dsId=d.defaultDatasetId;
+  if(!runId) throw new Error("Apify wouldn't start the run.");
+
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,6000)); waited+=6;
+    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
+    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs/"+runId,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(onStatus) onStatus(query+" — "+status.toLowerCase()+", "+waited+"s");
+    if(status==="SUCCEEDED") break;
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
+  const items=await dr.json();
+  if(items && items[0] && items[0].error) throw new Error("Apify rejected the input: "+items[0].error);
+
+  return (items||[]).map(it=>{
+    const j=blank();
+    j.title   = pick(it,["title","jobTitle","position"]) || "[No Title]";
+    j.company = pick(it,["companyName","company","company_name"]) || "[Unknown]";
+    j.location= pick(it,["location","jobLocation"]) || "";
+    j.url     = pick(it,["link","jobUrl","url","postUrl","jobLink"],"url") || "";
+    j.description = String(pick(it,["descriptionText","description","jobDescription","details"],"desc")||"").slice(0,1200);
+    const cli = pick(it,["companyLinkedinUrl","companyUrl"],"companylinkedin");
+    j.notes   = cli ? "Company LinkedIn: "+cli : "";
+    j.source  = "LinkedIn (live)"; j.query = query; j.status="New"; j.channel="posted";
+    return j;
+  });
+}
+
+/* ═══ LLM ═══
+   Two providers. DeepSeek is the default because it is roughly 20x cheaper per
+   token than a frontier model and this workload — structured scoring against a
+   fixed rubric — is exactly the kind of task where that trade is worth taking.
+   Anthropic stays available as a fallback, and is the only one that works with
+   no key at all when this file is opened inside Claude itself.
+
+   One caveat that is not in our control: calling any LLM API straight from a
+   browser depends on that provider sending permissive CORS headers. Anthropic
+   documents a header for it. DeepSeek does not document browser use either way,
+   so if DeepSeek fails with a network error and the key is definitely right,
+   that is CORS, and the fix is to switch provider rather than to retry. */
+const LLM = {
+  deepseek: {
+    url:"https://api.deepseek.com/chat/completions",
+    label:"DeepSeek",
+    keyPrefix:"sk-",
+    where:"platform.deepseek.com → API keys",
+    headers:k=>({"Content-Type":"application/json","Authorization":"Bearer "+k}),
+    body:(prompt,mt)=>({model:"deepseek-chat",max_tokens:mt||1400,
+      messages:[{role:"user",content:prompt}],temperature:0.2}),
+    read:d=>((d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"").trim()
+  },
+  anthropic: {
+    url:"https://api.anthropic.com/v1/messages",
+    label:"Anthropic",
+    keyPrefix:"sk-ant-",
+    where:"console.anthropic.com → API keys",
+    headers:k=>{const h={"Content-Type":"application/json"};
+      if(k){h["x-api-key"]=k;h["anthropic-version"]="2023-06-01";
+        h["anthropic-dangerous-direct-browser-access"]="true";} return h;},
+    body:(prompt,mt)=>({model:"claude-sonnet-4-6",max_tokens:mt||1400,
+      messages:[{role:"user",content:prompt}]}),
+    read:d=>(d.content||[]).filter(x=>x.type==="text").map(x=>x.text).join("").trim()
+  }
+};
+
+async function claude(prompt, maxTok){
+  const cfg = LLM[PROV] || LLM.deepseek;
+  // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
+  if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
+  let res;
+  try{
+    res = await fetch(cfg.url,{method:"POST",headers:cfg.headers(KEY),
+      body:JSON.stringify(cfg.body(prompt,maxTok))});
+  }catch(e){
+    throw new Error(KEY
+      ? "Couldn't reach "+cfg.label+". If the key is right, this is the browser being blocked \u2014 try the other provider."
+      : "NEEDKEY");
+  }
+  if(res.status===401||res.status===403) throw new Error("NEEDKEY");
+  if(!res.ok){
+    let d=''; try{const j=await res.json(); d=(j.error&&j.error.message)?': '+j.error.message:'';}catch(e){}
+    throw new Error(cfg.label+" returned "+res.status+d);
+  }
+  const out = cfg.read(await res.json());
+  if(!out) throw new Error(cfg.label+" returned an empty response.");
+  return out;
+}
+
+function keyDialog(retry){
+  const cfg = LLM[PROV]||LLM.deepseek;
+  const d=modal(`<div class="eyebrow">Set up scoring</div>
+    <h2 style="margin:6px 0 10px">Which model should read your jobs?</h2>
+    <label class="lab">Provider</label>
+    <select id="pv">
+      <option value="deepseek" ${PROV==='deepseek'?'selected':''}>DeepSeek \u2014 cheap, needs a key</option>
+      <option value="anthropic" ${PROV==='anthropic'?'selected':''}>Anthropic \u2014 no key needed inside Claude</option>
+    </select>
+    <p class="hint" style="margin:8px 0 14px">DeepSeek costs a fraction of the alternative and is plenty for scoring. Pick Anthropic if you're running this file inside Claude, where it needs no key at all.</p>
+    <label class="lab">API key</label>
+    <input type="text" id="kv" placeholder="${esc(cfg.keyPrefix)}..." value="${esc(KEY||'')}" autocomplete="off">
+    <p class="hint" id="kwhere">Get one at <span style="color:var(--cool)">${esc(cfg.where)}</span>. Stored only in this browser, only sent to that provider.</p>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="kSave">Save</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#pv').onchange=e=>{
+    const c=LLM[e.target.value];
+    d.querySelector('#kv').placeholder=c.keyPrefix+'...';
+    d.querySelector('#kwhere').innerHTML='Get one at <span style="color:var(--cool)">'+esc(c.where)+'</span>. Stored only in this browser, only sent to that provider.';
+  };
+  d.querySelector('#kSave').onclick=async()=>{
+    PROV=d.querySelector('#pv').value;
+    KEY=d.querySelector('#kv').value.trim();
+    if(PROV!=='anthropic' && !KEY){ alert('DeepSeek needs a key.'); return; }
+    await put('triage:key',KEY); await put('triage:prov',PROV);
+    d.remove(); if(retry) retry();
+  };
+}
+
+function grabJSON(txt){
+  let t = txt.replace(/^```(?:json)?/,'').replace(/```$/,'').trim();
+  const a=t.indexOf('{'), b=t.lastIndexOf('}');
+  if(a>=0 && b>a) t=t.slice(a,b+1);
+  return JSON.parse(t);
+}
+
+/* ═══ profile extraction ═══
+   This is what makes the tool work for anyone. It reads whatever CV-ish
+   markdown a person drops in and turns it into the structured facts the
+   scorer needs: where they are, what level they're at, what they can
+   honestly claim, what they can't, and which directions are open. */
+const EXTRACT_PROMPT = raw => `Read this person's career profile and extract a structured summary.
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{
+ "name":"",
+ "location":"",
+ "country":"",
+ "headline":"one line, max 12 words, what they are",
+ "years_experience":0,
+ "seniority":"junior|mid|senior|lead",
+ "domains":["3-6 fields they have real experience in"],
+ "strengths":["4-7 specific things they can actually do, concrete not generic"],
+ "hard_skills":["6-12 named tools, systems or disciplines from the profile"],
+ "unusual_combination":"one sentence on what makes this person's mix rare, or empty string",
+ "gaps":["3-6 things they honestly CANNOT claim: missing credentials, missing experience"],
+ "wrong_shapes":["3-6 kinds of role they should not apply to, and why in a few words"],
+ "tracks":[
+   {"id":"slug","label":"Job family name","difficulty":"easy|moderate|moonshot",
+    "why":"one sentence: why this fits them specifically",
+    "titles":["5-8 real job titles to search for"],
+    "boards":["4-8 domains where THIS KIND of job is actually posted"]}
+ ]
+}
+
+Rules for tracks: give 3 or 4. Order them from most obvious to most ambitious.
+"easy" = they could get this now with what's on the page.
+"moderate" = a real but winnable step across.
+"moonshot" = plausible but they'd be an unusual hire, and would need to be argued for.
+Base every track on evidence in the profile. Do not invent a direction the profile doesn't support.
+
+Rules for gaps: be honest and specific. These stop the tool from recommending roles the person cannot win. If the profile states its own limitations, use them.
+
+Rules for boards: this is the most important field to get right. For each track, list the domains where that specific kind of job is genuinely advertised - not generic job sites. Give bare domains, no protocol, no path. Think about where people in that field actually look:
+- Academic and research posts are advertised on field-specific registries and university systems, almost never on general job sites. A linguistics post goes to linguistlist.org, academicjobsonline.org, jobs.ac.uk, apply.interfolio.com, higheredjobs.com, euraxess.ec.europa.eu, chroniclevitae.com - not to linkedin.com.
+- Startup and tech roles cluster on ycombinator.com, wellfound.com, lever.co, greenhouse.io, ashbyhq.com, jobs.ashbyhq.com.
+- Public sector, NGO and development roles have their own registries entirely.
+- Medicine, law, teaching, trades, design, and creative fields each have their own.
+Only include linkedin.com or indeed.com for a track where those genuinely are where the jobs are. If you are unsure for a field, prefer the specialist registry over the general one.
+
+Rules generally: use ONLY what is in the profile below. Do not invent experience, employers, metrics or skills. If something isn't stated, leave it out.
+
+PROFILE:
+${String(raw).slice(0,16000)}`;
+
+async function extractProfile(raw){
+  const txt = await claude(EXTRACT_PROMPT(raw), 2000);
+  const p = grabJSON(txt);
+  p.name = p.name || 'Unnamed';
+  p.tracks = Array.isArray(p.tracks) && p.tracks.length ? p.tracks : [{
+    id:'general', label:'General search', difficulty:'moderate',
+    why:'Broad search across everything in the profile.', titles:[]
+  }];
+  ['domains','strengths','hard_skills','gaps','wrong_shapes'].forEach(k=>{
+    if(!Array.isArray(p[k])) p[k]=[];
+  });
+  p.tracks.forEach(t=>{
+    if(!Array.isArray(t.titles)) t.titles=[];
+    if(!Array.isArray(t.boards)) t.boards=[];
+    // Strip protocol/path if the model returned a URL rather than a bare domain.
+    t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim())
+                       .filter(Boolean);
+  });
+  return p;
+}
+
+/* ═══ company discovery ═══
+   The person should not have to already know who to approach. Naming the
+   companies is the hardest part of a cold search and the part they are least
+   equipped to do — they know their own work, not the shape of the market.
+
+   Two steps, and the split matters. The model proposes companies where this
+   specific background would be unusually valuable. Then the ATS layer checks
+   which of them are actually hiring. A company with open roles becomes a normal
+   application; a company with none becomes a cold approach. Same list, sorted
+   by reality rather than by guesswork. */
+async function suggestCompanies(prof, trk, extra){
+  const txt = await claude(`Name companies a specific person should approach about work.
+
+THE PERSON
+Based in: ${prof.location||'unspecified'}${prof.country?', '+prof.country:''}
+Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
+In short: ${prof.headline||''}
+Fields they know: ${(prof.domains||[]).join('; ')}
+What they can actually do: ${(prof.strengths||[]).join('; ')}
+Skills: ${(prof.hard_skills||[]).join(', ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
+Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
+
+THE DIRECTION THEY ARE PURSUING: ${trk.label||'general'}${trk.why?` — ${trk.why}`:''}
+${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"companies":[{
+  "name":"exact company name",
+  "location":"city, country, or Remote",
+  "stage":"seed|series-a|series-b|series-c|growth|public|agency|nonprofit|university|government",
+  "why":"one sentence, max 22 words: why THIS person specifically, not a generic candidate",
+  "overlap":"the single concrete thing in their background that this company would care about",
+  "odds":"strong|fair|longshot"
+}]}
+
+Give 16 to 24 companies. Rules that matter:
+
+1. Weight heavily toward the person's DOMAIN, not just their job title. Someone who has run operations in a particular industry is far more valuable to companies in that industry than to a generic employer, even when the role title is identical. Find the companies where their specific background is an advantage rather than a neutral.
+
+2. Spread across reachability. Include some obvious large names, but the majority should be companies small or specific enough that a well-aimed message actually gets read. A list of famous companies is useless.
+
+3. Favour their own region and genuinely remote-friendly employers. A company that will not hire someone in ${prof.location||'their location'} is not a real target.
+
+4. Prefer companies that plausibly use Greenhouse, Lever or Ashby - startups and scale-ups - since their openings can be checked automatically. But include a few larger or regional ones if they are genuinely strong fits.
+
+5. "odds" is about whether an approach from THIS person converts, considering their gaps, not about company quality.
+
+6. Real companies only, named exactly. No placeholders, no invented names, no "various startups". If unsure a company exists, leave it out.`, 3000);
+  const d = grabJSON(txt);
+  const list = Array.isArray(d) ? d : (d.companies||[]);
+  return list.filter(c=>c&&c.name).slice(0,24);
+}
+
+function companyRow(c,i){
+  const tag = c.odds==='strong'?'easy':c.odds==='longshot'?'hard':'mid';
+  return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
+    <input type="checkbox" data-co="${i}" checked style="margin-top:4px;width:auto">
+    <div style="flex:1;min-width:0">
+      <div class="ct-nm">${esc(c.name)}
+        <span class="tag ${tag}" style="margin-left:6px">${esc(c.odds||'')}</span></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(c.why||'')}</div>
+      ${c.overlap?`<div style="font-size:11px;color:var(--cold);margin-top:3px">↳ ${esc(c.overlap)}</div>`:''}
+      <div class="ct-meta" style="margin-top:3px">${esc(c.location||'')}${c.stage?' · '+esc(c.stage):''}</div>
+    </div></label>`;
+}
+
+function suggestDialog(){
+  const p=P(), prof=p.profile;
+  const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const d=modal(`<div class="eyebrow">Who to approach</div>
+    <h2 style="margin:6px 0 6px">Companies worth your time</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Built from your background and your current direction — <b>${esc(trk.label||'general')}</b>. Weighted toward places where what you've actually done is an advantage, not just places that are hiring.</p>
+    <label class="lab">Anything to steer it? (optional)</label>
+    <input type="text" id="sgExtra" placeholder="e.g. keep it to India, or lean agritech, or early-stage only">
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn-go btn-sm" id="sgGo">Suggest companies</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
+    <div id="sgOut"></div>`);
+
+  const run=async()=>{
+    const extra=d.querySelector('#sgExtra').value.trim();
+    d.querySelector('#sgGo').disabled=true;
+    d.querySelector('#sgOut').innerHTML='<p style="color:var(--muted);margin-top:16px"><span class="spin"></span> Working out who would want you…</p>';
+    let list;
+    try{ list=await suggestCompanies(prof,trk,extra); }
+    catch(e){
+      d.querySelector('#sgGo').disabled=false;
+      if(e.message==='NEEDKEY'){ d.remove(); keyDialog(suggestDialog); return; }
+      d.querySelector('#sgOut').innerHTML='<p class="err">'+esc(e.message)+'</p>'; return;
+    }
+    if(!list.length){
+      d.querySelector('#sgGo').disabled=false;
+      d.querySelector('#sgOut').innerHTML='<p class="err">Nothing came back. Try again, or add a steer.</p>'; return;
+    }
+    d.querySelector('#sgOut').innerHTML=`
+      <div class="eyebrow" style="margin-top:18px">${list.length} companies · untick any you don't want</div>
+      <div style="margin-top:8px;max-height:340px;overflow:auto">${list.map(companyRow).join('')}</div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go btn-sm" id="sgAdd">Add these and check who's hiring</button>
+        <button class="btn-sm" id="sgColdOnly">Add as cold targets only</button></div>
+      <p class="hint">Checking hiring reads each company's careers feed. Ones with open roles become normal applications; the rest stay cold approaches.</p>`;
+    const picked=()=>Array.from(d.querySelectorAll('[data-co]:checked')).map(x=>list[parseInt(x.dataset.co,10)]);
+    d.querySelector('#sgAdd').onclick=()=>{ const c=picked(); d.remove(); addSuggested(c,true); };
+    d.querySelector('#sgColdOnly').onclick=()=>{ const c=picked(); d.remove(); addSuggested(c,false); };
+  };
+  d.querySelector('#sgGo').onclick=run;
+  d.querySelector('#sgExtra').onkeydown=e=>{ if(e.key==='Enter') run(); };
+}
+
+async function addSuggested(list, checkHiring){
+  const p=P(); if(!p||!list.length) return;
+  busy=true; render();
+
+  // Everything starts as a cold target. The ATS check below promotes whichever
+  // ones turn out to be hiring, so the default is never wrong.
+  const cold=list.map(c=>{
+    const j=blank();
+    j.company=c.name; j.title='Cold approach'; j.location=c.location||'';
+    j.description=[c.why,c.overlap?('Your overlap: '+c.overlap):'',c.stage?('Stage: '+c.stage):'']
+      .filter(Boolean).join(' — ');
+    j.source='Suggested'; j.channel='cold'; j.stage='new';
+    j.notes=c.odds?('Odds: '+c.odds):'';
+    return j;
+  });
+  let added=addJobs(cold);
+  await save(); render();
+
+  if(!checkHiring){ busy=false; render(); setSearchInfo(`Added ${added} cold targets. Score them next.`); return; }
+
+  try{
+    const {found,misses}=await atsSearch(list.map(c=>c.name), setSearchInfo);
+    let roles=0;
+    for(const hit of found){
+      await recordVelocity(hit.slug,hit.rows.length);
+      const vel=velocityNote(hit.slug);
+      const jobs=hit.rows.map(x=>{
+        const j=blank();
+        j.title=x.title||'[No Title]'; j.company=hit.name||hit.slug;
+        j.location=x.location||''; j.url=x.url||'';
+        j.description=(x.desc||'').slice(0,4000);
+        j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
+        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'', x.posted?'Posted '+x.posted:'', vel]
+          .filter(Boolean).join(' · ');
+        return j;
+      });
+      roles+=addJobs(jobs);
+      // This company is advertising, so the placeholder cold row is redundant.
+      const ci=p.jobs.findIndex(j=>j.channel==='cold'&&j.source==='Suggested'&&j.company===(hit.name||hit.slug));
+      if(ci>=0 && jobs.length) p.jobs.splice(ci,1);
+    }
+    busy=false; await save(); render();
+    setSearchInfo(`${found.length} of ${list.length} are hiring — ${roles} open roles pulled. `
+      + `${misses.length} stay cold approaches. Score them all next.`);
+  }catch(e){
+    busy=false; await save(); render();
+    setSearchInfo(`Added ${added} cold targets. Couldn't check hiring: ${e.message}`);
+  }
+}
+
+/* ═══ assessing a direction the person names themselves ═══
+   The generated tracks are the model's read on where someone could go. This is
+   the inverse: the person says where they want to go, and gets an honest answer
+   about what that would take. It is the more useful direction of the two,
+   because ambition usually arrives before evidence, and the thing worth knowing
+   is not "is this allowed" but "what specifically is missing". */
+async function assessTrack(want, prof){
+  const txt = await claude(`A person wants to know whether a particular kind of job is realistic for them.
+
+THEIR PROFILE
+Name: ${prof.name}
+Based in: ${prof.location||'unspecified'}
+Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
+In short: ${prof.headline||''}
+Fields: ${(prof.domains||[]).join('; ')}
+Real strengths: ${(prof.strengths||[]).join('; ')}
+Skills: ${(prof.hard_skills||[]).join(', ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
+Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
+
+THE KIND OF JOB THEY ARE ASKING ABOUT: "${String(want).slice(0,200)}"
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{
+ "id":"short-slug",
+ "label":"the job family, named properly as the industry names it",
+ "difficulty":"easy|moderate|moonshot",
+ "why":"one sentence, max 20 words, on the fit",
+ "verdict":"2-4 sentences. Straight assessment. What would actually happen if they applied for this tomorrow, and what the single biggest obstacle is.",
+ "transfers":["3-6 things from their background that genuinely count toward this, stated concretely"],
+ "missing":["2-5 things they would have to acquire, show, or work around - be specific about which, and say if any is a hard blocker"],
+ "bridge":"one sentence: the shortest realistic path from where they are to this, or empty string if they are already there",
+ "titles":["5-8 real job titles to search for"],
+ "boards":["4-8 bare domains where this kind of job is actually posted"]
+}
+
+Difficulty means:
+- "easy": they could get this now with what is already on their profile. Someone reading their CV would find it an unsurprising application.
+- "moderate": a real step across. Winnable, but they would need to argue for it and would be competing against people with more direct experience.
+- "moonshot": plausible but they would be an unusual hire. Worth a small number of well-aimed attempts, not a campaign.
+
+Be honest rather than encouraging. If this is a bad idea for them, say so in the verdict and mark it moonshot - an inflated assessment wastes months of someone's life. If it is genuinely easy, say that too and do not manufacture obstacles.
+If the request is vague, interpret it as the nearest real job family and name that in the label.
+For boards: give the registries where this specific field posts, not general job sites. Bare domains, no protocol.
+Use ONLY what is in the profile. Do not invent experience.`, 1600);
+  const t = grabJSON(txt);
+  t.id = (t.id||'custom')+'_'+Math.random().toString(36).slice(2,5);
+  ['transfers','missing','titles','boards'].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; });
+  t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim()).filter(Boolean);
+  t.custom = true;
+  return t;
+}
+
+function diffTag(d){
+  return (d==='moonshot'||d==='stretch') ? 'hard' : d==='easy' ? 'easy' : 'mid';
+}
+
+/* Shown after an assessment. The verdict is the point — the lists are supporting
+   detail, so they sit under it rather than above. */
+function trackVerdict(t){
+  const chips=(arr,cls)=>arr.length
+    ? `<div class="chips" style="margin-top:8px">${arr.map(x=>`<span class="chip ${cls}">${esc(x)}</span>`).join('')}</div>` : '';
+  return `<div class="card" style="margin-top:14px">
+    <div class="tl" style="font-size:16px;font-weight:500;display:flex;align-items:center;gap:9px">
+      ${esc(t.label||'')} <span class="tag ${diffTag(t.difficulty)}">${esc(t.difficulty||'')}</span></div>
+    ${t.verdict?`<p style="margin:10px 0 0;font-size:13.5px;line-height:1.55">${esc(t.verdict)}</p>`:''}
+    ${t.transfers&&t.transfers.length?`<div class="eyebrow" style="margin-top:16px">What counts toward it</div>${chips(t.transfers,'g')}`:''}
+    ${t.missing&&t.missing.length?`<div class="eyebrow" style="margin-top:14px">What you'd have to close</div>${chips(t.missing,'r')}`:''}
+    ${t.bridge?`<div class="eyebrow" style="margin-top:14px">Shortest path</div><p style="margin:7px 0 0;color:var(--muted);font-size:13px">${esc(t.bridge)}</p>`:''}
+    ${t.titles&&t.titles.length?`<div class="eyebrow" style="margin-top:14px">Search these titles</div>${chips(t.titles.slice(0,8),'')}`:''}
+    ${t.boards&&t.boards.length?`<div class="eyebrow" style="margin-top:14px">On these boards</div>${chips(t.boards.slice(0,8),'')}`:''}
+  </div>`;
+}
+
+/* ═══ scoring prompt, built from THIS person ═══ */
+function sysPrompt(prof, track){
+  const t = (prof.tracks||[]).find(x=>x.id===track) || prof.tracks[0] || {};
+  return `You score job listings for one specific candidate. You will be given their profile and a batch of jobs.
+
+CANDIDATE SNAPSHOT
+Name: ${prof.name}
+Based in: ${prof.location||'unspecified'}${prof.country?', '+prof.country:''}
+Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
+What they are: ${prof.headline||''}
+Real strengths: ${(prof.strengths||[]).join('; ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
+
+THEY ARE TARGETING: ${t.label||'general roles'}${t.why?` — ${t.why}`:''}
+Typical titles in this family: ${(t.titles||[]).join(', ')||'various'}
+
+HONEST GAPS (they cannot claim these): ${(prof.gaps||[]).join('; ')||'none stated'}
+ROLE SHAPES TO RULE OUT: ${(prof.wrong_shapes||[]).join('; ')||'none stated'}
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"results":[{"id":"...","score":0,"reachability":0,"confidence":"high","reason":"...","flags":["..."]}]}
+
+For EACH job:
+- id: exactly as given
+- score: 0-100 FIT ONLY. How well does the described WORK match what this candidate can do and is targeting? Judge the work, not the title, and NOT whether they would win the process.
+- reachability: 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here.
+- confidence: "high" (real job description) | "medium" (short snippet) | "low" (title and company only)
+- reason: ONE sentence, max 20 words, specific. If fit and reachability diverge sharply, say why.
+- flags: from this set only: ["strong_fit","seniority_too_high","seniority_too_low","credential_gated","wrong_role_shape","location_ineligible","thin_data","high_competition","non_traditional_friendly","rare_combination_fit"]
+
+Rules:
+- The candidate is based in ${prof.location||'their stated location'}. A role requiring presence somewhere else with no remote allowance scores below 20 on FIT and gets "location_ineligible".
+- Do NOT lower the FIT score because of the gaps listed above. Gaps are a REACHABILITY consideration. Keep the two axes strictly separate.
+- Any job matching the ruled-out role shapes scores below 20 on FIT and gets "wrong_role_shape", however appealing its title.
+- A job that needs the candidate's rare combination of skills should score higher — flag "rare_combination_fit".
+- Do not invent details. Inferring from a title alone means confidence "low" and flag "thin_data".
+- Do not inflate. Most jobs are mediocre. The distribution should be wide on both axes.
+- One entry per input job. JSON object only.`;
+}
+
+/* ═══ jobs ═══ */
+function blank(){ const o={}; COLS.forEach(c=>o[c]=''); o.status='New'; o.pitch_sent='No'; o.channel='posted'; o.stage='new'; o.contacts='[]'; o.events='[]'; return o; }
+function keyOf(j){
+  const u=String(j.url||'').trim();
+  if(u && u!=='nan') return 'u:'+u.toLowerCase();
+  return 't:'+[j.title,j.company,j.location].map(x=>String(x||'').trim().toLowerCase()).join('|');
+}
+function addJobs(list){
+  const p=P(); if(!p) return 0;
+  const seen=new Set(p.jobs.map(keyOf)); let n=0;
+  list.forEach(j=>{ if(!String(j.title||'').trim()) return;
+    const k=keyOf(j); if(seen.has(k)) return; seen.add(k); p.jobs.push(j); n++; });
+  return n;
+}
+const isScored = j => String(j.ai_score||'').trim()!=='';
+const fitOf   = j => { const v=parseFloat(j.ai_score); return isNaN(v)?0:Math.max(0,Math.min(100,v)); };
+const reachOf = j => { const v=parseFloat(j.ai_reachability); return isNaN(v)?45:Math.max(0,Math.min(100,v)); };
+function rankOf(j){
+  const conf={high:1,medium:.9,low:.78}[String(j.ai_confidence||'low').toLowerCase()]||.78;
+  return Math.pow(fitOf(j),0.65)*Math.pow(reachOf(j),0.35)*conf;
+}
+const isOpen = j => stOf(j)!=='closed';
+const chOf   = j => String(j.channel||'posted').trim().toLowerCase()==='cold' ? 'cold' : 'posted';
+const stOf   = j => { const v=String(j.stage||'').trim().toLowerCase();
+  if(STAGES.includes(v)) return v;
+  // Rows imported before stages existed, or from the Python tracker.
+  const s=String(j.status||'').trim().toLowerCase();
+  if(s==='applied'||s==='contacted') return 'sent';
+  if(s==='skipped'||s==='rejected'||s==='closed') return 'closed';
+  return 'new'; };
+const dayDiff = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
+function isDue(j){
+  if(stOf(j)!=='sent') return false;
+  if(j.follow_up_date) return j.follow_up_date <= today();
+  const t=j.last_touch||j.date_applied;
+  return t ? dayDiff(t,today())>=FOLLOWUP_DAYS : false;
+}
+const daysSilent = j => { const t=j.last_touch||j.date_applied; return t?dayDiff(t,today()):0; };
+const listOf = (j,k) => { try{ const v=JSON.parse(j[k]||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } };
+const setList = (j,k,v) => { j[k]=JSON.stringify(v); };
+function logEvent(j,kind,text){
+  const ev=listOf(j,'events');
+  ev.unshift({on:today(),kind,text:String(text||'').slice(0,400)});
+  setList(j,'events',ev.slice(0,40));
+  j.last_touch=today();
+}
+function setStage(j,st){
+  j.stage=st;
+  j.status = st==='sent' ? (chOf(j)==='cold'?'Contacted':'Applied')
+           : st==='live' ? 'In conversation'
+           : st==='closed' ? 'Closed' : 'New';
+  if(st==='sent'){
+    if(!j.date_applied) j.date_applied=today();
+    const d=new Date(); d.setDate(d.getDate()+FOLLOWUP_DAYS);
+    j.follow_up_date=d.toISOString().slice(0,10);
+  }
+  j.last_touch=today();
+}
+
+/* ═══ CSV ═══ */
+function parseCSV(text){
+  text=text.replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+  const rows=[]; let row=[],cell='',q=false;
+  for(let i=0;i<text.length;i++){ const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+    else { if(c==='"') q=true;
+      else if(c===','){ row.push(cell); cell=''; }
+      else if(c==='\n'){ row.push(cell); rows.push(row); row=[]; cell=''; }
+      else cell+=c; } }
+  if(cell!=='' || row.length){ row.push(cell); rows.push(row); }
+  return rows.filter(r=>r.length && r.some(v=>String(v).trim()!==''));
+}
+function toCSV(rows,cols){
+  const q=v=>{const s=String(v==null?'':v); return /[",\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;};
+  return [cols.join(',')].concat(rows.map(r=>cols.map(c=>q(r[c])).join(','))).join('\n');
+}
+
+/* ═══ scoring run ═══ */
+async function scoreBatch(batch, prof, track){
+  const jobs = batch.map(b=>({ id:String(b.i),
+    title:String(b.j.title||''), company:String(b.j.company||''),
+    location:String(b.j.location||''),
+    description:String(b.j.description||'').slice(0,1100)||'(no description available)' }));
+  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), 1400);
+  const parsed = grabJSON(txt);
+  const items = Array.isArray(parsed)?parsed:(parsed.results||[]);
+  const out={};
+  items.forEach(it=>{ out[String(it.id)]={
+    score:Math.max(0,Math.min(100,parseInt(it.score,10)||0)),
+    reach:Math.max(0,Math.min(100,parseInt(it.reachability,10)||45)),
+    conf:String(it.confidence||'low').toLowerCase(),
+    reason:String(it.reason||'').slice(0,220),
+    flags:(it.flags||[]).join(',') }; });
+  return out;
+}
+
+async function runScoring(all){
+  const p=P(); if(!p || busy) return;
+  const targets = p.jobs.map((j,i)=>({j,i})).filter(b=> all || !isScored(b.j));
+  if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
+  busy=true; render();
+  const SIZE=6, total=targets.length; let done=0, failed=0;
+  for(let i=0;i<targets.length;i+=SIZE){
+    const batch=targets.slice(i,i+SIZE);
+    try{
+      const res=await scoreBatch(batch,p.profile,p.track);
+      batch.forEach(b=>{ const r=res[String(b.i)]; if(!r) return;
+        const j=p.jobs[b.i];
+        j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
+        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags; });
+    }catch(e){
+      if(e.message==='NEEDKEY'){
+        busy=false; render(); keyDialog(()=>runScoring(all)); return;
+      }
+      failed+=batch.length; console.error(e);
+    }
+    done+=batch.length;
+    const bar=$('#progBar'); if(bar) bar.style.width=Math.round(done/total*100)+'%';
+    setInfo(`${done} of ${total} done${failed?` · ${failed} failed`:''}`);
+    await save();
+  }
+  busy=false;
+  setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
+  await save(); render();
+}
+function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
+function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
+
+/* ═══ live search ═══ */
+async function runSearch(queries){
+  const p=P(); if(!p||busy) return;
+  queries=(queries||[]).filter(q=>q&&q.trim());
+  if(!queries.length){ setSearchInfo('Type a search first — title | location.'); return; }
+  busy=true; render();
+  let total=0, failed=0;
+  for(const q of queries){
+    try{
+      const jobs=await apifySearch(q,15,setSearchInfo);
+      const n=addJobs(jobs);
+      total+=n; setSearchInfo(`${total} new so far…`);
+      await save();
+    }catch(e){
+      if(e.message==='NEEDAPIFY'){ busy=false; render(); apifyDialog(()=>runSearch(queries)); return; }
+      failed++; console.error(e); setSearchInfo(e.message);
+    }
+  }
+  busy=false; await save(); render();
+  setSearchInfo(failed
+    ? `Added ${total}. ${failed} search${failed>1?'es':''} failed.`
+    : `Added ${total} new. Now score them.`);
+}
+
+async function runBoards(trk, prof){
+  const p=P(); if(!p||busy) return;
+  const boards=(trk.boards||[]), titles=(trk.titles||[]);
+  if(!boards.length){ setSearchInfo("This track has no specialist boards — use LinkedIn search instead."); return; }
+  if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
+  const qs=buildBoardQueries(titles,boards,'');
+  busy=true; render();
+  try{
+    // No country code: academic and remote roles are frequently international,
+    // and pinning Google to one country quietly hides them.
+    const jobs=await apifyBoardSearch(qs,"",setSearchInfo);
+    const n=addJobs(jobs);
+    await save(); busy=false; render();
+    setSearchInfo(n
+      ? `Added ${n} from ${boards.length} boards. Score them next.`
+      : `Searched ${boards.length} boards, nothing new came back.`);
+  }catch(e){
+    busy=false; render();
+    if(e.message==='NEEDAPIFY'){ apifyDialog(()=>runBoards(trk,prof)); return; }
+    setSearchInfo(e.message);
+  }
+}
+
+function atsDialog(){
+  const d=modal(`<div class="eyebrow">Company careers feeds</div>
+    <h2 style="margin:6px 0 6px">Pull straight from the source</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 10px">Most companies run their careers page on Greenhouse, Lever or Ashby, and all three publish the jobs as open data. This reads that directly \u2014 free, live, and with the full description, which is what the scorer actually needs.</p>
+    <p class="hint" style="margin:0 0 12px">You don't need to look anything up first. Type company names and it finds the careers pages itself.</p>
+    <label class="lab">One company per line</label>
+    <textarea id="atsIn" rows="8" placeholder="https://boards.greenhouse.io/anthropic
+https://jobs.lever.co/example
+https://jobs.ashbyhq.com/example
+notion"></textarea>
+    <p class="hint">Company names are enough \u2014 it works out the rest. It tries the usual slug forms first, then searches for the careers page if that fails. Anything not on Greenhouse, Lever or Ashby is reported back rather than failing.</p>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="atsGo">Pull jobs</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#atsGo').onclick=()=>{
+    const lines=d.querySelector('#atsIn').value.split(/\n+/).map(x=>x.trim()).filter(Boolean);
+    if(!lines.length){ alert('Add at least one company.'); return; }
+    d.remove(); runAts(lines);
+  };
+}
+
+async function runAts(lines){
+  const p=P(); if(!p||busy) return;
+  busy=true; render();
+  try{
+    const {found,misses}=await atsSearch(lines,setSearchInfo);
+    let added=0; const notes=[];
+    for(const hit of found){
+      await recordVelocity(hit.slug,hit.rows.length);
+      const vel=velocityNote(hit.slug);
+      const jobs=hit.rows.map(x=>{
+        const j=blank();
+        j.title=x.title||'[No Title]';
+        j.company=hit.name||hit.slug;
+        j.location=x.location||'';
+        j.url=x.url||'';
+        j.description=(x.desc||'').slice(0,4000);
+        j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
+        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'',
+                 x.posted?'Posted '+x.posted:''].filter(Boolean).join(' \u00b7 ');
+        return j;
+      });
+      added+=addJobs(jobs);
+      notes.push(`${hit.name||hit.slug} \u2192 ${hit.label}${hit.viaGoogle?' (found via search)':''}: ${hit.rows.length} open${vel?' \u2014 '+vel:''}`);
+    }
+    await save(); busy=false; render();
+    setSearchInfo(
+      (added?`Added ${added} new. `:'Nothing new. ')
+      + notes.join(' \u00b7 ')
+      + (misses.length?` \u00b7 not found: ${misses.slice(0,4).join(', ')}`:''));
+  }catch(e){
+    busy=false; render(); setSearchInfo(e.message);
+  }
+}
+
+function apifyDialog(retry){
+  const d=modal(`<div class="eyebrow">Live search</div>
+    <h2 style="margin:6px 0 10px">Add your Apify token</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 4px">Searching LinkedIn runs through Apify, the same service your Python scanner uses. Paste the same token.</p>
+    <p class="hint" style="margin-bottom:12px">Find it at <span style="color:var(--cool)">console.apify.com → Settings → API &amp; Integrations</span>. Stored only in this browser — but it is a real credential, so don't share this file with the token saved in it.</p>
+    <label class="lab">Token</label>
+    <input type="text" id="av" placeholder="apify_api_..." value="${esc(APIFY||'')}" autocomplete="off">
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="aSave">Save token</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#aSave').onclick=async()=>{
+    const v=d.querySelector('#av').value.trim();
+    if(!v.startsWith('apify_api_')){ alert('Apify tokens start with apify_api_'); return; }
+    APIFY=v; await put('triage:apify',v); d.remove(); if(retry) retry();
+  };
+}
+
+/* ═══ cold target ═══
+   A company with no posting. Same two axes, but the action is a DM rather than
+   an application — which is where most of these roles actually get filled. */
+function coldDialog(){
+  const d=modal(`<div class="eyebrow">Cold target</div>
+    <h2 style="margin:6px 0 6px">Add a company with no posting</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">For places you'd want to work whether or not they're advertising. Scored the same way, but the next step is a message, not an application.</p>
+    <label class="lab">Company</label><input type="text" id="cCo">
+    <label class="lab" style="margin-top:10px">Role you'd want</label><input type="text" id="cTitle" placeholder="AI Operations / Internal Tools">
+    <label class="lab" style="margin-top:10px">Location</label><input type="text" id="cLoc">
+    <label class="lab" style="margin-top:10px">Careers page or LinkedIn</label><input type="text" id="cUrl">
+    <label class="lab" style="margin-top:10px">Why them</label><textarea id="cDesc" rows="5" placeholder="What they do, and why you'd be useful to them."></textarea>
+    <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="cAdd">Add target</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#cAdd').onclick=async()=>{
+    const j=blank();
+    j.company=d.querySelector('#cCo').value.trim();
+    j.title=d.querySelector('#cTitle').value.trim()||'Cold approach';
+    j.location=d.querySelector('#cLoc').value.trim();
+    j.url=d.querySelector('#cUrl').value.trim();
+    j.description=d.querySelector('#cDesc').value.trim();
+    j.source='Cold list'; j.channel='cold';
+    if(!j.company){ alert('Needs a company name.'); return; }
+    addJobs([j]); await save(); render(); d.remove();
+  };
+}
+
+/* ═══════════════ ONBOARDING ═══════════════ */
+function renderOnb(){
+  const steps=['Your profile','What we found','Pick a direction'];
+  let body='';
+
+  if(ONB.step===0){
+    body=`<p class="lede">Drop in your profile. We'll work out what you should be applying for.</p>
+      <p class="say">A CV, a résumé, a career summary — any markdown or text file describing your background. It never leaves your browser except to be read once.</p>
+      <div class="drop" id="dropProf" style="padding:38px 18px">
+        <div style="font-size:15px;color:var(--text);margin-bottom:6px">Drop your profile file here</div>
+        <div>or click to choose · .md or .txt</div></div>
+      <input type="file" id="fileProf" accept=".md,.txt,.markdown" style="display:none">
+      <p class="say" style="margin:14px 0 0">No file? <a href="#" id="pasteProf" class="lnk">Paste your background instead</a></p>
+      ${ONB.error?`<p class="err">${esc(ONB.error)}</p>`:''}
+      <div style="margin-top:34px;padding-top:20px;border-top:1px solid var(--line)">
+        <div class="eyebrow">First time here?</div>
+        <p class="say" style="margin:9px 0 10px;font-size:13px">This runs entirely on your machine. Your CV and everything you do with it stay in this browser \u2014 nothing is uploaded and there's no account. Scoring calls an AI model, so it needs an API key: your own, or one somebody shared with you.</p>
+        <div class="btn-row">
+          <button class="btn-sm" id="onbKeys">Set up keys</button>
+          <button class="btn-sm" id="onbRestore">Restore a backup</button></div>
+        <input type="file" id="onbFile" accept=".json" style="display:none">
+        <div id="onbMsg" class="hint"></div>
+      </div>
+      ${Object.keys(DB.profiles).length?`<div style="margin-top:32px"><div class="eyebrow">Or continue as</div>
+        <div class="btn-row" style="margin-top:9px">${Object.entries(DB.profiles).map(([id,p])=>
+          `<button class="btn-sm" data-open="${esc(id)}">${esc(p.profile.name)} · ${p.jobs.length} jobs</button>`).join('')}</div></div>`:''}`;
+  }
+
+  if(ONB.step===1){
+    if(!ONB.parsed){
+      body=`<p class="lede"><span class="spin"></span> Reading ${esc(ONB.fileName||'your profile')}…</p>
+        <p class="say">Pulling out your level, your location, what you can honestly claim, and where you could go next.</p>`;
+    } else {
+      const p=ONB.parsed;
+      body=`<p class="lede">Here's what we read.</p>
+        <p class="say">Check it. Anything wrong here will skew every score, so fix it now rather than later.</p>
+        <div class="card">
+          <div class="kv">
+            <div class="k">Name</div><div>${esc(p.name)}</div>
+            <div class="k">Based in</div><div>${esc(p.location||'—')}</div>
+            <div class="k">Level</div><div>${esc(p.seniority||'—')}${p.years_experience?` · ~${p.years_experience} yrs`:''}</div>
+            <div class="k">In short</div><div>${esc(p.headline||'—')}</div>
+          </div>
+        </div>
+        ${p.unusual_combination?`<div class="card"><div class="eyebrow">What's rare about you</div>
+          <p style="margin:7px 0 0">${esc(p.unusual_combination)}</p></div>`:''}
+        <div class="card"><div class="eyebrow">You can do</div>
+          <div class="chips" style="margin-top:9px">${(p.strengths||[]).map(s=>`<span class="chip g">${esc(s)}</span>`).join('')}</div></div>
+        <div class="card"><div class="eyebrow">You can't claim</div>
+          <div class="chips" style="margin-top:9px">${(p.gaps||[]).map(s=>`<span class="chip r">${esc(s)}</span>`).join('')||'<span class="chip">none found</span>'}</div>
+          <p class="hint">These don't lower your fit score. They lower how likely a place is to reply, which is tracked separately.</p></div>
+        <div class="btn-row" style="margin-top:18px">
+          <button class="btn-go" id="onbNext">Looks right</button>
+          <button id="onbBack">Start over</button></div>`;
+    }
+  }
+
+  if(ONB.step===2){
+    const p=ONB.parsed;
+    body=`<p class="lede">Which direction are you going?</p>
+      <p class="say">This changes what counts as a good job. You can switch later and rescore.</p>
+      ${(p.tracks||[]).map(t=>`<div class="trk ${ONB.track===t.id?'sel':''}" data-track="${esc(t.id)}">
+        <div class="tl">${esc(t.label)} <span class="tag ${t.difficulty==='easy'?'easy':(t.difficulty==='moonshot'||t.difficulty==='stretch')?'hard':'mid'}">${esc(t.difficulty||'')}</span></div>
+        <p class="tw">${esc(t.why||'')}</p>
+        ${(t.titles||[]).length?`<div class="chips" style="margin-top:9px">${t.titles.slice(0,6).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:''}
+      </div>`).join('')}
+      <div class="card" style="margin-top:18px">
+        <div class="eyebrow">Something else in mind?</div>
+        <p style="color:var(--muted);font-size:12.5px;margin:8px 0 10px">Name any kind of work and you'll get a straight answer on where you stand \u2014 easy, moderate, or moonshot \u2014 and what it would take.</p>
+        <input type="text" id="wantIn" placeholder="e.g. AI policy research, product management, data journalism"
+          ${ONB.assessing?'disabled':''}>
+        <div class="btn-row" style="margin-top:9px">
+          <button class="btn-sm" id="wantGo" ${ONB.assessing?'disabled':''}>
+            ${ONB.assessing?'<span class="spin"></span> Working it out\u2026':'Assess it'}</button></div>
+        ${ONB.assessErr?`<p class="err">${esc(ONB.assessErr)}</p>`:''}
+        ${ONB.assessed?trackVerdict(ONB.assessed)+`
+          <div class="btn-row" style="margin-top:12px">
+            <button class="btn-go btn-sm" id="wantAdd">Add this as a direction</button>
+            <button class="btn-sm" id="wantDrop">Discard</button></div>`:''}
+      </div>
+      <div class="btn-row" style="margin-top:16px">
+        <button class="btn-go" id="onbDone" ${ONB.track?'':'disabled'}>Start finding jobs</button>
+        <button id="onbBack2">Back</button></div>`;
+  }
+
+  $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
+      <span class="sub" style="color:var(--muted);font-size:12px">fit &times; reachability</span></div>
+    <div class="onb">
+      <div class="steps">${steps.map((s,i)=>
+        `<div class="stp ${i===ONB.step?'on':''} ${i<ONB.step?'did':''}">${i+1} &nbsp;${s}</div>`).join('')}</div>
+      ${body}</div>`;
+
+  if(ONB.step===0){
+    hookDrop($('#dropProf'),$('#fileProf'),onProfileFile);
+    $('#pasteProf').onclick=e=>{ e.preventDefault(); pasteProfileDialog(); };
+    $('#onbKeys').onclick=()=>keyDialog(()=>render());
+    $('#onbRestore').onclick=()=>$('#onbFile').click();
+    $('#onbFile').onchange=e=>{
+      const f=e.target.files[0]; if(!f) return;
+      readFile(f, async txt=>{
+        const m=$('#onbMsg');
+        try{
+          // One picker for either file, so nobody has to know which is which.
+          if(txt.includes('"triage-keys"')){ await importKeys(txt); m.textContent='Keys imported.'; }
+          else { const n=await importBackup(txt,'merge'); m.textContent=`Restored ${n} profile${n===1?'':'s'}.`;
+                 if(DB.current&&DB.profiles[DB.current]) VIEW='app'; }
+          render();
+        }catch(err){ m.innerHTML='<span class="err">'+esc(err.message)+'</span>'; }
+      });
+    };
+    document.querySelectorAll('[data-open]').forEach(b=>b.onclick=async()=>{
+      DB.current=b.dataset.open; VIEW='app'; await save(); render(); });
+  }
+  if(ONB.step===1 && ONB.parsed){
+    $('#onbNext').onclick=()=>{ ONB.step=2; ONB.track=(ONB.parsed.tracks[0]||{}).id; render(); };
+    $('#onbBack').onclick=()=>{ ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''}; render(); };
+  }
+  if(ONB.step===2){
+    document.querySelectorAll('[data-track]').forEach(el=>el.onclick=()=>{ ONB.track=el.dataset.track; render(); });
+    $('#onbBack2').onclick=()=>{ ONB.step=1; render(); };
+    $('#onbDone').onclick=finishOnb;
+    const goAssess=async()=>{
+      const v=$('#wantIn').value.trim();
+      if(v.length<3){ ONB.assessErr='Say a bit more about the kind of work.'; render(); return; }
+      ONB.assessing=true; ONB.assessErr=''; ONB.assessed=null; ONB.wantText=v; render();
+      try{ ONB.assessed=await assessTrack(v,ONB.parsed); }
+      catch(e){
+        if(e.message==='NEEDKEY'){ ONB.assessing=false; render(); keyDialog(goAssess); return; }
+        ONB.assessErr=e.message;
+      }
+      ONB.assessing=false; render();
+    };
+    $('#wantGo').onclick=goAssess;
+    $('#wantIn').onkeydown=e=>{ if(e.key==='Enter') goAssess(); };
+    if(ONB.wantText) $('#wantIn').value=ONB.wantText;
+    if($('#wantAdd')) $('#wantAdd').onclick=()=>{
+      ONB.parsed.tracks.push(ONB.assessed);
+      ONB.track=ONB.assessed.id;
+      ONB.assessed=null; ONB.wantText=''; render();
+    };
+    if($('#wantDrop')) $('#wantDrop').onclick=()=>{ ONB.assessed=null; render(); };
+  }
+}
+
+async function onProfileFile(text,name){
+  if(!String(text||'').trim()){ ONB.step=0; ONB.error="That file came through empty."; render(); return; }
+  ONB.raw=text; ONB.fileName=name||'profile.md'; ONB.step=1; ONB.parsed=null; ONB.error='';
+  render();
+  try{ ONB.parsed=await extractProfile(text); render(); }
+  catch(e){
+    ONB.step=0;
+    if(e.message==='NEEDKEY'){
+      ONB.error="Your file loaded fine — but this needs an Anthropic key to read it.";
+      render(); keyDialog(()=>onProfileFile(text,name)); return;
+    }
+    ONB.error="Your file loaded, but reading it failed. "+e.message;
+    render();
+  }
+}
+function pasteProfileDialog(){
+  const d=modal(`<div class="eyebrow">Your background</div>
+    <h2 style="margin:6px 0 12px">Paste it in</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 10px">Work history, skills, anything. Rough notes are fine.</p>
+    <textarea id="pt" rows="12" placeholder="I've spent six years running..."></textarea>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="ptGo">Read it</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#ptGo').onclick=()=>{
+    const v=d.querySelector('#pt').value.trim();
+    if(v.length<80){ alert('Give it a bit more to work with — a few sentences at least.'); return; }
+    d.remove(); onProfileFile(v,'pasted profile');
+  };
+}
+async function finishOnb(){
+  const id = 'p_'+Date.now().toString(36);
+  DB.profiles[id]={ profile:ONB.parsed, raw:ONB.raw, track:ONB.track, jobs:[], created:today() };
+  DB.current=id; VIEW='app';
+  ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''};
+  await save(); render();
+}
+
+/* ═══════════════ MAIN APP ═══════════════ */
+const PL={x:56,y:20,w:544,h:340};
+const plotXY=(f,r)=>({ x:PL.x+(r/100)*PL.w, y:PL.y+(1-f/100)*PL.h });
+
+function plotSVG(){
+  const p=P(), scored=p.jobs.filter(isScored);
+  let g='';
+  for(let v=0;v<=100;v+=25){
+    const y=PL.y+(1-v/100)*PL.h, x=PL.x+(v/100)*PL.w, mid=v===50;
+    g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
+    g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
+    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="#56656F">${v}</text>`;
+    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#56656F">${v}</text>`;
+  }
+  g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+14}" text-anchor="end">APPLY TODAY</text>`;
+  g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
+  g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
+  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#7D8C99" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
+  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#7D8C99">REACHABILITY</text>`;
+  if(RANGE){
+    const a=plotXY(RANGE.f1,RANGE.r1), b=plotXY(RANGE.f0,RANGE.r0);
+    g+=`<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" fill="#E8B04B" fill-opacity=".07" stroke="#E8B04B" stroke-width="1" stroke-dasharray="4 3"/>`;
+  }
+  scored.forEach(j=>{
+    const f=fitOf(j), r=reachOf(j), pt=plotXY(f,r), open=isOpen(j);
+    const inR=!RANGE||(f>=RANGE.f0&&f<=RANGE.f1&&r>=RANGE.r0&&r<=RANGE.r1);
+    const col=!open?'#56656F':(inR?'#E8B04B':'#3F5260'), rad=!open?3:(inR?5.5:3.5);
+    const tip=`<title>${esc(j.title)} — ${esc(j.company)}
+fit ${f} · reach ${r} · ${chOf(j)}</title>`;
+    // Posted roles are circles, cold targets squares. Same axes, different action:
+    // one you apply to, the other you have to start the conversation yourself.
+    g += chOf(j)==='cold'
+      ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="none" stroke="${col}" stroke-width="1.6" stroke-opacity="${inR&&open?.95:.5}">${tip}</rect>`
+      : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${inR&&open?.85:.5}" stroke="${col}" stroke-width="1">${tip}</circle>`;
+  });
+  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="Space Grotesk" font-size="13" fill="#56656F">Nothing scored yet</text>`;
+  return g;
+}
+
+function inRange(j){
+  if(CHFILT!=='all' && chOf(j)!==CHFILT) return false;
+  if(!RANGE) return true;
+  const f=fitOf(j), r=reachOf(j);
+  return f>=RANGE.f0&&f<=RANGE.f1&&r>=RANGE.r0&&r<=RANGE.r1;
+}
+function ranked(){ const p=P();
+  return p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j)&&inRange(x.j)).sort((a,b)=>rankOf(b.j)-rankOf(a.j)); }
+
+function flagHtml(s){
+  const good=['strong_fit','non_traditional_friendly','rare_combination_fit'];
+  const bad=['wrong_role_shape','location_ineligible','credential_gated','seniority_too_high','seniority_too_low','high_competition'];
+  return String(s||'').split(',').filter(Boolean).map(f=>
+    `<span class="flag ${good.includes(f)?'g':bad.includes(f)?'r':''}">${esc(f.replace(/_/g,' '))}</span>`).join('');
+}
+function jobCard(j,i,hi){
+  const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j);
+  const cls = st==='live' ? 'st-live' : due ? 'st-due' : 'ch-'+ch;
+  const stLabel = st==='sent' && due ? 'due' : st;
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
+  const silent = daysSilent(j);
+  return `<div class="job ${cls} ${st==='closed'?'done':''}">
+    <div class="jrow"><div style="flex:1;min-width:0">
+      <div class="jt">${esc(j.title||'(untitled)')}</div>
+      <div class="jc">${esc(j.company||'\u2014')}${j.location?' \u00b7 '+esc(j.location):''}</div>
+      <div class="flags" style="margin-top:7px">
+        <span class="chn ${ch}">${ch==='cold'?'cold approach':'posted role'}</span>
+        <span class="stage s-${stLabel}">${esc(stLabel)}</span>
+        ${st==='sent'&&silent?`<span class="stage s-sent">${silent}d silent</span>`:''}
+        ${cts.length?`<span class="stage">${cts.length} contact${cts.length>1?'s':''}</span>`:''}
+      </div></div>
+      <div class="jscore"><div class="big">${Math.round(rankOf(j))}</div>
+        <div class="sm">fit ${f}</div>
+        <div class="sm" style="color:var(--neutral)">reach ${r}</div></div></div>
+    <div class="bar"><i style="width:${f}%;background:var(--${ch})"></i></div>
+    <div class="bar"><i style="width:${r}%;background:var(--neutral)"></i></div>
+    ${j.ai_reason?`<p class="jreason">${esc(j.ai_reason)}</p>`:''}
+    ${j.ai_flags?`<div class="flags">${flagHtml(j.ai_flags)}</div>`:''}
+    ${ev.length?`<div class="log"><span class="when">${esc(ev[0].on)}</span> \u00b7 <b>${esc(ev[0].kind)}</b> ${esc(ev[0].text).slice(0,120)}</div>`:''}
+    <div class="jacts">
+      ${j.url?`<a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open \u2197</a>`:''}
+      <div class="spacer"></div>
+      <button class="btn-sm" data-act="open" data-i="${i}">Details</button>
+      ${st==='new'
+        ? `<button class="${ch==='cold'?'btn-cold btn-sm':'btn-go btn-sm'}" data-act="pitch" data-i="${i}">${ch==='cold'?'Write the DM':'Draft outreach'}</button>
+           <button class="btn-sm" data-act="sent" data-i="${i}">${ch==='cold'?'Mark contacted':'Mark applied'}</button>`
+        : ''}
+      ${st==='sent'
+        ? `${due?`<button class="btn-go btn-sm" data-act="chase" data-i="${i}">Write the chase</button>`:''}
+           <button class="btn-sm" data-act="live" data-i="${i}">They replied</button>`
+        : ''}
+      ${st==='live'
+        ? `<button class="btn-sm" data-act="note" data-i="${i}">Log a note</button>`
+        : ''}
+      ${st!=='closed'
+        ? `<button class="btn-sm" data-act="close" data-i="${i}">Close</button>`
+        : `<button class="btn-sm" data-act="reopen" data-i="${i}">Reopen</button>`}
+    </div></div>`;
+}
+
+/* ═══ the daily view ═══
+   Ordered by what is actually worth doing, not by score. A live conversation
+   beats ten new applications, and a chase that is three days overdue beats a
+   fresh application, because the cost of losing it is already sunk. New work
+   comes last on purpose — it is the most tempting and the least urgent. */
+function renderToday(){
+  const p=P();
+  const all=p.jobs.map((j,i)=>({j,i}));
+  const live=all.filter(x=>stOf(x.j)==='live')
+                .sort((a,b)=>daysSilent(b.j)-daysSilent(a.j));
+  const due =all.filter(x=>isDue(x.j))
+                .sort((a,b)=>daysSilent(b.j)-daysSilent(a.j));
+  const fresh=all.filter(x=>stOf(x.j)==='new'&&isScored(x.j)&&inRange(x.j))
+                 .sort((a,b)=>rankOf(b.j)-rankOf(a.j)).slice(0,10);
+  const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).length;
+  const doneToday=all.filter(x=>x.j.last_touch===today()).length;
+
+  const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
+    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
+    <p class="sect-sub">${sub}</p>
+    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
+
+  if(!live.length&&!due.length&&!fresh.length){
+    return `<div class="empty"><b>${p.jobs.length?'Nothing needs you today':'No jobs yet'}</b>
+      ${p.jobs.length
+        ? (waiting?`${waiting} still waiting on a reply. Come back when one comes due.`:'Add and score some jobs to get started.')
+        : 'Find jobs on the left, then score them.'}</div>`;
+  }
+  return `<div class="stats">
+      <div class="stat"><div class="k num">${doneToday}</div><div class="l">touched today</div></div>
+      <div class="stat"><div class="k num" style="color:var(--live)">${live.length}</div><div class="l">in conversation</div></div>
+      <div class="stat"><div class="k num" style="color:var(--warn)">${due.length}</div><div class="l">need chasing</div></div>
+      <div class="stat"><div class="k num" style="color:var(--neutral)">${waiting}</div><div class="l">waiting</div></div>
+    </div>
+    ${sect('live','Reply to these','Someone real is on the other end. This is worth more than any new application.',live)}
+    ${sect('due','Chase these','Sent, and gone quiet past the follow-up date. One nudge, then let it go.',due)}
+    ${sect('','Start these','Ranked by fit and reachability. Work down, don\'t browse.',fresh)}`;
+}
+
+function renderApp(){
+  const p=P(), prof=p.profile;
+  const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const scored=p.jobs.filter(isScored), inr=scored.filter(inRange);
+  const strong=inr.filter(j=>fitOf(j)>=65&&reachOf(j)>=45&&isOpen(j)).length;
+  const applied=p.jobs.filter(j=>j.status==='Applied').length;
+  const posted=p.jobs.filter(j=>chOf(j)==='posted').length;
+  const cold=p.jobs.filter(j=>chOf(j)==='cold').length;
+  const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
+  const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  const top=ranked().filter(x=>isOpen(x.j)).slice(0,10);
+  const all=ranked();
+
+  $('#root').innerHTML=`
+  <div class="topbar">
+    <h1>Job Triage</h1>
+    <div class="who"><div class="av">${esc(initials)}</div>
+      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}${trk.label?' · '+esc(trk.label):''}</div></div></div>
+    <div class="spacer"></div>
+    <span class="pill ${p.jobs.length?'on':''}">${p.jobs.length} jobs</span>
+    <span class="pill ${scored.length?'on':''}">${scored.length} scored</span>
+    <button class="btn-sm" id="btnSwitch">Switch profile</button>
+  </div>
+  <div class="wrap">
+    <div class="side">
+      <div class="block"><span class="eyebrow">Direction</span>
+        <select id="trackSel">${(prof.tracks||[]).map(t=>
+          `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
+        <div class="hint">${esc(trk.why||'')}</div>
+        <div class="btn-row" style="margin-top:9px">
+          <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
+          <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
+        ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
+      </div>
+      <div class="block"><span class="eyebrow">Find new jobs</span>
+        <label class="lab">Search LinkedIn</label>
+        <input type="text" id="sq" placeholder="Forward Deployed Engineer | remote"
+          value="${esc((trk.titles&&trk.titles[0])||'')}${trk.titles&&trk.titles.length?' | remote':''}">
+        <p class="hint">Format: <b>title | location</b>. Use <b>remote</b> for worldwide.</p>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-go btn-sm" id="btnSearch" style="flex:1" ${busy?'disabled':''}>
+            ${busy?'<span class="spin"></span> Searching…':'Search LinkedIn'}</button>
+          <button class="btn-sm" id="btnSearchAll" ${busy?'disabled':''}>All titles</button></div>
+        <button class="btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
+          Search this field's job boards</button>
+        <button class="btn-go btn-sm" id="btnSuggest" style="width:100%;margin-top:10px" ${busy?'disabled':''}>
+          Suggest companies for me</button>
+        <p class="hint">Names the places worth approaching, then checks which are hiring. Start here if you don't know who to target.</p>
+        <button class="btn-sm" id="btnAts" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
+          Pull a company I already know</button>
+        <p class="hint">Free and live \u2014 no token needed. Full job descriptions from the company's own feed.</p>
+        ${(trk.boards||[]).length
+          ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
+             <p class="hint">Where ${esc(trk.label||'these')} roles are actually posted. LinkedIn misses most of them.</p>`
+          : `<p class="hint">No specialist boards found for this track — LinkedIn search is the fallback.</p>`}
+        <div id="searchInfo" class="hint"></div>
+      </div>
+      <div class="block"><span class="eyebrow">Add jobs</span>
+        <div class="drop" id="dropCsv">Drop a <b>jobs .csv</b><br>or click to choose</div>
+        <input type="file" id="fileCsv" accept=".csv,.txt" style="display:none">
+        <div class="btn-row" style="margin-top:8px">
+          <button class="btn-sm" id="btnPaste" style="flex:1">Add by hand</button>
+          <button class="btn-sm" id="btnCold" style="flex:1">Add a company</button></div>
+        <div id="csvInfo" class="hint"></div>
+      </div>
+      <div class="block"><span class="eyebrow">Score</span>
+        <button class="btn-go" id="btnScore" style="width:100%" ${busy?'disabled':''}>
+          ${busy?'<span class="spin"></span> Scoring…':'Score new jobs'}</button>
+        ${busy?'<div class="prog"><i id="progBar" style="width:0"></i></div>':''}
+        <div id="scoreInfo" class="hint"></div>
+        <button class="btn-sm" id="btnRescore" style="margin-top:8px;width:100%" ${busy?'disabled':''}>Rescore everything</button>
+        <div class="hint">Rescore after changing direction — the same jobs will land in different places.</div>
+      </div>
+      <div class="block"><span class="eyebrow">Data</span>
+        <div class="btn-row">
+          <button class="btn-go btn-sm" id="btnData" style="width:100%">Backup &amp; transfer</button></div>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnKey" style="flex:1">${KEY?'Keys':'Set up keys'}</button>
+          <button class="btn-sm" id="btnExport" style="flex:1">Export CSV</button></div>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
+        <div class="hint">Stored in this browser only \u2014 clearing site data wipes it. Take a backup.</div>
+      </div>
+    </div>
+    <div class="main">
+      <div class="tabs">
+        <div class="tab ${TAB==='map'?'on':''}" data-tab="map">The map</div>
+        <div class="tab ${TAB==='list'?'on':''}" data-tab="list">Today</div>
+        <div class="tab ${TAB==='all'?'on':''}" data-tab="all">Everything</div>
+        <div class="spacer"></div>
+        <div class="tab ${CHFILT==='all'?'on':''}" data-ch="all">All</div>
+        <div class="tab ${CHFILT==='posted'?'on':''}" data-ch="posted">Posted ●</div>
+        <div class="tab ${CHFILT==='cold'?'on':''}" data-ch="cold">Cold □</div>
+      </div>
+      <div ${TAB==='map'?'':'style="display:none"'}>
+        <div class="plotwrap"><div class="plothead">
+          <span class="eyebrow">Drag a box to set your range</span><div class="spacer"></div>
+          <span class="num" style="font-size:11px;color:var(--muted)">${RANGE?`fit ${Math.round(RANGE.f0)}–${Math.round(RANGE.f1)} · reach ${Math.round(RANGE.r0)}–${Math.round(RANGE.r1)}`:'showing all'}</span>
+          <button class="btn-sm" id="btnReset">Reset range</button></div>
+          <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg></div>
+        <div class="stats">${[[p.jobs.length,'held'],[posted,'posted ●'],[cold,'cold □'],[inr.length,'in range'],[strong,'worth doing'],[applied,'actioned']]
+          .map(([k,l])=>`<div class="stat"><div class="k num">${k}</div><div class="l">${l}</div></div>`).join('')}</div>
+        ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
+          :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
+      </div>
+      <div ${TAB==='list'?'':'style="display:none"'}>${renderToday()}</div>
+      <div ${TAB==='all'?'':'style="display:none"'}>
+        ${all.length?`<p style="color:var(--muted);font-size:12px;margin:0 0 14px">${all.length} in range, ranked.</p>${all.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')}`
+          :`<div class="empty"><b>Nothing to show</b>Add jobs and score them.</div>`}
+      </div>
+    </div>
+  </div>`;
+
+  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
+  document.querySelectorAll('.tab[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
+  hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
+  $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); };
+  $('#btnProfile').onclick=showProfile;
+  $('#btnAddTrack').onclick=addTrackDialog;
+  if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
+    `<div class="eyebrow">Your assessment</div>${trackVerdict(trk)}
+     <div class="btn-row" style="margin-top:16px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''}; render(); };
+  $('#btnPaste').onclick=pasteJobDialog;
+  $('#btnScore').onclick=()=>runScoring(false);
+  $('#btnRescore').onclick=()=>{ if(confirm('Rescore every job? Existing scores get overwritten.')) runScoring(true); };
+  $('#btnReset').onclick=()=>{ RANGE=null; render(); };
+  $('#btnExport').onclick=()=>{
+    if(!P().jobs.length){ alert('Nothing to export yet.'); return; }
+    const b=new Blob([toCSV(P().jobs,COLS)],{type:'text/csv'});
+    const a=document.createElement('a'); a.href=URL.createObjectURL(b);
+    a.download='job_tracker.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+  $('#btnClear').onclick=async()=>{ if(!confirm('Delete every job for this profile? Your profile stays.')) return;
+    P().jobs=[]; RANGE=null; await save(); render(); };
+  $('#btnKey').onclick=()=>keyDialog(()=>render());
+  $('#btnData').onclick=dataDialog;
+  $('#btnCold').onclick=coldDialog;
+  $('#btnSearch').onclick=()=>runSearch([$('#sq').value.trim()]);
+  $('#btnBoards').onclick=()=>runBoards(trk, prof);
+  $('#btnAts').onclick=atsDialog;
+  $('#btnSuggest').onclick=suggestDialog;
+  $('#btnSearchAll').onclick=()=>{
+    const t=(trk.titles||[]).slice(0,6);
+    if(!t.length){ $('#searchInfo').textContent='This track has no titles to search.'; return; }
+    const qs=[]; t.forEach(x=>{ qs.push(x+' | remote'); qs.push(x+' | '+(prof.location||'Bangalore').split(',')[0]); });
+    runSearch(qs);
+  };
+  bindPlot();
+}
+
+/* Adding a direction after setup. Same assessor as onboarding — people work out
+   what they actually want weeks in, not on day one. */
+function addTrackDialog(){
+  const prof=P().profile;
+  const d=modal(`<div class="eyebrow">New direction</div>
+    <h2 style="margin:6px 0 6px">What kind of work?</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Name it and you'll get a straight read on where you stand against it \u2014 easy, moderate, or moonshot \u2014 plus the titles and boards to search.</p>
+    <input type="text" id="tIn" placeholder="e.g. developer relations, agri-tech operations, technical writing">
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn-go btn-sm" id="tGo">Assess it</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
+    <div id="tOut"></div>`);
+  const run=async()=>{
+    const v=d.querySelector('#tIn').value.trim();
+    if(v.length<3){ d.querySelector('#tOut').innerHTML='<p class="err">Say a bit more about the kind of work.</p>'; return; }
+    d.querySelector('#tGo').disabled=true;
+    d.querySelector('#tOut').innerHTML='<p style="color:var(--muted);margin-top:14px"><span class="spin"></span> Working it out\u2026</p>';
+    try{
+      const t=await assessTrack(v,prof);
+      d.querySelector('#tOut').innerHTML=trackVerdict(t)+`
+        <div class="btn-row" style="margin-top:12px">
+          <button class="btn-go btn-sm" id="tAdd">Add and switch to it</button>
+          <button class="btn-sm" id="tAgain">Try another</button></div>`;
+      d.querySelector('#tAdd').onclick=async()=>{
+        const p=P(); p.profile.tracks.push(t); p.track=t.id;
+        await save(); d.remove(); render();
+      };
+      d.querySelector('#tAgain').onclick=()=>{
+        d.querySelector('#tOut').innerHTML=''; d.querySelector('#tGo').disabled=false;
+        d.querySelector('#tIn').value=''; d.querySelector('#tIn').focus();
+      };
+    }catch(e){
+      d.querySelector('#tGo').disabled=false;
+      if(e.message==='NEEDKEY'){ d.remove(); keyDialog(addTrackDialog); return; }
+      d.querySelector('#tOut').innerHTML='<p class="err">'+esc(e.message)+'</p>';
+    }
+  };
+  d.querySelector('#tGo').onclick=run;
+  d.querySelector('#tIn').onkeydown=e=>{ if(e.key==='Enter') run(); };
+  setTimeout(()=>d.querySelector('#tIn').focus(),50);
+}
+
+function showProfile(){
+  const p=P().profile;
+  const sec=(t,arr,cls)=>arr&&arr.length?`<div class="eyebrow" style="margin-top:15px">${t}</div>
+    <div class="chips" style="margin-top:8px">${arr.map(x=>`<span class="chip ${cls||''}">${esc(x)}</span>`).join('')}</div>`:'';
+  modal(`<div class="eyebrow">Your profile</div><h2 style="margin:6px 0 4px">${esc(p.name)}</h2>
+    <p style="color:var(--muted);margin:0 0 14px">${esc(p.headline||'')}</p>
+    <div class="kv"><div class="k">Based in</div><div>${esc(p.location||'—')}</div>
+      <div class="k">Level</div><div>${esc(p.seniority||'—')}${p.years_experience?` · ~${p.years_experience} yrs`:''}</div></div>
+    ${p.unusual_combination?`<p style="margin:14px 0 0;color:var(--muted);font-style:italic">${esc(p.unusual_combination)}</p>`:''}
+    ${sec('You can do',p.strengths,'g')}${sec('Fields',p.domains)}${sec('Skills',p.hard_skills)}
+    ${sec("You can't claim",p.gaps,'r')}${sec('Not worth applying to',p.wrong_shapes,'r')}
+    <div class="btn-row" style="margin-top:18px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+}
+
+/* ═══ plot drag ═══ */
+function bindPlot(){
+  const svg=$('#plot'); if(!svg) return;
+  let start=null;
+  const toPlot=ev=>{ const pt=svg.createSVGPoint(); const t=ev.touches?ev.touches[0]:ev;
+    pt.x=t.clientX; pt.y=t.clientY; const m=svg.getScreenCTM(); if(!m) return null;
+    const q=pt.matrixTransform(m.inverse());
+    return { r:Math.max(0,Math.min(100,(q.x-PL.x)/PL.w*100)), f:Math.max(0,Math.min(100,(1-(q.y-PL.y)/PL.h)*100)) }; };
+  const down=ev=>{ if(ev.target.classList.contains('dot')) return;
+    const p=toPlot(ev); if(!p) return; start=p; ev.preventDefault(); };
+  const move=ev=>{ if(!start) return; const p=toPlot(ev); if(!p) return;
+    RANGE={f0:Math.min(start.f,p.f),f1:Math.max(start.f,p.f),r0:Math.min(start.r,p.r),r1:Math.max(start.r,p.r)};
+    svg.innerHTML=plotSVG(); };
+  const up=()=>{ if(start&&RANGE&&(RANGE.f1-RANGE.f0<4||RANGE.r1-RANGE.r0<4)) RANGE=null;
+    if(start){ start=null; render(); } start=null; };
+  svg.addEventListener('mousedown',down); svg.addEventListener('touchstart',down,{passive:false});
+  window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
+  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
+  svg.addEventListener('click',ev=>{ if(ev.target.classList.contains('dot')) showJob(parseInt(ev.target.dataset.idx,10)); });
+}
+
+/* ═══ backup, restore, and sharing ═══
+   Everything lives in this browser's storage, which is durable but not
+   permanent — clearing site data wipes it, and there is no server copy. So a
+   real export matters more here than it would in a hosted app.
+
+   Keys are deliberately kept OUT of the data backup and given their own file.
+   A data backup is the thing you keep and pass around; credentials are not, and
+   bundling them together is how a key ends up somewhere it shouldn't be. */
+
+function downloadFile(name, text, mime){
+  const b=new Blob([text],{type:mime||'application/json'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(b); a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),2000);
+}
+
+async function exportBackup(){
+  const payload={
+    kind:"triage-backup", version:3, exported:today(),
+    profiles:DB.profiles, current:DB.current
+  };
+  downloadFile(`triage-backup-${today()}.json`, JSON.stringify(payload,null,1));
+}
+
+async function importBackup(text, mode){
+  let d; try{ d=JSON.parse(text); }catch(e){ throw new Error("That isn't a valid backup file."); }
+  if(d.kind!=="triage-backup"||!d.profiles) throw new Error("That JSON isn't a triage backup.");
+  const incoming=Object.keys(d.profiles).length;
+  if(mode==='replace'){ DB.profiles=d.profiles; DB.current=d.current||Object.keys(d.profiles)[0]||null; }
+  else {
+    // Merge: keep both sides. Colliding ids get a fresh one rather than
+    // silently overwriting someone's work.
+    Object.entries(d.profiles).forEach(([id,prof])=>{
+      const key = DB.profiles[id] ? id+'_'+Math.random().toString(36).slice(2,6) : id;
+      DB.profiles[key]=prof;
+    });
+    if(!DB.current) DB.current=Object.keys(DB.profiles)[0]||null;
+  }
+  await save();
+  return incoming;
+}
+
+async function exportKeys(){
+  if(!KEY && !APIFY){ alert("No keys saved yet \u2014 nothing to export."); return; }
+  modal(`<div class="eyebrow">Send keys to a friend</div>
+    <h2 style="margin:6px 0 10px">This file contains your credentials</h2>
+    <p style="color:var(--muted);font-size:13px;margin:0 0 10px">It holds your ${esc((LLM[PROV]||{}).label||PROV)} key${APIFY?' and your Apify token':''}. Anyone who has it can spend money on your account.</p>
+    <p class="hint" style="margin-bottom:14px">Only send it to someone you'd hand your card to, over a channel you trust. If it ever leaks, rotate both keys immediately \u2014 that's the only fix. The safer option is to let them use their own keys, which costs them nothing to set up.</p>
+    <div class="btn-row">
+      <button class="btn-go btn-sm" id="kdl">I understand \u2014 download it</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`)
+    .querySelector('#kdl').onclick=function(){
+      downloadFile('triage-keys.json', JSON.stringify({kind:"triage-keys",prov:PROV,key:KEY,apify:APIFY},null,1));
+      this.closest('.modal').remove();
+    };
+}
+
+async function importKeys(text){
+  let d; try{ d=JSON.parse(text); }catch(e){ throw new Error("That isn't a valid keys file."); }
+  if(d.kind!=="triage-keys") throw new Error("That JSON isn't a triage keys file.");
+  if(d.prov) { PROV=d.prov; await put('triage:prov',PROV); }
+  if(d.key)  { KEY=d.key;   await put('triage:key',KEY); }
+  if(d.apify){ APIFY=d.apify; await put('triage:apify',APIFY); }
+  return true;
+}
+
+function dataDialog(){
+  const n=Object.keys(DB.profiles).length;
+  const jobs=Object.values(DB.profiles).reduce((a,p)=>a+(p.jobs||[]).length,0);
+  const d=modal(`<div class="eyebrow">Data</div>
+    <h2 style="margin:6px 0 6px">Backup and transfer</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 14px">${n} profile${n===1?'':'s'}, ${jobs} job${jobs===1?'':'s'}, stored in this browser only. Clearing site data deletes it, so keep a backup.</p>
+
+    <div class="eyebrow">Your work</div>
+    <div class="btn-row" style="margin:8px 0 4px">
+      <button class="btn-go btn-sm" id="bkOut">Download backup</button>
+      <button class="btn-sm" id="bkIn">Restore from backup</button></div>
+    <p class="hint" style="margin-bottom:18px">Profiles, jobs, scores, contacts and history. No keys. Safe to keep anywhere.</p>
+
+    <div class="eyebrow">Credentials</div>
+    <div class="btn-row" style="margin:8px 0 4px">
+      <button class="btn-sm" id="kOut">Export keys</button>
+      <button class="btn-sm" id="kIn">Import keys</button></div>
+    <p class="hint" style="margin-bottom:18px">Kept separate on purpose. Only send these to someone you trust with your billing.</p>
+
+    <div class="eyebrow">Sending this app to someone</div>
+    <p class="hint" style="margin-top:8px">Send them the HTML file itself \u2014 it carries no data and no keys. They open it, drop in their own CV, and they're running. If you want them on your keys, send the keys file separately and have them use Import keys.</p>
+
+    <input type="file" id="bkFile" accept=".json" style="display:none">
+    <input type="file" id="kFile" accept=".json" style="display:none">
+    <div id="dataMsg" class="hint"></div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+
+  const msg=(t,err)=>{ d.querySelector('#dataMsg').innerHTML = err?`<span class="err">${esc(t)}</span>`:esc(t); };
+  d.querySelector('#bkOut').onclick=exportBackup;
+  d.querySelector('#kOut').onclick=()=>{ d.remove(); exportKeys(); };
+  d.querySelector('#bkIn').onclick=()=>d.querySelector('#bkFile').click();
+  d.querySelector('#kIn').onclick=()=>d.querySelector('#kFile').click();
+  d.querySelector('#bkFile').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    readFile(f, async txt=>{
+      const mode = Object.keys(DB.profiles).length
+        ? (confirm("You already have profiles here.\n\nOK = merge the backup in alongside them.\nCancel = replace everything with the backup.") ? 'merge':'replace')
+        : 'replace';
+      try{ const n=await importBackup(txt,mode); msg(`Restored ${n} profile${n===1?'':'s'}.`); render(); }
+      catch(err){ msg(err.message,true); }
+    });
+  };
+  d.querySelector('#kFile').onchange=e=>{
+    const f=e.target.files[0]; if(!f) return;
+    readFile(f, async txt=>{
+      try{ await importKeys(txt); msg("Keys imported. You're ready to score."); render(); }
+      catch(err){ msg(err.message,true); }
+    });
+  };
+}
+
+/* ═══ shared bits ═══ */
+function modal(html){
+  const d=document.createElement('div'); d.className='modal';
+  d.innerHTML=`<div class="box">${html}</div>`;
+  d.addEventListener('click',e=>{ if(e.target===d) d.remove(); });
+  document.body.appendChild(d); return d;
+}
+function hookDrop(dropEl,inputEl,handler){
+  if(!dropEl) return;
+  dropEl.onclick=()=>inputEl.click();
+  inputEl.onchange=e=>{ const f=e.target.files[0]; if(f) readFile(f,handler); inputEl.value=''; };
+  ['dragenter','dragover'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.add('over');}));
+  ['dragleave','drop'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove('over');}));
+  dropEl.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f,handler); });
+}
+function readFile(file,cb){ const r=new FileReader(); r.onload=()=>cb(String(r.result),file.name); r.readAsText(file); }
+
+async function onCsv(text){
+  const rows=parseCSV(text);
+  const info=$('#csvInfo');
+  if(rows.length<2){ if(info) info.innerHTML='<span class="err">That file has no rows.</span>'; return; }
+  const head=rows[0].map(h=>String(h).trim().toLowerCase()); const idx={};
+  head.forEach((h,i)=>idx[h]=i);
+  if(idx.title===undefined){ if(info) info.innerHTML='<span class="err">No "title" column. Needs at least title and company.</span>'; return; }
+  let list=rows.slice(1).map(r=>{ const j=blank();
+    COLS.forEach(c=>{ if(idx[c]!==undefined) j[c]=String(r[idx[c]]==null?'':r[idx[c]]).trim(); });
+    if(!j.status) j.status='New'; if(!j.channel) j.channel='posted'; return j; });
+
+  // The starter template ships with placeholder rows. People import it before
+  // clearing them, then wonder why the app is recommending 'Example Corp'.
+  // Drop them on the way in rather than letting them reach the scorer, which
+  // costs a call to conclude what we can tell from the title.
+  const isPlaceholder = j => {
+    const blob=(j.title+' '+j.company).toLowerCase();
+    return /delete me|example corp|example row|example cold target|somewhere you want to work|another company|^your city$/.test(blob);
+  };
+  const skipped = list.filter(isPlaceholder).length;
+  list = list.filter(j=>!isPlaceholder(j));
+
+  const added=addJobs(list);
+  await save(); render();
+  const i2=$('#csvInfo');
+  if(i2){
+    if(!list.length && skipped){
+      i2.innerHTML='<span class="err">That was the blank template \u2014 only the example rows were in it. Replace them with real jobs, or use Search to pull some in.</span>';
+    } else {
+      i2.textContent=`${added} added \u00b7 ${list.length-added} already here`
+        + (skipped?` \u00b7 ${skipped} example row${skipped>1?'s':''} skipped`:'');
+    }
+  }
+}
+
+function pasteJobDialog(){
+  const d=modal(`<div class="eyebrow">Add a listing</div><h2 style="margin:6px 0 12px">Paste the posting</h2>
+    <label class="lab">Title</label><input type="text" id="pTitle">
+    <label class="lab" style="margin-top:10px">Company</label><input type="text" id="pCo">
+    <label class="lab" style="margin-top:10px">Location</label><input type="text" id="pLoc">
+    <label class="lab" style="margin-top:10px">Link</label><input type="text" id="pUrl">
+    <label class="lab" style="margin-top:10px">Description</label><textarea id="pDesc" rows="7"></textarea>
+    <p class="hint">The more of the posting you paste, the better the score. Title alone gets a low-confidence guess.</p>
+    <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="pAdd">Add job</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#pAdd').onclick=async()=>{
+    const j=blank();
+    j.title=d.querySelector('#pTitle').value.trim(); j.company=d.querySelector('#pCo').value.trim();
+    j.location=d.querySelector('#pLoc').value.trim(); j.url=d.querySelector('#pUrl').value.trim();
+    j.description=d.querySelector('#pDesc').value.trim(); j.source='Manual';
+    if(!j.title){ alert('Needs a title at minimum.'); return; }
+    addJobs([j]); await save(); render(); d.remove(); };
+}
+
+function showJob(i){
+  const j=P().jobs[i]; if(!j) return;
+  const ch=chOf(j), st=stOf(j);
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
+  const d=modal(`
+    <div class="flags" style="margin-bottom:9px">
+      <span class="chn ${ch}">${ch==='cold'?'cold approach':'posted role'}</span>
+      <span class="stage s-${isDue(j)?'due':st}">${isDue(j)?'due':esc(st)}</span></div>
+    <h2 style="margin:0 0 3px">${esc(j.title)}</h2>
+    <p style="color:var(--muted);margin:0 0 14px">${esc(j.company)}${j.location?' \u00b7 '+esc(j.location):''}</p>
+    <div style="display:flex;gap:22px;margin-bottom:16px">
+      <div><div class="num" style="font-size:22px;color:var(--${ch})">${fitOf(j)}</div><div style="font-size:11px;color:var(--muted)">fit</div></div>
+      <div><div class="num" style="font-size:22px;color:var(--neutral)">${reachOf(j)}</div><div style="font-size:11px;color:var(--muted)">reachability</div></div>
+      <div><div class="num" style="font-size:22px">${esc(j.ai_confidence||'\u2014')}</div><div style="font-size:11px;color:var(--muted)">confidence</div></div></div>
+    ${j.ai_reason?`<p style="color:var(--muted);font-style:italic;margin:0 0 12px">${esc(j.ai_reason)}</p>`:''}
+
+    <div class="eyebrow" style="margin-top:18px">People</div>
+    <div id="ctList" style="margin-top:8px">${cts.length
+      ? cts.map((c,ci)=>`<div class="ct-row">
+          <div style="flex:1;min-width:0">
+            <div class="ct-nm">${esc(c.name||'(no name)')}${c.role?` <span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
+            ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
+            ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
+          </div>
+          <button class="btn-sm" data-ct-del="${ci}">Remove</button></div>`).join('')
+      : '<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>'}</div>
+    <button class="btn-sm" id="ctAdd" style="margin-top:9px">Add a person</button>
+
+    <div class="eyebrow" style="margin-top:20px">History</div>
+    <div style="margin-top:8px">${ev.length
+      ? ev.map(e=>`<div class="log"><span class="when">${esc(e.on)}</span> \u00b7 <b>${esc(e.kind)}</b> ${esc(e.text)}</div>`).join('')
+      : '<div class="ct-none">Nothing logged yet.</div>'}</div>
+    <button class="btn-sm" id="evAdd" style="margin-top:9px">Log something</button>
+
+    ${j.description?`<div class="eyebrow" style="margin-top:20px">Description</div>
+      <p style="color:var(--muted);font-size:12px;white-space:pre-wrap;max-height:200px;overflow:auto;margin-top:8px">${esc(j.description)}</p>`:''}
+    ${j.url?`<p style="margin-top:12px"><a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open posting \u2197</a></p>`:''}
+
+    <div class="eyebrow" style="margin-top:20px">Stage</div>
+    <div class="btn-row" style="margin-top:8px">
+      ${STAGES.map(x=>`<button class="btn-sm ${st===x?'btn-go':''}" data-stage="${x}">${x}</button>`).join('')}
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+
+  d.querySelector('#ctAdd').onclick=()=>{ d.remove(); contactDialog(i); };
+  d.querySelector('#evAdd').onclick=()=>{ d.remove(); noteDialog(i); };
+  d.querySelectorAll('[data-ct-del]').forEach(b=>b.onclick=async()=>{
+    const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ctDel,10),1);
+    setList(j,'contacts',arr); await save(); d.remove(); showJob(i); render(); });
+  d.querySelectorAll('[data-stage]').forEach(b=>b.onclick=async()=>{
+    setStage(j,b.dataset.stage); logEvent(j,'stage','moved to '+b.dataset.stage);
+    await save(); d.remove(); render(); });
+}
+
+/* Contacts live on the job, not in a separate address book. The same person at
+   the same company matters differently depending on which role you are chasing,
+   and a shared contact list would flatten that. */
+function contactDialog(i){
+  const j=P().jobs[i];
+  const d=modal(`<div class="eyebrow">Add a person</div>
+    <h2 style="margin:6px 0 4px">${esc(j.company)}</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 14px">A recruiter, hiring manager, or anyone on the team worth talking to.</p>
+    <label class="lab">Name</label><input type="text" id="cn">
+    <label class="lab" style="margin-top:10px">Role</label><input type="text" id="cr" placeholder="Head of Engineering / Recruiter">
+    <label class="lab" style="margin-top:10px">Email</label><input type="text" id="ce" placeholder="name@company.com">
+    <label class="lab" style="margin-top:10px">LinkedIn</label><input type="text" id="cl" placeholder="https://linkedin.com/in/...">
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="cSave">Add</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#cSave').onclick=async()=>{
+    const c={ name:d.querySelector('#cn').value.trim(), role:d.querySelector('#cr').value.trim(),
+              email:d.querySelector('#ce').value.trim(), linkedin:d.querySelector('#cl').value.trim() };
+    if(!c.name&&!c.email&&!c.linkedin){ alert('Needs at least a name, an email, or a link.'); return; }
+    const arr=listOf(j,'contacts'); arr.push(c); setList(j,'contacts',arr);
+    logEvent(j,'contact','added '+(c.name||c.email||'a contact'));
+    await save(); d.remove(); render(); };
+}
+
+function noteDialog(i){
+  const j=P().jobs[i];
+  const d=modal(`<div class="eyebrow">Log something</div>
+    <h2 style="margin:6px 0 12px">${esc(j.title)} \u00b7 ${esc(j.company)}</h2>
+    <label class="lab">What happened</label>
+    <select id="nk">
+      <option value="sent">Sent a message</option>
+      <option value="reply">They replied</option>
+      <option value="call">Had a call</option>
+      <option value="note">Note</option>
+    </select>
+    <label class="lab" style="margin-top:10px">Detail</label>
+    <textarea id="nt" rows="5" placeholder="Short. Enough to remember where this stands."></textarea>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="nSave">Log it</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#nSave').onclick=async()=>{
+    const k=d.querySelector('#nk').value, t=d.querySelector('#nt').value.trim();
+    logEvent(j,k,t);
+    // A reply is the one event that should move the row on its own \u2014 forgetting
+    // to change the stage is exactly how live conversations get dropped.
+    if(k==='reply'||k==='call') setStage(j,'live');
+    await save(); d.remove(); render(); };
+}
+
+async function draftPitch(i,isChase){
+  const p=P(), j=p.jobs[i]; if(!j) return;
+  const prof=p.profile;
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
+  const d=modal(`<div class="eyebrow">Outreach</div><h2 style="margin:6px 0 14px">${esc(j.title)} · ${esc(j.company)}</h2><p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
+  try{
+    const txt=await claude(
+`Write a short cold outreach message for a job seeker.
+
+WHO THEY ARE
+Name: ${prof.name}
+Based in: ${prof.location||''}
+In short: ${prof.headline||''}
+Real strengths: ${(prof.strengths||[]).join('; ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
+Skills: ${(prof.hard_skills||[]).join(', ')}
+
+FULL PROFILE (source of truth — invent nothing beyond this):
+${String(p.raw||'').slice(0,9000)}
+
+TARGET COMPANY: ${j.company}
+TARGET ROLE: ${j.title}
+CONTEXT: ${String(j.description||'').slice(0,900)}
+
+ADDRESSED TO: ${cts.length ? cts.map(c=>`${c.name||'(unnamed)'}${c.role?', '+c.role:''}`).join('; ') : 'nobody identified yet \u2014 keep it addressable to any reader'}
+
+${isChase ? `THIS IS A FOLLOW-UP. They were contacted ${daysSilent(j)} days ago and have not replied.
+Previous activity, most recent first:
+${ev.slice(0,4).map(x=>`- ${x.on} ${x.kind}: ${x.text||''}`).join('\n')||'- no detail logged'}
+Write a SHORT nudge: three sentences at most. Do not re-pitch from scratch and do not repeat the original message. Add one new thing \u2014 a relevant piece of work, a recent development at their company, or a sharper version of the offer. Be graceful, never wounded, and make it easy to ignore without awkwardness.` : ''}
+
+CHANNEL: ${chOf(j)==='cold'
+ ? 'COLD \u2014 there is NO job posting. This is an unsolicited approach to someone at the company. Do not refer to "the role", "this position", "the opening" or "your posting", because none exists. Open by making them want to reply, and make the ask a conversation, not an application.'
+ : 'POSTED \u2014 there is a live job posting, so referring to the role directly is correct.'}
+
+Rules:
+- Maximum 5 sentences. A LinkedIn DM or short email, not a cover letter.
+- Open with the single most specific concrete thing this person has actually built or run. No "I hope this finds you well", no "I am writing to express interest".
+- Lead with whatever is rarest about them relative to other applicants for this role.
+- Reference something specific about this company or role.
+- End with a low-friction ask: a short call, or an offer to show something they've made. Never "please consider my application".
+- Plain language. No buzzwords, no em-dashes, no "passionate about".
+- Invent nothing not in the profile above.
+
+Return only the message text.`, 1000);
+    d.querySelector('.box').innerHTML=`<div class="eyebrow">Outreach</div>
+      <h2 style="margin:6px 0 14px">${esc(j.title)} · ${esc(j.company)}</h2>
+      <textarea id="pitchTxt" rows="10">${esc(txt)}</textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-go btn-sm" id="pitchCopy">Copy</button>
+        <button class="btn-sm" id="pitchSave">Save to notes</button>
+        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
+    d.querySelector('#pitchCopy').onclick=()=>{ const t=d.querySelector('#pitchTxt'); t.select();
+      navigator.clipboard.writeText(t.value).then(()=>{ d.querySelector('#pitchCopy').textContent='Copied'; },()=>{}); };
+    d.querySelector('#pitchSave').onclick=async()=>{
+      j.notes=(j.notes?j.notes+' | ':'')+d.querySelector('#pitchTxt').value;
+      j.pitch_sent='Drafted'; await save(); render(); d.remove(); };
+  }catch(e){
+    d.remove();
+    if(e.message==='NEEDKEY'){ keyDialog(()=>draftPitch(i)); return; }
+    modal(`<div class="eyebrow">Outreach</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
+  }
+}
+
+document.addEventListener('click',async e=>{
+  const b=e.target.closest('button[data-act]'); if(!b) return;
+  const i=parseInt(b.dataset.i,10), p=P(), j=p&&p.jobs[i]; if(!j) return;
+  const a=b.dataset.act;
+  if(a==='open')  return showJob(i);
+  if(a==='pitch') return draftPitch(i,false);
+  if(a==='chase') return draftPitch(i,true);
+  if(a==='note')  return noteDialog(i);
+  if(a==='sent'){ setStage(j,'sent'); logEvent(j,'sent',chOf(j)==='cold'?'reached out':'applied'); }
+  if(a==='live'){ setStage(j,'live'); logEvent(j,'reply','they replied'); }
+  if(a==='close'){ setStage(j,'closed'); logEvent(j,'closed','closed out'); }
+  if(a==='reopen'){ setStage(j,'new'); j.follow_up_date=''; logEvent(j,'note','reopened'); }
+  await save(); render();
+});
+
+function render(){ (VIEW==='app'&&P()) ? renderApp() : renderOnb(); }
+load().then(()=>{ if(DB.current&&DB.profiles[DB.current]) VIEW='app'; render(); });
+})();
+</script>

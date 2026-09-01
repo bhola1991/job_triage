@@ -1,0 +1,4 @@
+title,company,location,url,description,status,date_applied,follow_up_date,hr_contact,pitch_sent,notes,source,query,ai_score,ai_reason,ai_flags,ai_confidence,ai_reachability,channel
+EXAMPLE ROW - DELETE ME,Example Corp,Remote,https://example.com/jobs/123,"Paste the whole job posting here. The more of the real description you include, the better the score. Title and company alone still work, but you get a low-confidence guess instead of a real read.",New,,,,No,,Manual,,,,,,,posted
+EXAMPLE COLD TARGET - DELETE ME,Somewhere You Want To Work,Your city,https://example.com/careers,"Use channel=cold for companies that are NOT advertising. Write what they do and why you would be useful to them. The app tells the model there is no posting, so the outreach it drafts opens a conversation instead of referring to a role that does not exist.",New,,,,No,,Cold list,,,,,,,cold
+EXAMPLE MINIMAL ROW - DELETE ME,Another Company,,,,New,,,,No,,Manual,,,,,,,posted
