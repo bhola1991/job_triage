@@ -2,8 +2,7 @@
 
 A single-file web app that reads a CV, works out which career directions are realistically open to that person, then finds and ranks jobs against them.
 
-**[Try it →](https://YOURUSERNAME.github.io/job-triage/)** · no signup, nothing leaves your browser
-
+**[Try it →](https://bhola1991.github.io/job_triage/)** · no signup, nothing leaves your browser
 ---
 
 ## The problem
