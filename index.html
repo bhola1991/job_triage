@@ -1,3 +1,6 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Triage</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -38,6 +41,11 @@
     border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   .pill.on{color:var(--good);border-color:#31513f}
 
+  /* Tappable UI shouldn't behave like text on a touch screen — without this a
+     tap that lingers a few ms selects the label or throws up a callout menu
+     instead of registering as a click. */
+  button,.tab,.trk,.stp,.dot,.chn,.stage,.pill,.drop,.chip,.tag{
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
   button{font-family:var(--disp);font-size:13px;cursor:pointer;border-radius:3px;
     border:1px solid var(--line);background:var(--panel2);color:var(--text);
     padding:8px 13px;transition:.14s}
@@ -70,7 +78,8 @@
   .stp.on{color:var(--signal);border-bottom-color:var(--signal)}
   .stp.did{color:var(--good)}
 
-  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;
+    box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .card + .card{margin-top:12px}
   .kv{display:grid;grid-template-columns:132px 1fr;gap:8px 14px;font-size:13px}
   .kv .k{color:var(--muted);font-size:12px}
@@ -92,15 +101,16 @@
 
   /* ── main app ── */
   .wrap{display:grid;grid-template-columns:288px 1fr}
-  @media(max-width:900px){.wrap{grid-template-columns:1fr}}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}.main{order:1}.side{order:2}}
   .side{border-right:1px solid var(--line);padding:18px;background:var(--panel);
     min-height:calc(100vh - 60px)}
-  @media(max-width:900px){.side{border-right:none;border-bottom:1px solid var(--line);min-height:0}}
+  @media(max-width:900px){.side{border-right:none;border-top:1px solid var(--line);min-height:0}}
   .main{padding:20px 22px 60px;min-width:0}
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
 
-  .plotwrap{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px}
+  .plotwrap{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
   svg.plot{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
   .dot{cursor:pointer}
@@ -111,7 +121,7 @@
   .stat .l{font-size:11px;color:var(--muted);margin-top:3px}
 
   .job{border:1px solid var(--line);border-left:2px solid var(--dim);border-radius:3px;
-    background:var(--panel);padding:13px 15px;margin-bottom:9px}
+    background:var(--panel);padding:13px 15px;margin-bottom:9px;box-shadow:0 1px 2px rgba(0,0,0,.2)}
   .job.hi{border-left-color:var(--signal)}
   .job.ch-posted{border-left-color:var(--posted)}
   .job.ch-cold{border-left-color:var(--cold)}
@@ -176,13 +186,19 @@
   .modal{position:fixed;inset:0;background:rgba(8,12,16,.82);display:flex;
     align-items:center;justify-content:center;padding:20px;z-index:50}
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:5px;
-    max-width:620px;width:100%;max-height:84vh;overflow:auto;padding:22px}
+    max-width:620px;width:100%;max-height:84vh;overflow:auto;padding:22px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5)}
 
   .tabs{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--line)}
-  .tab{padding:8px 14px;font-size:13px;color:var(--muted);cursor:pointer;
+  .tab{padding:8px 14px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;
     border-bottom:2px solid transparent;margin-bottom:-1px}
   .tab.on{color:var(--signal);border-bottom-color:var(--signal)}
   .tab:hover{color:var(--text)}
+  @media(max-width:480px){
+    .tabs{flex-wrap:wrap;row-gap:10px}
+    .tabs .spacer{flex-basis:100%;height:0}
+    .tab{padding:6px 10px 8px}
+  }
 
   .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
   .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
@@ -618,6 +634,108 @@ async function apifySearch(query, count, onStatus){
     j.source  = "LinkedIn (live)"; j.query = query; j.status="New"; j.channel="posted";
     return j;
   });
+}
+
+/* ═══ Apify: HR / recruiter contact finder ═══
+   Job postings almost never link to the company's own site — LinkedIn and ATS
+   pages point back to themselves — so this is two actor calls chained the same
+   way atsSearch's Google fallback is: find the domain, then crawl it. The
+   crawl only reads pages the company itself published (careers, about, team),
+   never LinkedIn profiles directly, and costs a few cents per company on the
+   same Apify account already paying for search. */
+const RECRUITER_ACTOR = "scrapepilot~recruiter-lead-finder-hr-talent-acquisition-contacts";
+const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
+
+async function findCompanyDomain(company, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  const payload={queries:`"${company}" official website`,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false};
+  let r;
+  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  catch(e){ throw new Error("Couldn't reach Apify."); }
+  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+  if(!r.ok) throw new Error("Apify returned "+r.status);
+  const d=(await r.json()).data||{};
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,4000)); waited+=4;
+    if(waited>120) throw new Error("Timed out looking up "+company+"'s website.");
+    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(onStatus) onStatus(`finding ${company}'s website — ${status.toLowerCase()}, ${waited}s`);
+    if(status==="SUCCEEDED") break;
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
+  const items=await dr.json();
+  for(const item of (items||[])){
+    for(const res of (item.organicResults||[])){
+      try{
+        const host=new URL(res.url).hostname.replace(/^www\./,'');
+        if(host && !NOT_COMPANY_SITE.test(host)) return host;
+      }catch(e){}
+    }
+  }
+  return null;
+}
+
+function slugToName(url){
+  const m=String(url).match(/linkedin\.com\/in\/([a-z0-9\-]+)/i);
+  if(!m) return '';
+  return m[1].replace(/-[a-f0-9]{4,}$/i,'').split('-').filter(Boolean)
+    .map(s=>s[0].toUpperCase()+s.slice(1)).join(' ');
+}
+
+async function findHrContacts(company, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  const domain = await findCompanyDomain(company, onStatus);
+  if(!domain) throw new Error("Couldn't work out "+company+"'s own website from a search.");
+  if(onStatus) onStatus(`checking ${domain} for HR and recruiting contacts…`);
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  const payload={startUrls:[{url:"https://"+domain}],maxPagesPerDomain:15,
+    targetKeywords:["hr","human resources","recruiter","recruiting","talent acquisition","people team","hiring manager","careers","people ops"]};
+  let r;
+  try{ r=await fetch(APIFY_BASE+"/acts/"+RECRUITER_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  catch(e){ throw new Error("Couldn't reach Apify."); }
+  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+  if(!r.ok) throw new Error("Apify returned "+r.status);
+  const d=(await r.json()).data||{};
+  const runId=d.id, dsId=d.defaultDatasetId;
+  if(!runId) throw new Error("Apify wouldn't start the run.");
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,5000)); waited+=5;
+    if(waited>240) throw new Error("Apify timed out after 4 minutes.");
+    const pr=await fetch(APIFY_BASE+"/acts/"+RECRUITER_ACTOR+"/runs/"+runId,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(onStatus) onStatus(`scanning ${domain} — ${status.toLowerCase()}, ${waited}s`);
+    if(status==="SUCCEEDED") break;
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
+  const items=await dr.json();
+
+  // The actor's exact output keys aren't fixed anywhere public, so this reads
+  // them the same tolerant way as every other Apify parser in this file (pick()
+  // above): try the plausible names, don't crash if the shape is a little off.
+  const seen=new Set(), out=[];
+  (items||[]).forEach(it=>{
+    const type=String(pick(it,["type","contactType"])||'').toLowerCase();
+    const val=String(pick(it,["value","contactValue"])||'');
+    let email=pick(it,["email","emailAddress"]) || (type==='email'?val:(val.includes('@')?val:''));
+    let linkedin=pick(it,["linkedin","linkedinUrl","profileUrl"]) || (type==='linkedin'||val.includes('linkedin.com')?val:'');
+    if(!email && !linkedin) return;
+    const key=(email||linkedin).toLowerCase();
+    if(seen.has(key)) return; seen.add(key);
+    const titles=pick(it,["jobTitles","matchedKeywords","titles"]);
+    out.push({
+      name: linkedin ? slugToName(linkedin) : '',
+      role: Array.isArray(titles) ? titles.slice(0,3).join(', ') : String(titles||''),
+      email: email||'', linkedin: linkedin||''
+    });
+  });
+  if(!out.length) throw new Error("Checked "+domain+" but found no public HR or recruiting contacts on it.");
+  return out;
 }
 
 /* ═══ LLM ═══
@@ -2096,7 +2214,9 @@ function showJob(i){
           </div>
           <button class="btn-sm" data-ct-del="${ci}">Remove</button></div>`).join('')
       : '<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>'}</div>
-    <button class="btn-sm" id="ctAdd" style="margin-top:9px">Add a person</button>
+    <div class="btn-row" style="margin-top:9px">
+      <button class="btn-sm" id="ctAdd">Add a person</button>
+      <button class="btn-sm" id="hrFind">Find HR contact</button></div>
 
     <div class="eyebrow" style="margin-top:20px">History</div>
     <div style="margin-top:8px">${ev.length
@@ -2116,6 +2236,7 @@ function showJob(i){
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
 
   d.querySelector('#ctAdd').onclick=()=>{ d.remove(); contactDialog(i); };
+  d.querySelector('#hrFind').onclick=()=>{ d.remove(); hrDialog(i); };
   d.querySelector('#evAdd').onclick=()=>{ d.remove(); noteDialog(i); };
   d.querySelectorAll('[data-ct-del]').forEach(b=>b.onclick=async()=>{
     const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ctDel,10),1);
@@ -2147,6 +2268,54 @@ function contactDialog(i){
     const arr=listOf(j,'contacts'); arr.push(c); setList(j,'contacts',arr);
     logEvent(j,'contact','added '+(c.name||c.email||'a contact'));
     await save(); d.remove(); render(); };
+}
+
+function hrRow(c,i){
+  return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
+    <input type="checkbox" data-hr="${i}" checked style="margin-top:4px;width:auto">
+    <div style="flex:1;min-width:0">
+      <div class="ct-nm">${esc(c.name||'(name unknown)')}${c.role?` <span style="color:var(--muted);font-size:11px">· ${esc(c.role)}</span>`:''}</div>
+      ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
+      ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
+    </div></label>`;
+}
+
+/* Runs the two-actor chain in findHrContacts and lets the person pick which
+   hits are worth keeping — a scraped page can surface a stray email that has
+   nothing to do with hiring, so this never adds anything unreviewed. */
+function hrDialog(i){
+  const j=P().jobs[i];
+  const d=modal(`<div class="eyebrow">Find HR contact</div>
+    <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Searches for ${esc(j.company)}'s own website, then checks its careers, about and team pages for publicly listed HR and recruiting contacts. Costs a few cents of Apify credit.</p>
+    <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
+    <div id="hrOut"></div>`);
+  d.querySelector('#hrGo').onclick=async()=>{
+    d.querySelector('#hrGo').disabled=true;
+    const out=d.querySelector('#hrOut');
+    out.innerHTML='<p style="color:var(--muted);margin-top:16px"><span class="spin"></span> <span id="hrStatus">starting…</span></p>';
+    const setStatus=t=>{ const s=d.querySelector('#hrStatus'); if(s) s.textContent=t; };
+    let list;
+    try{ list=await findHrContacts(j.company, setStatus); }
+    catch(e){
+      if(e.message==='NEEDAPIFY'){ d.remove(); apifyDialog(()=>hrDialog(i)); return; }
+      d.querySelector('#hrGo').disabled=false;
+      out.innerHTML='<p class="err">'+esc(e.message)+'</p>'; return;
+    }
+    out.innerHTML=`
+      <div class="eyebrow" style="margin-top:18px">${list.length} found · untick any that aren't right</div>
+      <div style="margin-top:8px;max-height:320px;overflow:auto">${list.map(hrRow).join('')}</div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go btn-sm" id="hrAdd">Add selected</button></div>`;
+    d.querySelector('#hrAdd').onclick=async()=>{
+      const picked=Array.from(d.querySelectorAll('[data-hr]:checked')).map(x=>list[parseInt(x.dataset.hr,10)]);
+      if(!picked.length){ d.remove(); return; }
+      const arr=listOf(j,'contacts'); picked.forEach(c=>arr.push(c)); setList(j,'contacts',arr);
+      logEvent(j,'contact','found '+picked.length+' contact'+(picked.length>1?'s':'')+' via HR search');
+      await save(); d.remove(); showJob(i); render();
+    };
+  };
 }
 
 function noteDialog(i){
