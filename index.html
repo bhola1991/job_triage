@@ -811,6 +811,11 @@ function keyDialog(retry){
     <label class="lab">API key</label>
     <input type="text" id="kv" placeholder="${esc(cfg.keyPrefix)}..." value="${esc(KEY||'')}" autocomplete="off">
     <p class="hint" id="kwhere">Get one at <span style="color:var(--cool)">${esc(cfg.where)}</span>. Stored only in this browser, only sent to that provider.</p>
+
+    <label class="lab" style="margin-top:18px">Apify token <span style="color:var(--dim)">— optional, for live LinkedIn search and finding HR contacts</span></label>
+    <input type="text" id="av" placeholder="apify_api_..." value="${esc(APIFY||'')}" autocomplete="off">
+    <p class="hint">Get one at <span style="color:var(--cool)">console.apify.com → Settings → API &amp; Integrations</span>. Skip this if you only want scoring — it'll ask again the moment a search feature needs it.</p>
+
     <div class="btn-row" style="margin-top:12px">
       <button class="btn-go btn-sm" id="kSave">Save</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
@@ -823,7 +828,10 @@ function keyDialog(retry){
     PROV=d.querySelector('#pv').value;
     KEY=d.querySelector('#kv').value.trim();
     if(PROV!=='anthropic' && !KEY){ alert('DeepSeek needs a key.'); return; }
+    const av=d.querySelector('#av').value.trim();
+    if(av && !av.startsWith('apify_api_')){ alert('Apify tokens start with apify_api_'); return; }
     await put('triage:key',KEY); await put('triage:prov',PROV);
+    if(av){ APIFY=av; await put('triage:apify',av); }
     d.remove(); if(retry) retry();
   };
 }
