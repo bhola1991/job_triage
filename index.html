@@ -132,7 +132,10 @@
     box-shadow:0 1px 2px rgba(0,0,0,.25)}
   .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
   svg.plot{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
-  .dot{cursor:pointer}
+  /* Cold targets are drawn as unfilled squares, so without this only the 1.6px
+     stroke is clickable. pointer-events makes the whole shape a target. */
+  .dot{cursor:pointer;pointer-events:all}
+  .dot:hover{filter:brightness(1.35)}
   .quadlabel{font-family:var(--mono);font-size:8px;fill:var(--dim);letter-spacing:.1em}
 
   .stats{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 22px}
@@ -213,6 +216,9 @@
     border-bottom:2px solid transparent;margin-bottom:-1px}
   .tab.on{color:var(--signal);border-bottom-color:var(--signal)}
   .tab:hover{color:var(--text)}
+  .tabct{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:8px;
+    background:var(--panel2);color:var(--muted);vertical-align:1px}
+  .tabct.due{background:#4d3129;color:var(--warn)}
   @media(max-width:480px){
     .tabs{flex-wrap:wrap;row-gap:10px}
     .tabs .spacer{flex-basis:100%;height:0}
@@ -689,7 +695,29 @@ async function apifySearch(query, count, onStatus){
    as a guess, everywhere it's shown, never presented as confirmed. */
 const EMPLOYEES_ACTOR = "automation-lab~linkedin-company-employees-scraper";
 const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
-const HR_TITLE = /\b(hr|human resources|recruit|talent acquisition|talent partner|talent sourc|people (team|ops|operations)|people & culture|hiring manager)\b/i;
+/* Two ways a person is worth talking to. The first is the recruiting side —
+   they own the process. The second is the hiring side: whoever runs the team
+   the role sits in, matched by pairing a leadership word with a word from the
+   job you're actually chasing, so a "Head of Data" surfaces for a data role
+   and stays out of the way for a design one. */
+/* Stems take \w* deliberately: the closing \b otherwise anchors to the end of
+   the alternative, so a bare "recruit" never matches "Recruiter" — which is
+   how almost every one of these people actually writes their title. */
+const HR_TITLE   = /\b(hr|human resources|recruit\w*|talent\w*|sourc(er|ers|ing)|staffing|people (team|ops|operations|partner)|people & culture|hiring manager|head of people|chief people)\b/i;
+const LEAD_TITLE = /\b(head of|director|vp|vice president|chief|founder|co-?founder|lead|manager|principal)\b/i;
+const TITLE_NOISE = /^(a|an|the|and|or|of|for|at|in|to|with|senior|junior|staff|principal|lead|head|chief|vp|vice|president|director|manager|associate|assistant|i|ii|iii|jr|sr|remote|hybrid|onsite|full|part|time|contract|intern)$/i;
+
+/* Words from the role being chased, used to decide whether a department head
+   is relevant. Deliberately crude — a shared noun like "data" or "design" is
+   a good enough signal, and anything cleverer starts inventing relevance. */
+function roleWords(ctx){
+  const src=[(ctx&&ctx.title)||'', ...(((ctx&&ctx.titles)||[]).slice(0,6))].join(' ');
+  const out=new Set();
+  String(src).toLowerCase().split(/[^a-z+#]+/).forEach(w=>{
+    if(w.length>=3 && !TITLE_NOISE.test(w)) out.add(w);
+  });
+  return Array.from(out);
+}
 
 async function googleFirst(query, onStatus, statusLabel){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
@@ -746,7 +774,7 @@ function guessEmail(name, domain){
   return `${parts[0]}.${parts[parts.length-1]}@${domain}`;
 }
 
-async function findHrContacts(company, onStatus){
+async function findHrContacts(company, ctx, onStatus){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
   const slug = await findLinkedInSlug(company, onStatus);
   if(!slug) throw new Error("Couldn't find "+company+"'s LinkedIn company page.");
@@ -777,13 +805,23 @@ async function findHrContacts(company, onStatus){
   // Output field names for this actor aren't fixed anywhere public either, so
   // this stays with the same tolerant pick()-based reading as the rest of the
   // file's Apify parsers.
-  const people=items.map(it=>({
-    name: pick(it,["name","fullName"]),
-    role: pick(it,["headline","title","jobTitle"]),
-    linkedin: pick(it,["profileUrl","profileURL","url"])
-  })).filter(p=>p.name && HR_TITLE.test(p.role||''));
+  const words=roleWords(ctx);
+  const people=[];
+  items.forEach(it=>{
+    const name=pick(it,["name","fullName"]);
+    const role=String(pick(it,["headline","title","jobTitle"])||'');
+    if(!name) return;
+    const low=role.toLowerCase();
+    let tier='';
+    if(HR_TITLE.test(role)) tier='recruiting';
+    else if(LEAD_TITLE.test(role) && words.some(w=>low.includes(w))) tier='hiring';
+    if(!tier) return;
+    people.push({ name, role, linkedin:pick(it,["profileUrl","profileURL","url"]), tier });
+  });
+  // Recruiting first: they own the process, so they're the safer opener.
+  people.sort((a,b)=> (a.tier==='recruiting'?0:1) - (b.tier==='recruiting'?0:1));
 
-  if(!people.length) throw new Error(`Checked ${items.length} public employee${items.length===1?'':'s'} of ${company} on LinkedIn — none had an HR or recruiting title. Try adding someone by hand.`);
+  if(!people.length) throw new Error(`Checked ${items.length} public employee${items.length===1?'':'s'} of ${company} on LinkedIn — none looked like recruiting, or like they run the team this role sits in. Try adding someone by hand.`);
 
   if(onStatus) onStatus(`found ${people.length} — checking ${company}'s domain for an email pattern…`);
   let domain=null;
@@ -794,7 +832,7 @@ async function findHrContacts(company, onStatus){
     return {
       name: p.name,
       role: p.role + (guess ? ' · email is a guessed pattern, unverified' : ''),
-      email: guess, linkedin: p.linkedin||''
+      email: guess, linkedin: p.linkedin||'', tier: p.tier
     };
   });
 }
@@ -1730,13 +1768,16 @@ function plotSVG(){
     const f=fitOf(j), r=reachOf(j), pt=plotXY(f,r), open=isOpen(j);
     const inR=!RANGE||(f>=RANGE.f0&&f<=RANGE.f1&&r>=RANGE.r0&&r<=RANGE.r1);
     const col=!open?'#56656F':(inR?'#E8B04B':'#3F5260'), rad=!open?3:(inR?5.5:3.5);
+    // With a box drawn, everything outside it drops back hard so the selection
+    // reads as the answer rather than as one more thing on a busy chart.
+    const dim=RANGE&&!inR ? .28 : (inR&&open?.85:.5);
     const tip=`<title>${esc(j.title)} — ${esc(j.company)}
 fit ${f} · reach ${r} · ${chOf(j)}</title>`;
     // Posted roles are circles, cold targets squares. Same axes, different action:
     // one you apply to, the other you have to start the conversation yourself.
     g += chOf(j)==='cold'
-      ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="none" stroke="${col}" stroke-width="1.6" stroke-opacity="${inR&&open?.95:.5}">${tip}</rect>`
-      : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${inR&&open?.85:.5}" stroke="${col}" stroke-width="1">${tip}</circle>`;
+      ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="${col}" fill-opacity=".08" stroke="${col}" stroke-width="1.6" stroke-opacity="${RANGE&&!inR?.3:(inR&&open?.95:.5)}">${tip}</rect>`
+      : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${dim}" stroke="${col}" stroke-width="1" stroke-opacity="${RANGE&&!inR?.3:1}">${tip}</circle>`;
   });
   if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="Space Grotesk" font-size="13" fill="#56656F">Nothing scored yet</text>`;
   return g;
@@ -1839,12 +1880,12 @@ function nextStep(){
   const due=jobs.filter(isDue).length;
   if(due) return {cls:'warn',h:`${due} follow-up${due>1?'s':''} overdue`,
     s:'These were sent over a week ago with no reply. A short nudge beats starting somewhere new.',
-    b:'Open Today', act:'today'};
+    b:'Open follow-ups', act:'follow'};
 
   const live=jobs.filter(j=>stOf(j)==='live').length;
   if(live) return {cls:'calm',h:`${live} live conversation${live>1?'s':''}`,
     s:'Someone is actually on the other end of these. They are worth more than anything else on the board.',
-    b:'Open Today', act:'today'};
+    b:'Open follow-ups', act:'follow'};
 
   const fresh=ranked().filter(x=>stOf(x.j)==='new'&&isOpen(x.j));
   if(fresh.length){ const t=fresh[0];
@@ -1891,6 +1932,42 @@ function renderToday(){
     ${sect('','Start these','Ranked by fit and reachability. Work down, don\'t browse.',fresh)}`;
 }
 
+/* ═══ follow-ups ═══
+   Everything already sent, which is a different question from "what should I
+   do today". Today drops a thing off its list the moment it isn't due; this
+   keeps it, because the pipeline you've already paid for is the part most
+   people lose track of. Ordered by how long it has been silent. */
+function renderFollowups(){
+  const p=P();
+  const all=p.jobs.map((j,i)=>({j,i}));
+  const bySilent=(a,b)=>daysSilent(b.j)-daysSilent(a.j);
+  const due    =all.filter(x=>isDue(x.j)).sort(bySilent);
+  const live   =all.filter(x=>stOf(x.j)==='live').sort(bySilent);
+  const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).sort(bySilent);
+  const closed =all.filter(x=>stOf(x.j)==='closed').length;
+
+  const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
+    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
+    <p class="sect-sub">${sub}</p>
+    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
+
+  if(!due.length&&!live.length&&!waiting.length){
+    return `<div class="empty"><b>Nothing sent yet</b>
+      Anything you mark applied or contacted lands here, so you can chase it without hunting through the whole list.
+      ${closed?`<br><span style="font-size:12px">${closed} closed.</span>`:''}</div>`;
+  }
+  const oldest=[...due,...waiting,...live].reduce((m,x)=>Math.max(m,daysSilent(x.j)),0);
+  return `<div class="stats">
+      <div class="stat"><div class="k num" style="color:var(--warn)">${due.length}</div><div class="l">overdue</div></div>
+      <div class="stat"><div class="k num" style="color:var(--live)">${live.length}</div><div class="l">in conversation</div></div>
+      <div class="stat"><div class="k num" style="color:var(--neutral)">${waiting.length}</div><div class="l">waiting</div></div>
+      <div class="stat"><div class="k num">${oldest}</div><div class="l">days, longest silence</div></div>
+    </div>
+    ${sect('due','Overdue a chase',`Past the ${FOLLOWUP_DAYS}-day mark with no reply. One nudge is worth sending; a second rarely is.`,due)}
+    ${sect('live','In conversation','Someone replied. Keep these moving before anything else.',live)}
+    ${sect('','Still waiting','Sent recently and not yet due. Nothing to do but leave them alone.',waiting)}`;
+}
+
 function renderApp(){
   const p=P(), prof=p.profile;
   const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
@@ -1900,6 +1977,8 @@ function renderApp(){
   const posted=p.jobs.filter(j=>chOf(j)==='posted').length;
   const cold=p.jobs.filter(j=>chOf(j)==='cold').length;
   const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
+  const followCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
+  const followDue=p.jobs.some(isDue);
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
   const top=ranked().filter(x=>isOpen(x.j)).slice(0,10);
   const all=sortedAll();
@@ -1985,6 +2064,8 @@ function renderApp(){
       <div class="tabs">
         <div class="tab ${TAB==='map'?'on':''}" data-tab="map">The map</div>
         <div class="tab ${TAB==='list'?'on':''}" data-tab="list">Today</div>
+        <div class="tab ${TAB==='follow'?'on':''}" data-tab="follow">Follow-ups${
+          followCount?` <span class="tabct${followDue?' due':''}">${followCount}</span>`:''}</div>
         <div class="tab ${TAB==='all'?'on':''}" data-tab="all">Everything</div>
         <div class="spacer"></div>
         <div class="tab ${CHFILT==='all'?'on':''}" data-ch="all">All</div>
@@ -1993,9 +2074,11 @@ function renderApp(){
       </div>
       <div ${TAB==='map'?'':'style="display:none"'}>
         <div class="plotwrap"><div class="plothead">
-          <span class="eyebrow">Drag a box to set your range</span><div class="spacer"></div>
-          <span class="num" style="font-size:11px;color:var(--muted)">${RANGE?`fit ${Math.round(RANGE.f0)}–${Math.round(RANGE.f1)} · reach ${Math.round(RANGE.r0)}–${Math.round(RANGE.r1)}`:'showing all'}</span>
-          <button class="btn-sm" id="btnReset">Reset range</button></div>
+          <span class="eyebrow">Drag a box to select · click a dot to open the posting</span><div class="spacer"></div>
+          <span class="num" style="font-size:11px;color:${RANGE?'var(--signal)':'var(--muted)'}">${RANGE
+            ? `${inr.length} of ${scored.length} selected · fit ${Math.round(RANGE.f0)}–${Math.round(RANGE.f1)} · reach ${Math.round(RANGE.r0)}–${Math.round(RANGE.r1)}`
+            : `showing all ${scored.length}`}</span>
+          <button class="btn-sm" id="btnReset" ${RANGE?'':'disabled'}>Reset range</button></div>
           <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg></div>
         <div class="stats">${[[p.jobs.length,'held'],[posted,'posted ●'],[cold,'cold □'],[inr.length,'in range'],[strong,'worth doing'],[applied,'actioned']]
           .map(([k,l])=>`<div class="stat"><div class="k num">${k}</div><div class="l">${l}</div></div>`).join('')}</div>
@@ -2003,6 +2086,7 @@ function renderApp(){
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
       </div>
       <div ${TAB==='list'?'':'style="display:none"'}>${renderToday()}</div>
+      <div ${TAB==='follow'?'':'style="display:none"'}>${renderFollowups()}</div>
       <div ${TAB==='all'?'':'style="display:none"'}>
         ${all.length?`<div class="listhead">
             <span style="color:var(--muted);font-size:12px">${all.length} in range</span>
@@ -2026,6 +2110,7 @@ function renderApp(){
     if(a==='suggest') return suggestDialog();
     if(a==='score')   return runScoring(false);
     if(a==='today'){ TAB='list'; return render(); }
+    if(a==='follow'){ TAB='follow'; return render(); }
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
   hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
@@ -2137,7 +2222,15 @@ function bindPlot(){
   svg.addEventListener('mousedown',down); svg.addEventListener('touchstart',down,{passive:false});
   window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
   window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
-  svg.addEventListener('click',ev=>{ if(ev.target.classList.contains('dot')) showJob(parseInt(ev.target.dataset.idx,10)); });
+  // A dot is the job, so clicking it goes to the posting. Cold targets have no
+  // posting to open, and neither do rows added by hand, so those fall back to
+  // the detail view rather than doing nothing.
+  svg.addEventListener('click',ev=>{
+    if(!ev.target.classList.contains('dot')) return;
+    const idx=parseInt(ev.target.dataset.idx,10), j=P().jobs[idx];
+    if(j && j.url) window.open(j.url,'_blank','noopener');
+    else showJob(idx);
+  });
 }
 
 /* ═══ backup, restore, and sharing ═══
@@ -2349,7 +2442,9 @@ function showJob(i){
     <div id="ctList" style="margin-top:8px">${cts.length
       ? cts.map((c,ci)=>`<div class="ct-row">
           <div style="flex:1;min-width:0">
-            <div class="ct-nm">${esc(c.name||'(no name)')}${c.role?` <span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
+            <div class="ct-nm">${esc(c.name||'(no name)')}
+              ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
+              ${c.role?`<span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
             ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
             ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
           </div>
@@ -2359,7 +2454,7 @@ function showJob(i){
       : '<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>'}</div>
     <div class="btn-row" style="margin-top:9px">
       <button class="btn-sm" id="ctAdd">Add a person</button>
-      <button class="btn-sm" id="hrFind">Find HR contact</button></div>
+      <button class="btn-sm" id="hrFind">Find contacts</button></div>
 
     <div class="eyebrow" style="margin-top:20px">History</div>
     <div style="margin-top:8px">${ev.length
@@ -2419,7 +2514,9 @@ function hrRow(c,i){
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
     <input type="checkbox" data-hr="${i}" checked style="margin-top:4px;width:auto">
     <div style="flex:1;min-width:0">
-      <div class="ct-nm">${esc(c.name||'(name unknown)')}${c.role?` <span style="color:var(--muted);font-size:11px">· ${esc(c.role)}</span>`:''}</div>
+      <div class="ct-nm">${esc(c.name||'(name unknown)')}
+        ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
+        ${c.role?`<span style="color:var(--muted);font-size:11px">· ${esc(c.role)}</span>`:''}</div>
       ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
       ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
     </div></label>`;
@@ -2429,10 +2526,12 @@ function hrRow(c,i){
    hits are worth keeping — a scraped page can surface a stray email that has
    nothing to do with hiring, so this never adds anything unreviewed. */
 function hrDialog(i){
-  const j=P().jobs[i];
-  const d=modal(`<div class="eyebrow">Find HR contact</div>
+  const p=P(), j=p.jobs[i];
+  const trk=(p.profile.tracks||[]).find(t=>t.id===p.track)||{};
+  const ctx={ title:j.title, titles:trk.titles||[] };
+  const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
-    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and lists whoever on its public employee page has an HR or recruiting title. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and reads its public employee page for two kinds of person: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
     <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
     <div id="hrOut"></div>`);
@@ -2442,7 +2541,7 @@ function hrDialog(i){
     out.innerHTML='<p style="color:var(--muted);margin-top:16px"><span class="spin"></span> <span id="hrStatus">starting…</span></p>';
     const setStatus=t=>{ const s=d.querySelector('#hrStatus'); if(s) s.textContent=t; };
     let list;
-    try{ list=await findHrContacts(j.company, setStatus); }
+    try{ list=await findHrContacts(j.company, ctx, setStatus); }
     catch(e){
       if(e.message==='NEEDAPIFY'){ d.remove(); apifyDialog(()=>hrDialog(i)); return; }
       d.querySelector('#hrGo').disabled=false;
