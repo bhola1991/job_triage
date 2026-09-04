@@ -245,6 +245,21 @@
     background:linear-gradient(90deg,rgba(196,99,74,.12),transparent 60%)}
   .next .nh{font-size:15px;font-weight:500;margin-bottom:2px}
   .next .ns{font-size:12px;color:var(--muted)}
+  /* Background-task toasts. Fixed to the corner and above the app but BELOW
+     the modal layer, so opening the picker doesn't leave a toast floating
+     over its own dialog. */
+  #tasks{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;
+    flex-direction:column;gap:9px;width:min(330px,calc(100vw - 32px))}
+  .task{background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--signal);border-radius:6px;padding:12px 13px;
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  .task.done{border-left-color:var(--good)}
+  .task.err{border-left-color:var(--warn)}
+  .task .tl{font-size:13px;margin-bottom:3px}
+  .task .ts{font-size:11px;color:var(--muted);font-family:var(--mono);
+    word-break:break-word;line-height:1.4}
+  @media(prefers-reduced-motion:no-preference){.task{animation:rise .3s cubic-bezier(.16,1,.3,1) backwards}}
+
   .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
   .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
   .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
@@ -253,7 +268,7 @@
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
-<div id="app"><div id="root"></div></div>
+<div id="app"><div id="root"></div><div id="tasks"></div></div>
 
 <script>
 (function(){
@@ -290,6 +305,11 @@ let ONB  = { step:0, raw:'', fileName:'', parsed:null, track:null, error:'',
              assessing:false, assessed:null, assessErr:'', wantText:'' };
 let RANGE = null, TAB = 'map', busy = false;
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
+/* Long-running work lives here rather than behind a modal, so the app stays
+   usable while an Apify run polls. Deliberately not persisted: a run belongs
+   to the page that started it, and a task restored after a reload would have
+   nothing on the other end of it. */
+let TASKS = [], TASKSEQ = 0;
 
 const P = () => DB.profiles[DB.current] || null;
 
@@ -2510,6 +2530,26 @@ function contactDialog(i){
     await save(); d.remove(); render(); };
 }
 
+/* Rendered into #tasks, which sits outside #root — render() replaces the whole
+   of #root on every state change, and a toast that vanished mid-run would be
+   worse than no toast at all. */
+function renderTasks(){
+  const el=$('#tasks'); if(!el) return;
+  el.innerHTML=TASKS.map(t=>`<div class="task ${t.state==='done'?'done':t.state==='error'?'err':''}">
+    <div class="tl">${t.state==='running'?'<span class="spin"></span> ':''}${esc(t.label)}</div>
+    <div class="ts">${esc(t.status||'')}</div>
+    ${t.state==='running'?'':`<div class="btn-row" style="margin-top:9px">
+      ${t.state==='done'&&(t.result||[]).length?`<button class="btn-go btn-sm" data-task-open="${t.id}">Review</button>`:''}
+      <button class="btn-sm" data-task-drop="${t.id}">Dismiss</button></div>`}
+  </div>`).join('');
+  el.querySelectorAll('[data-task-open]').forEach(b=>b.onclick=()=>{
+    const t=TASKS.find(x=>x.id===b.dataset.taskOpen); if(!t) return;
+    dropTask(t.id); hrPick(t);
+  });
+  el.querySelectorAll('[data-task-drop]').forEach(b=>b.onclick=()=>dropTask(b.dataset.taskDrop));
+}
+function dropTask(id){ TASKS=TASKS.filter(t=>t.id!==id); renderTasks(); }
+
 function hrRow(c,i){
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
     <input type="checkbox" data-hr="${i}" checked style="margin-top:4px;width:auto">
@@ -2532,33 +2572,51 @@ function hrDialog(i){
   const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
     <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and reads its public employee page for two kinds of person: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
+    <p class="hint" style="margin-bottom:12px">Takes a couple of minutes. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
     <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
-    <div id="hrOut"></div>`);
-  d.querySelector('#hrGo').onclick=async()=>{
-    d.querySelector('#hrGo').disabled=true;
-    const out=d.querySelector('#hrOut');
-    out.innerHTML='<p style="color:var(--muted);margin-top:16px"><span class="spin"></span> <span id="hrStatus">starting…</span></p>';
-    const setStatus=t=>{ const s=d.querySelector('#hrStatus'); if(s) s.textContent=t; };
-    let list;
-    try{ list=await findHrContacts(j.company, ctx, setStatus); }
-    catch(e){
-      if(e.message==='NEEDAPIFY'){ d.remove(); apifyDialog(()=>hrDialog(i)); return; }
-      d.querySelector('#hrGo').disabled=false;
-      out.innerHTML='<p class="err">'+esc(e.message)+'</p>'; return;
-    }
-    out.innerHTML=`
-      <div class="eyebrow" style="margin-top:18px">${list.length} found · untick any that aren't right</div>
-      <div style="margin-top:8px;max-height:320px;overflow:auto">${list.map(hrRow).join('')}</div>
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn-go btn-sm" id="hrAdd">Add selected</button></div>`;
-    d.querySelector('#hrAdd').onclick=async()=>{
-      const picked=Array.from(d.querySelectorAll('[data-hr]:checked')).map(x=>list[parseInt(x.dataset.hr,10)]);
-      if(!picked.length){ d.remove(); return; }
-      const arr=listOf(j,'contacts'); picked.forEach(c=>arr.push(c)); setList(j,'contacts',arr);
-      logEvent(j,'contact','found '+picked.length+' contact'+(picked.length>1?'s':'')+' via HR search');
-      await save(); d.remove(); showJob(i); render();
-    };
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#hrGo').onclick=()=>{ d.remove(); startHrSearch(i, ctx); };
+}
+
+/* Detached on purpose. An Apify run takes minutes, and a modal held open over
+   the whole app for that long stops the person doing the thing they actually
+   came here for. The run reports into the corner instead, and the picker only
+   appears once there is something to pick. */
+function startHrSearch(i, ctx){
+  const p=P(), j=p.jobs[i];
+  // Held by key, not index: this runs for minutes, and a delete or an import
+  // in the meantime would otherwise land the contacts on somebody else's job.
+  const t={ id:'t'+(++TASKSEQ), label:'Finding contacts at '+(j.company||'this company'),
+            status:'starting…', state:'running', profileId:DB.current, key:keyOf(j), result:null };
+  TASKS.push(t); renderTasks();
+  findHrContacts(j.company, ctx, s=>{ t.status=s; renderTasks(); })
+    .then(list=>{ t.state='done'; t.result=list; t.status=list.length+' worth looking at'; renderTasks(); })
+    .catch(e=>{
+      if(e.message==='NEEDAPIFY'){ dropTask(t.id); apifyDialog(()=>startHrSearch(i,ctx)); return; }
+      // A failed run is still worth a couple of cents of context, so say what
+      // went wrong rather than silently dropping the toast.
+      t.state='error'; t.status=e.message; renderTasks();
+    });
+}
+
+function hrPick(t){
+  if(DB.current!==t.profileId) return alert('That search was run under a different profile.');
+  const p=P(), j=p&&p.jobs.find(x=>keyOf(x)===t.key);
+  if(!j) return alert('That job is no longer in the list, so there is nothing to attach these to.');
+  const list=t.result||[];
+  const d=modal(`<div class="eyebrow">Contacts found</div>
+    <h2 style="margin:6px 0 10px">${esc(j.company)}</h2>
+    <div class="eyebrow">${list.length} found · untick any that aren't right</div>
+    <div style="margin-top:8px;max-height:340px;overflow:auto">${list.map(hrRow).join('')}</div>
+    <div class="btn-row" style="margin-top:14px">
+      <button class="btn-go btn-sm" id="hrAdd">Add selected</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  d.querySelector('#hrAdd').onclick=async()=>{
+    const picked=Array.from(d.querySelectorAll('[data-hr]:checked')).map(x=>list[parseInt(x.dataset.hr,10)]);
+    if(!picked.length){ d.remove(); return; }
+    const arr=listOf(j,'contacts'); picked.forEach(c=>arr.push(c)); setList(j,'contacts',arr);
+    logEvent(j,'contact','found '+picked.length+' contact'+(picked.length>1?'s':'')+' via contact search');
+    await save(); d.remove(); render();
   };
 }
 
