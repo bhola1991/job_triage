@@ -20,17 +20,33 @@
     --mono:'IBM Plex Mono',ui-monospace,monospace;
   }
   *{box-sizing:border-box}
-  #app{background:var(--ink);color:var(--text);font-family:var(--disp);
+  #app{background:
+      radial-gradient(1200px 500px at 15% -10%, rgba(232,176,75,.07), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, rgba(95,168,199,.06), transparent 55%),
+      var(--ink);
+    color:var(--text);font-family:var(--disp);
     font-size:14px;line-height:1.5;min-height:100vh;margin:0}
   #app h1,#app h2,#app h3{margin:0;font-weight:500;letter-spacing:-0.01em}
+  @media(prefers-reduced-motion:no-preference){
+    .card,.trk,.job,.stat,.chip{animation:rise .45s cubic-bezier(.16,1,.3,1) backwards}
+    .job:nth-child(2),.trk:nth-child(2){animation-delay:.04s}
+    .job:nth-child(3),.trk:nth-child(3){animation-delay:.08s}
+    .job:nth-child(4){animation-delay:.12s}
+    .job:nth-child(5){animation-delay:.16s}
+    .job:nth-child(n+6){animation-delay:.2s}
+  }
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
   .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
     text-transform:uppercase;color:var(--dim)}
   .num{font-family:var(--mono);font-variant-numeric:tabular-nums}
   .spacer{flex:1}
 
   .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
-    padding:14px 22px;border-bottom:1px solid var(--line);background:var(--panel)}
-  .topbar h1{font-size:18px}
+    padding:14px 22px;border-bottom:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    position:sticky;top:0;z-index:10;backdrop-filter:blur(8px)}
+  .topbar h1{font-size:19px;background:linear-gradient(90deg,var(--text),var(--signal) 160%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
   .who{display:flex;align-items:center;gap:9px}
   .av{width:30px;height:30px;border-radius:50%;background:var(--panel2);
     border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
@@ -46,14 +62,17 @@
      instead of registering as a click. */
   button,.tab,.trk,.stp,.dot,.chn,.stage,.pill,.drop,.chip,.tag{
     -webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
-  button{font-family:var(--disp);font-size:13px;cursor:pointer;border-radius:3px;
+  button{font-family:var(--disp);font-size:13px;cursor:pointer;border-radius:5px;
     border:1px solid var(--line);background:var(--panel2);color:var(--text);
-    padding:8px 13px;transition:.14s}
-  button:hover:not(:disabled){border-color:var(--signal);color:var(--signal)}
+    padding:8px 13px;transition:transform .12s ease,box-shadow .12s ease,border-color .12s,color .12s,background .12s}
+  button:hover:not(:disabled){border-color:var(--signal);color:var(--signal);transform:translateY(-1px)}
+  button:active:not(:disabled){transform:translateY(0)}
   button:disabled{opacity:.38;cursor:not-allowed}
   button:focus-visible{outline:2px solid var(--cool);outline-offset:2px}
-  .btn-go{background:var(--signal);color:#16202a;border-color:var(--signal);font-weight:700}
-  .btn-go:hover:not(:disabled){background:#f0c163;color:#16202a;border-color:#f0c163}
+  .btn-go{background:var(--signal);color:#16202a;border-color:var(--signal);font-weight:700;
+    box-shadow:0 1px 2px rgba(0,0,0,.2)}
+  .btn-go:hover:not(:disabled){background:#f0c163;color:#16202a;border-color:#f0c163;
+    box-shadow:0 4px 14px rgba(232,176,75,.28),0 1px 2px rgba(0,0,0,.2)}
   .btn-sm{padding:5px 9px;font-size:12px}
   .btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
@@ -200,6 +219,26 @@
     .tab{padding:6px 10px 8px}
   }
 
+  .listhead{display:flex;align-items:center;gap:10px;margin:0 0 14px;flex-wrap:wrap}
+  .segs{display:flex;border:1px solid var(--line);border-radius:5px;overflow:hidden}
+  .seg{border:none;border-radius:0;background:transparent;color:var(--muted);
+    padding:5px 11px;font-size:12px}
+  .seg + .seg{border-left:1px solid var(--line)}
+  .seg:hover:not(.on){color:var(--text);transform:none}
+  .seg.on{background:var(--panel2);color:var(--signal)}
+
+  /* The one thing to do next. Everything else on screen is a list; this is a
+     single instruction, derived from state rather than chosen by the reader. */
+  .next{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:linear-gradient(90deg,rgba(232,176,75,.10),rgba(232,176,75,.02) 60%,transparent);
+    border:1px solid var(--line);border-left:3px solid var(--signal);
+    border-radius:6px;padding:14px 16px;margin-bottom:18px}
+  .next.calm{border-left-color:var(--good);
+    background:linear-gradient(90deg,rgba(111,185,143,.10),transparent 60%)}
+  .next.warn{border-left-color:var(--warn);
+    background:linear-gradient(90deg,rgba(196,99,74,.12),transparent 60%)}
+  .next .nh{font-size:15px;font-weight:500;margin-bottom:2px}
+  .next .ns{font-size:12px;color:var(--muted)}
   .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
   .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
   .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
@@ -219,7 +258,7 @@ const today = () => new Date().toISOString().slice(0,10);
 const COLS = ["title","company","location","url","description","status","date_applied",
   "follow_up_date","hr_contact","pitch_sent","notes","source","query",
   "ai_score","ai_reason","ai_flags","ai_confidence","ai_reachability","channel",
-  "stage","last_touch","contacts","events"];
+  "stage","last_touch","contacts","events","added"];
 
 /* Pipeline stages. Deliberately few — every extra state is one more decision
    the person has to make about a row instead of acting on it.
@@ -244,6 +283,7 @@ let VIEW = 'onb';        // 'onb' | 'app'
 let ONB  = { step:0, raw:'', fileName:'', parsed:null, track:null, error:'',
              assessing:false, assessed:null, assessErr:'', wantText:'' };
 let RANGE = null, TAB = 'map', busy = false;
+let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
 
 const P = () => DB.profiles[DB.current] || null;
 
@@ -636,20 +676,25 @@ async function apifySearch(query, count, onStatus){
   });
 }
 
-/* ═══ Apify: HR / recruiter contact finder ═══
-   Job postings almost never link to the company's own site — LinkedIn and ATS
-   pages point back to themselves — so this is two actor calls chained the same
-   way atsSearch's Google fallback is: find the domain, then crawl it. The
-   crawl only reads pages the company itself published (careers, about, team),
-   never LinkedIn profiles directly, and costs a few cents per company on the
-   same Apify account already paying for search. */
-const RECRUITER_ACTOR = "scrapepilot~recruiter-lead-finder-hr-talent-acquisition-contacts";
-const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
+/* ═══ Apify: HR / recruiter contact finder (LinkedIn) ═══
+   A company's own "about" page turns out to be a weak signal — most don't name
+   HR at all. LinkedIn's company page does, publicly, in its employee list. So
+   this finds the company's LinkedIn slug via Google (same site: pattern as
+   findBoardsViaGoogle), lists its public employees, and keeps whoever's title
+   reads as HR or recruiting.
 
-async function findCompanyDomain(company, onStatus){
+   LinkedIn never publishes email addresses, scraped or otherwise, so this does
+   NOT claim to find one. It separately looks up the company's own domain and
+   guesses the ordinary firstname.lastname pattern from it — clearly labelled
+   as a guess, everywhere it's shown, never presented as confirmed. */
+const EMPLOYEES_ACTOR = "automation-lab~linkedin-company-employees-scraper";
+const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
+const HR_TITLE = /\b(hr|human resources|recruit|talent acquisition|talent partner|talent sourc|people (team|ops|operations)|people & culture|hiring manager)\b/i;
+
+async function googleFirst(query, onStatus, statusLabel){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={queries:`"${company}" official website`,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false};
+  const payload={queries:query,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false};
   let r;
   try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
@@ -659,16 +704,31 @@ async function findCompanyDomain(company, onStatus){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,4000)); waited+=4;
-    if(waited>120) throw new Error("Timed out looking up "+company+"'s website.");
+    if(waited>120) throw new Error("Timed out on "+statusLabel+".");
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`finding ${company}'s website — ${status.toLowerCase()}, ${waited}s`);
+    if(onStatus) onStatus(`${statusLabel} — ${status.toLowerCase()}, ${waited}s`);
     if(status==="SUCCEEDED") break;
     if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
   }
   const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
-  const items=await dr.json();
-  for(const item of (items||[])){
+  return (await dr.json())||[];
+}
+
+async function findLinkedInSlug(company, onStatus){
+  const items=await googleFirst(`site:linkedin.com/company "${company}"`, onStatus, `finding ${company} on LinkedIn`);
+  for(const item of items){
+    for(const res of (item.organicResults||[])){
+      const m=String(res.url||'').match(/linkedin\.com\/company\/([^\/?#]+)/i);
+      if(m) return m[1];
+    }
+  }
+  return null;
+}
+
+async function findCompanyDomain(company, onStatus){
+  const items=await googleFirst(`"${company}" official website`, onStatus, `finding ${company}'s website`);
+  for(const item of items){
     for(const res of (item.organicResults||[])){
       try{
         const host=new URL(res.url).hostname.replace(/^www\./,'');
@@ -679,23 +739,22 @@ async function findCompanyDomain(company, onStatus){
   return null;
 }
 
-function slugToName(url){
-  const m=String(url).match(/linkedin\.com\/in\/([a-z0-9\-]+)/i);
-  if(!m) return '';
-  return m[1].replace(/-[a-f0-9]{4,}$/i,'').split('-').filter(Boolean)
-    .map(s=>s[0].toUpperCase()+s.slice(1)).join(' ');
+function guessEmail(name, domain){
+  const parts=String(name||'').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'')
+    .replace(/[^a-z\s]/g,'').trim().split(/\s+/).filter(Boolean);
+  if(parts.length<2 || !domain) return '';
+  return `${parts[0]}.${parts[parts.length-1]}@${domain}`;
 }
 
 async function findHrContacts(company, onStatus){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
-  const domain = await findCompanyDomain(company, onStatus);
-  if(!domain) throw new Error("Couldn't work out "+company+"'s own website from a search.");
-  if(onStatus) onStatus(`checking ${domain} for HR and recruiting contacts…`);
+  const slug = await findLinkedInSlug(company, onStatus);
+  if(!slug) throw new Error("Couldn't find "+company+"'s LinkedIn company page.");
+  if(onStatus) onStatus(`listing ${company}'s public employees on LinkedIn…`);
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={startUrls:[{url:"https://"+domain}],maxPagesPerDomain:15,
-    targetKeywords:["hr","human resources","recruiter","recruiting","talent acquisition","people team","hiring manager","careers","people ops"]};
+  const payload={companyUrls:[slug]};
   let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+RECRUITER_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  try{ r=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -706,36 +765,38 @@ async function findHrContacts(company, onStatus){
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,5000)); waited+=5;
     if(waited>240) throw new Error("Apify timed out after 4 minutes.");
-    const pr=await fetch(APIFY_BASE+"/acts/"+RECRUITER_ACTOR+"/runs/"+runId,{headers:H});
+    const pr=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs/"+runId,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`scanning ${domain} — ${status.toLowerCase()}, ${waited}s`);
+    if(onStatus) onStatus(`scanning ${company}'s employees — ${status.toLowerCase()}, ${waited}s`);
     if(status==="SUCCEEDED") break;
     if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
   }
   const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
-  const items=await dr.json();
+  const items=(await dr.json())||[];
 
-  // The actor's exact output keys aren't fixed anywhere public, so this reads
-  // them the same tolerant way as every other Apify parser in this file (pick()
-  // above): try the plausible names, don't crash if the shape is a little off.
-  const seen=new Set(), out=[];
-  (items||[]).forEach(it=>{
-    const type=String(pick(it,["type","contactType"])||'').toLowerCase();
-    const val=String(pick(it,["value","contactValue"])||'');
-    let email=pick(it,["email","emailAddress"]) || (type==='email'?val:(val.includes('@')?val:''));
-    let linkedin=pick(it,["linkedin","linkedinUrl","profileUrl"]) || (type==='linkedin'||val.includes('linkedin.com')?val:'');
-    if(!email && !linkedin) return;
-    const key=(email||linkedin).toLowerCase();
-    if(seen.has(key)) return; seen.add(key);
-    const titles=pick(it,["jobTitles","matchedKeywords","titles"]);
-    out.push({
-      name: linkedin ? slugToName(linkedin) : '',
-      role: Array.isArray(titles) ? titles.slice(0,3).join(', ') : String(titles||''),
-      email: email||'', linkedin: linkedin||''
-    });
+  // Output field names for this actor aren't fixed anywhere public either, so
+  // this stays with the same tolerant pick()-based reading as the rest of the
+  // file's Apify parsers.
+  const people=items.map(it=>({
+    name: pick(it,["name","fullName"]),
+    role: pick(it,["headline","title","jobTitle"]),
+    linkedin: pick(it,["profileUrl","profileURL","url"])
+  })).filter(p=>p.name && HR_TITLE.test(p.role||''));
+
+  if(!people.length) throw new Error(`Checked ${items.length} public employee${items.length===1?'':'s'} of ${company} on LinkedIn — none had an HR or recruiting title. Try adding someone by hand.`);
+
+  if(onStatus) onStatus(`found ${people.length} — checking ${company}'s domain for an email pattern…`);
+  let domain=null;
+  try{ domain=await findCompanyDomain(company, onStatus); }catch(e){}
+
+  return people.map(p=>{
+    const guess = domain ? guessEmail(p.name, domain) : '';
+    return {
+      name: p.name,
+      role: p.role + (guess ? ' · email is a guessed pattern, unverified' : ''),
+      email: guess, linkedin: p.linkedin||''
+    };
   });
-  if(!out.length) throw new Error("Checked "+domain+" but found no public HR or recruiting contacts on it.");
-  return out;
 }
 
 /* ═══ LLM ═══
@@ -1188,7 +1249,7 @@ Rules:
 }
 
 /* ═══ jobs ═══ */
-function blank(){ const o={}; COLS.forEach(c=>o[c]=''); o.status='New'; o.pitch_sent='No'; o.channel='posted'; o.stage='new'; o.contacts='[]'; o.events='[]'; return o; }
+function blank(){ const o={}; COLS.forEach(c=>o[c]=''); o.status='New'; o.pitch_sent='No'; o.channel='posted'; o.stage='new'; o.contacts='[]'; o.events='[]'; o.added=today(); return o; }
 function keyOf(j){
   const u=String(j.url||'').trim();
   if(u && u!=='nan') return 'u:'+u.toLowerCase();
@@ -1690,6 +1751,20 @@ function inRange(j){
 function ranked(){ const p=P();
   return p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j)&&inRange(x.j)).sort((a,b)=>rankOf(b.j)-rankOf(a.j)); }
 
+/* Newest first. Rows added before 'added' existed have no date, so index order
+   stands in for it — the jobs array is append-only, so a higher index is always
+   the later arrival. Dated rows sort above undated ones for the same reason. */
+function byNewest(list){
+  return list.slice().sort((a,b)=>{
+    const da=a.j.added||'', db=b.j.added||'';
+    if(da&&db&&da!==db) return db.localeCompare(da);
+    if(da&&!db) return -1;
+    if(!da&&db) return 1;
+    return b.i-a.i;
+  });
+}
+function sortedAll(){ const r=ranked(); return SORT==='new' ? byNewest(r) : r; }
+
 function flagHtml(s){
   const good=['strong_fit','non_traditional_friendly','rare_combination_fit'];
   const bad=['wrong_role_shape','location_ineligible','credential_gated','seniority_too_high','seniority_too_low','high_competition'];
@@ -1746,6 +1821,42 @@ function jobCard(j,i,hi){
    beats ten new applications, and a chase that is three days overdue beats a
    fresh application, because the cost of losing it is already sunk. New work
    comes last on purpose — it is the most tempting and the least urgent. */
+/* The single next action, worked out from state instead of left to the reader.
+   Order matters: a person who owes someone a reply should be told that before
+   they're told about a promising new listing. Returns null only when there is
+   genuinely nothing to do. */
+function nextStep(){
+  const p=P(), jobs=p.jobs;
+  if(!jobs.length) return {cls:'',h:'Nothing in the tracker yet',
+    s:'Start with companies worth approaching — it works out who would want you, then checks which are hiring.',
+    b:'Suggest companies for me', act:'suggest'};
+
+  const unscored=jobs.filter(j=>!isScored(j)).length;
+  if(unscored) return {cls:'',h:`${unscored} job${unscored>1?'s':''} not scored yet`,
+    s:'Scoring reads each one against your background and rates fit and reachability separately.',
+    b:'Score them', act:'score'};
+
+  const due=jobs.filter(isDue).length;
+  if(due) return {cls:'warn',h:`${due} follow-up${due>1?'s':''} overdue`,
+    s:'These were sent over a week ago with no reply. A short nudge beats starting somewhere new.',
+    b:'Open Today', act:'today'};
+
+  const live=jobs.filter(j=>stOf(j)==='live').length;
+  if(live) return {cls:'calm',h:`${live} live conversation${live>1?'s':''}`,
+    s:'Someone is actually on the other end of these. They are worth more than anything else on the board.',
+    b:'Open Today', act:'today'};
+
+  const fresh=ranked().filter(x=>stOf(x.j)==='new'&&isOpen(x.j));
+  if(fresh.length){ const t=fresh[0];
+    return {cls:'',h:`${fresh.length} scored and untouched`,
+      s:`Best of them: ${t.j.title}${t.j.company?' at '+t.j.company:''} — fit ${fitOf(t.j)}, reachability ${reachOf(t.j)}.`,
+      b:'Open it', act:'job:'+t.i};
+  }
+  return {cls:'calm',h:'Clear for today',
+    s:'Everything scored has been actioned or closed. Pull in more roles when you want the next batch.',
+    b:'Find more jobs', act:'suggest'};
+}
+
 function renderToday(){
   const p=P();
   const all=p.jobs.map((j,i)=>({j,i}));
@@ -1791,7 +1902,7 @@ function renderApp(){
   const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
   const top=ranked().filter(x=>isOpen(x.j)).slice(0,10);
-  const all=ranked();
+  const all=sortedAll();
 
   $('#root').innerHTML=`
   <div class="topbar">
@@ -1865,6 +1976,12 @@ function renderApp(){
       </div>
     </div>
     <div class="main">
+      ${(()=>{ const n=nextStep(); return n?`<div class="next ${n.cls}">
+        <div style="flex:1;min-width:220px">
+          <div class="nh">${esc(n.h)}</div>
+          <div class="ns">${esc(n.s)}</div></div>
+        <button class="btn-go" id="btnNext" data-next="${esc(n.act)}" ${busy?'disabled':''}>${esc(n.b)}</button>
+      </div>`:''; })()}
       <div class="tabs">
         <div class="tab ${TAB==='map'?'on':''}" data-tab="map">The map</div>
         <div class="tab ${TAB==='list'?'on':''}" data-tab="list">Today</div>
@@ -1887,7 +2004,15 @@ function renderApp(){
       </div>
       <div ${TAB==='list'?'':'style="display:none"'}>${renderToday()}</div>
       <div ${TAB==='all'?'':'style="display:none"'}>
-        ${all.length?`<p style="color:var(--muted);font-size:12px;margin:0 0 14px">${all.length} in range, ranked.</p>${all.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')}`
+        ${all.length?`<div class="listhead">
+            <span style="color:var(--muted);font-size:12px">${all.length} in range</span>
+            <div class="spacer"></div>
+            <span class="eyebrow">Sort</span>
+            <div class="segs">
+              <button class="seg ${SORT==='rank'?'on':''}" data-sort="rank">Best first</button>
+              <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Newest first</button>
+            </div>
+          </div>${all.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')}`
           :`<div class="empty"><b>Nothing to show</b>Add jobs and score them.</div>`}
       </div>
     </div>
@@ -1895,6 +2020,14 @@ function renderApp(){
 
   document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
   document.querySelectorAll('.tab[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
+  document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
+  if($('#btnNext')) $('#btnNext').onclick=()=>{
+    const a=$('#btnNext').dataset.next;
+    if(a==='suggest') return suggestDialog();
+    if(a==='score')   return runScoring(false);
+    if(a==='today'){ TAB='list'; return render(); }
+    if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
+  };
   hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
   $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); };
   $('#btnProfile').onclick=showProfile;
@@ -2220,7 +2353,9 @@ function showJob(i){
             ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
             ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
           </div>
-          <button class="btn-sm" data-ct-del="${ci}">Remove</button></div>`).join('')
+          <div class="btn-row" style="flex-shrink:0">
+            ${c.linkedin?`<button class="btn-sm" data-inmail="${ci}">Draft InMail</button>`:''}
+            <button class="btn-sm" data-ct-del="${ci}">Remove</button></div></div>`).join('')
       : '<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>'}</div>
     <div class="btn-row" style="margin-top:9px">
       <button class="btn-sm" id="ctAdd">Add a person</button>
@@ -2249,6 +2384,8 @@ function showJob(i){
   d.querySelectorAll('[data-ct-del]').forEach(b=>b.onclick=async()=>{
     const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ctDel,10),1);
     setList(j,'contacts',arr); await save(); d.remove(); showJob(i); render(); });
+  d.querySelectorAll('[data-inmail]').forEach(b=>b.onclick=()=>{
+    d.remove(); draftInmail(i,parseInt(b.dataset.inmail,10)); });
   d.querySelectorAll('[data-stage]').forEach(b=>b.onclick=async()=>{
     setStage(j,b.dataset.stage); logEvent(j,'stage','moved to '+b.dataset.stage);
     await save(); d.remove(); render(); });
@@ -2295,7 +2432,7 @@ function hrDialog(i){
   const j=P().jobs[i];
   const d=modal(`<div class="eyebrow">Find HR contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
-    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Searches for ${esc(j.company)}'s own website, then checks its careers, about and team pages for publicly listed HR and recruiting contacts. Costs a few cents of Apify credit.</p>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and lists whoever on its public employee page has an HR or recruiting title. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
     <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
     <div id="hrOut"></div>`);
@@ -2412,6 +2549,68 @@ Return only the message text.`, 1000);
     d.remove();
     if(e.message==='NEEDKEY'){ keyDialog(()=>draftPitch(i)); return; }
     modal(`<div class="eyebrow">Outreach</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
+  }
+}
+
+/* One person, one LinkedIn InMail. Separate from draftPitch because that one
+   addresses the job as a whole (or "nobody identified yet") — this always has
+   exactly one named reader, so the opener can use their name and role
+   directly instead of hedging. Nothing gets sent from here: LinkedIn has no
+   API for it, so this only ever produces text to paste into their own
+   compose box after clicking through to the profile. */
+async function draftInmail(i,ci){
+  const p=P(), j=p.jobs[i]; if(!j) return;
+  const c=listOf(j,'contacts')[ci]; if(!c) return;
+  const prof=p.profile;
+  const d=modal(`<div class="eyebrow">InMail draft</div><h2 style="margin:6px 0 14px">${esc(c.name||'them')} · ${esc(j.company)}</h2><p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
+  try{
+    const txt=await claude(
+`Write a short LinkedIn InMail message from a job seeker to one specific person.
+
+WHO IT'S FROM
+Name: ${prof.name}
+Based in: ${prof.location||''}
+In short: ${prof.headline||''}
+Real strengths: ${(prof.strengths||[]).join('; ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
+
+FULL PROFILE (source of truth — invent nothing beyond this):
+${String(p.raw||'').slice(0,9000)}
+
+WHO IT'S TO: ${c.name||'(name unknown)'}${c.role?', '+c.role:''} at ${j.company}
+
+TARGET ROLE: ${j.title}
+CONTEXT: ${String(j.description||'').slice(0,900)}
+
+CHANNEL: ${chOf(j)==='cold'
+ ? 'COLD — there is NO job posting. Do not refer to "the role" or "your posting" as if one exists. This is an unsolicited approach; make them want to reply.'
+ : 'POSTED — there is a live posting, so referring to the role directly is correct. Mention that an application is going in (or already has), so this reads as a real signal, not a substitute for applying.'}
+
+Rules:
+- This is a LinkedIn InMail to someone they are not yet connected with — shorter than an email, no subject line, no formal greeting like "Dear".
+- Maximum 4 sentences.
+- Open by addressing them by first name, then the single most specific concrete thing this person (the sender) has actually built or run. No "I hope this finds you well", no "I am writing to express interest".
+- Reference something specific about this company or role, and if they have a title suggesting they'd actually own hiring for this, say why you're reaching out to them specifically.
+- End with a low-friction ask — a short call, or an offer to show something specific.
+- Plain language. No buzzwords, no em-dashes, no "passionate about".
+- Invent nothing not in the profile above.
+
+Return only the message text.`, 700);
+    d.querySelector('.box').innerHTML=`<div class="eyebrow">InMail draft</div>
+      <h2 style="margin:6px 0 14px">${esc(c.name||'them')} · ${esc(j.company)}</h2>
+      <textarea id="inmailTxt" rows="8">${esc(txt)}</textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-go btn-sm" id="inmailCopy">Copy</button>
+        ${c.linkedin?`<button class="btn-sm" id="inmailOpen">Open their profile</button>`:''}
+        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
+    d.querySelector('#inmailCopy').onclick=()=>{ const t=d.querySelector('#inmailTxt'); t.select();
+      navigator.clipboard.writeText(t.value).then(()=>{ d.querySelector('#inmailCopy').textContent='Copied'; },()=>{}); };
+    if(c.linkedin) d.querySelector('#inmailOpen').onclick=()=>window.open(c.linkedin,'_blank','noopener');
+  }catch(e){
+    d.remove();
+    if(e.message==='NEEDKEY'){ keyDialog(()=>draftInmail(i,ci)); return; }
+    modal(`<div class="eyebrow">InMail draft</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
   }
 }
