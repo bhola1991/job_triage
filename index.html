@@ -347,6 +347,20 @@ async function load(){
 const APIFY_ACTOR = "curious_coder~linkedin-jobs-scraper";
 const APIFY_BASE  = "https://api.apify.com/v2";
 
+/* Giving up on a run does not stop it. The tab walks away, the actor keeps
+   working, and the bill keeps growing — the one way to spend money here and
+   get nothing whatsoever back. Two guards, because they fail differently:
+   every run carries a server-side timeout, which holds even if the browser is
+   closed mid-run, and every place that stops waiting also aborts on its way
+   out, which is immediate rather than waiting for that timeout to expire. */
+function runUrl(actor, secs, extra){
+  return APIFY_BASE+"/acts/"+actor+"/runs?timeout="+secs+(extra||'');
+}
+async function abortRun(runId, H){
+  if(!runId) return;
+  try{ await fetch(APIFY_BASE+"/actor-runs/"+runId+"/abort",{method:"POST",headers:H}); }catch(e){}
+}
+
 function buildLiUrl(query){
   const parts = String(query).split("|");
   const kw = encodeURIComponent(parts[0].trim());
@@ -478,14 +492,14 @@ async function findBoardsViaGoogle(names, onStatus){
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
   const payload={queries:qs.join("\n"),languageCode:"en",maxPagesPerQuery:1,resultsPerPage:5,mobileResults:false};
   let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  try{ r=await fetch(runUrl(APIFY_GOOGLE,360),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ return {}; }
   if(!r.ok) return {};
   const d=(await r.json()).data||{};
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>300) return {};
+    if(waited>300){ abortRun(d.id,H); return {}; }
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(`looking up careers pages \u2014 ${status.toLowerCase()}, ${waited}s`);
@@ -596,14 +610,19 @@ function velocityNote(slug){
    patching an existing one. */
 const APIFY_GOOGLE = "apify~google-search-scraper";
 
+/* One query per board, with the titles OR'd inside it, rather than one query
+   per board-and-title pair. Apify bills a Google page per query, so the old
+   8x4 fan-out cost four times this for slots that were mostly empty anyway —
+   a niche board and an exact title rarely fill ten results between them, and
+   the four titles are near-synonyms competing for the same postings. If a
+   large board starts to feel under-read, maxPagesPerQuery in apifyBoardSearch
+   is the dial, and a second page is cheaper than splitting the query back up
+   because it does not pay for another run. */
 function buildBoardQueries(titles, boards, where){
-  const qs=[];
-  (boards||[]).slice(0,8).forEach(b=>{
-    (titles||[]).slice(0,4).forEach(t=>{
-      qs.push(`site:${b} "${t}"` + (where?` ${where}`:''));
-    });
-  });
-  return qs.slice(0,32);
+  const ts=(titles||[]).slice(0,4).map(t=>`"${t}"`);
+  if(!ts.length) return [];
+  const any=ts.length>1 ? `(${ts.join(' OR ')})` : ts[0];
+  return (boards||[]).slice(0,8).map(b=>`site:${b} ${any}` + (where?` ${where}`:''));
 }
 
 async function apifyBoardSearch(queries, countryCode, onStatus){
@@ -615,7 +634,7 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
     languageCode:"en",maxPagesPerQuery:1,resultsPerPage:10,mobileResults:false};
   let r;
   try{
-    r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
+    r=await fetch(runUrl(APIFY_GOOGLE,660),{method:"POST",headers:H,body:JSON.stringify(payload)});
   }catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -626,7 +645,7 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
+    if(waited>600){ abortRun(runId,H); throw new Error("Apify timed out after 10 minutes."); }
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+runId,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(`searching ${queries.length} board queries — ${status.toLowerCase()}, ${waited}s`);
@@ -666,7 +685,7 @@ async function apifySearch(query, count, onStatus){
   const payload={urls:[buildLiUrl(query)],count:Math.max(count||10,10),scrapeCompany:true};
   let r;
   try{
-    r = await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
+    r = await fetch(runUrl(APIFY_ACTOR,660),{method:"POST",headers:H,body:JSON.stringify(payload)});
   }catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -677,7 +696,7 @@ async function apifySearch(query, count, onStatus){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
+    if(waited>600){ abortRun(runId,H); throw new Error("Apify timed out after 10 minutes."); }
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs/"+runId,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(query+" — "+status.toLowerCase()+", "+waited+"s");
@@ -766,7 +785,7 @@ async function googleFirst(query, onStatus, statusLabel){
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
   const payload={queries:query,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false};
   let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  try{ r=await fetch(runUrl(APIFY_GOOGLE,240),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -776,7 +795,7 @@ async function googleFirst(query, onStatus, statusLabel){
     await new Promise(z=>setTimeout(z,4000)); waited+=4;
     // Three queries can share one run now, so this waits longer than a
     // single search would need — a timeout throws away money already spent.
-    if(waited>180) throw new Error("Timed out on "+statusLabel+".");
+    if(waited>180){ abortRun(d.id,H); throw new Error("Timed out on "+statusLabel+"."); }
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(`${statusLabel} — ${status.toLowerCase()}, ${waited}s`);
@@ -883,7 +902,10 @@ async function scrapeEmployees(company, onStatus){
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
   const payload={companyUrls:[slug], maxEmployees:MAX_EMPLOYEES};
   let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  // maxEmployees is the actor's own input, so a rename or a regression upstream
+  // silently restores its default of fifty. maxTotalChargeUsd is enforced by
+  // Apify instead, and sits just above what a capped run can legitimately cost.
+  try{ r=await fetch(runUrl(EMPLOYEES_ACTOR,300,"&maxTotalChargeUsd=0.25"),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -893,7 +915,7 @@ async function scrapeEmployees(company, onStatus){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,5000)); waited+=5;
-    if(waited>240) throw new Error("Apify timed out after 4 minutes.");
+    if(waited>240){ abortRun(runId,H); throw new Error("Apify timed out after 4 minutes."); }
     const pr=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs/"+runId,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(`scanning ${company}'s employees — ${status.toLowerCase()}, ${waited}s`);
