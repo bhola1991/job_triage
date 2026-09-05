@@ -825,36 +825,101 @@ async function findHrContacts(company, ctx, onStatus){
   // Output field names for this actor aren't fixed anywhere public either, so
   // this stays with the same tolerant pick()-based reading as the rest of the
   // file's Apify parsers.
-  const words=roleWords(ctx);
-  const people=[];
-  items.forEach(it=>{
-    const name=pick(it,["name","fullName"]);
-    const role=String(pick(it,["headline","title","jobTitle"])||'');
-    if(!name) return;
-    const low=role.toLowerCase();
-    let tier='';
-    if(HR_TITLE.test(role)) tier='recruiting';
-    else if(LEAD_TITLE.test(role) && words.some(w=>low.includes(w))) tier='hiring';
-    if(!tier) return;
-    people.push({ name, role, linkedin:pick(it,["profileUrl","profileURL","url"]), tier });
-  });
-  // Recruiting first: they own the process, so they're the safer opener.
-  people.sort((a,b)=> (a.tier==='recruiting'?0:1) - (b.tier==='recruiting'?0:1));
+  const roster=items.map(it=>({
+    name: pick(it,["name","fullName"]),
+    role: String(pick(it,["headline","title","jobTitle"])||''),
+    linkedin: pick(it,["profileUrl","profileURL","url"])
+  })).filter(x=>x.name);
 
-  if(!people.length) throw new Error(`Checked ${items.length} public employee${items.length===1?'':'s'} of ${company} on LinkedIn — none looked like recruiting, or like they run the team this role sits in. Try adding someone by hand.`);
+  if(!roster.length) throw new Error(`${company}'s LinkedIn page returned no readable employees.`);
+
+  // Ask the model first, fall back to keywords only if that call actually
+  // fails. An empty answer from the model is an answer — "nobody here" is a
+  // real finding, and second-guessing it with a keyword sweep would just put
+  // back the false positives the model was brought in to remove.
+  if(onStatus) onStatus(`reading ${roster.length} profiles for who is worth contacting…`);
+  let people=[], judged=true;
+  try{ people=await pickPeople(roster, company, ctx); }
+  catch(e){ judged=false; people=keywordPeople(roster, ctx); }
+
+  if(!people.length) throw new Error(`Read ${roster.length} public employee${roster.length===1?'':'s'} at ${company} — none of them looked like the right desk for this role. Try adding someone by hand.`);
 
   if(onStatus) onStatus(`found ${people.length} — checking ${company}'s domain for an email pattern…`);
   let domain=null;
   try{ domain=await findCompanyDomain(company, onStatus); }catch(e){}
 
-  return people.map(p=>{
+  return { judged, list: people.map(p=>{
     const guess = domain ? guessEmail(p.name, domain) : '';
     return {
       name: p.name,
       role: p.role + (guess ? ' · email is a guessed pattern, unverified' : ''),
-      email: guess, linkedin: p.linkedin||'', tier: p.tier
+      email: guess, linkedin: p.linkedin||'', tier: p.tier, why: p.why||''
     };
+  })};
+}
+
+/* Relevance is a judgement, not a string match. "Head of Business Intelligence"
+   is the right desk for an analytics role and shares no word with it, while
+   "Head of Data Governance" shares two and is the wrong desk. The model already
+   reads jobs for scoring; here it reads the employee list the same way, and
+   says in one line why each person is the one to write to. */
+async function pickPeople(roster, company, ctx){
+  const prof=P().profile;
+  const listed=roster.slice(0,60)
+    .map((x,n)=>`${n}. ${x.name} — ${String(x.role||'').slice(0,110)}`).join('\n');
+  const txt=await claude(
+`Choose who a job seeker should contact at one company.
+
+THE ROLE THEY ARE CHASING
+${ctx.title||'unspecified'} at ${company}
+${String(ctx.description||'').slice(0,500)}
+Related titles in this family: ${(ctx.titles||[]).slice(0,6).join(', ')||'none given'}
+
+THE PERSON APPLYING
+${prof.headline||''}
+Strengths: ${(prof.strengths||[]).slice(0,5).join('; ')}
+
+PEOPLE ON THE COMPANY'S PUBLIC EMPLOYEE LIST
+${listed}
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"picks":[{"i":0,"tier":"recruiting","why":"..."}]}
+
+Rules:
+- tier "recruiting": they own hiring itself — recruiter, talent, HR, people ops, staffing.
+- tier "hiring": they run, or sit senior in, the team this role belongs to.
+- Judge by what the work actually is, not by shared words. "Head of Business Intelligence" is the right desk for an analytics role. "Head of Data Governance" is not, despite the overlap.
+- Include someone only if a message from this candidate about THIS role would plausibly land on the right desk.
+- Leave out individual contributors unless the company looks small and there is nobody else.
+- why: max 12 words, specific about why this is the right desk. No flattery, no restating their title.
+- At most 8, best first, recruiting ahead of hiring side when equally good.
+- Nobody suitable is a valid answer: {"picks":[]}
+- Use only the numbered list above. Never invent a person or a title.`, 900);
+  const parsed=grabJSON(txt);
+  const picks=Array.isArray(parsed)?parsed:(parsed.picks||[]);
+  const out=[];
+  picks.forEach(pk=>{
+    const src=roster[parseInt(pk.i,10)];
+    if(!src) return;                                  // model made an index up
+    if(out.some(o=>o.linkedin===src.linkedin&&o.name===src.name)) return;
+    out.push({ name:src.name, role:src.role, linkedin:src.linkedin,
+      tier: pk.tier==='recruiting'?'recruiting':'hiring',
+      why: String(pk.why||'').slice(0,90) });
   });
+  return out;
+}
+
+/* The fallback, and what this used to do on its own. Crude by nature: a shared
+   noun stands in for relevance, which is why the model gets first refusal. */
+function keywordPeople(roster, ctx){
+  const words=roleWords(ctx);
+  const out=roster.filter(p=>{
+    const low=String(p.role||'').toLowerCase();
+    if(HR_TITLE.test(p.role)) { p.tier='recruiting'; return true; }
+    if(LEAD_TITLE.test(p.role) && words.some(w=>low.includes(w))) { p.tier='hiring'; return true; }
+    return false;
+  });
+  return out.sort((a,b)=> (a.tier==='recruiting'?0:1) - (b.tier==='recruiting'?0:1));
 }
 
 /* ═══ LLM ═══
@@ -2557,6 +2622,7 @@ function hrRow(c,i){
       <div class="ct-nm">${esc(c.name||'(name unknown)')}
         ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
         ${c.role?`<span style="color:var(--muted);font-size:11px">· ${esc(c.role)}</span>`:''}</div>
+      ${c.why?`<div style="font-size:12px;color:var(--cool);margin-top:2px">↳ ${esc(c.why)}</div>`:''}
       ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
       ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
     </div></label>`;
@@ -2568,7 +2634,7 @@ function hrRow(c,i){
 function hrDialog(i){
   const p=P(), j=p.jobs[i];
   const trk=(p.profile.tracks||[]).find(t=>t.id===p.track)||{};
-  const ctx={ title:j.title, titles:trk.titles||[] };
+  const ctx={ title:j.title, titles:trk.titles||[], description:j.description };
   const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
     <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and reads its public employee page for two kinds of person: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
@@ -2590,7 +2656,9 @@ function startHrSearch(i, ctx){
             status:'starting…', state:'running', profileId:DB.current, key:keyOf(j), result:null };
   TASKS.push(t); renderTasks();
   findHrContacts(j.company, ctx, s=>{ t.status=s; renderTasks(); })
-    .then(list=>{ t.state='done'; t.result=list; t.status=list.length+' worth looking at'; renderTasks(); })
+    .then(res=>{ t.state='done'; t.result=res.list; t.judged=res.judged;
+      t.status=res.list.length+' worth looking at'+(res.judged?'':' (keyword match — the model was unavailable)');
+      renderTasks(); })
     .catch(e=>{
       if(e.message==='NEEDAPIFY'){ dropTask(t.id); apifyDialog(()=>startHrSearch(i,ctx)); return; }
       // A failed run is still worth a couple of cents of context, so say what
