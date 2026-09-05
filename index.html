@@ -704,16 +704,38 @@ async function apifySearch(query, count, onStatus){
 
 /* ═══ Apify: HR / recruiter contact finder (LinkedIn) ═══
    A company's own "about" page turns out to be a weak signal — most don't name
-   HR at all. LinkedIn's company page does, publicly, in its employee list. So
-   this finds the company's LinkedIn slug via Google (same site: pattern as
-   findBoardsViaGoogle), lists its public employees, and keeps whoever's title
-   reads as HR or recruiting.
+   HR at all. LinkedIn does, publicly: recruiters and department heads write who
+   they are in their headline, and Google has all of it indexed.
+
+   So this asks Google directly for the people, rather than paying an employee
+   scraper to hand back the whole company. That is not a small difference. The
+   employees actor bills per profile, defaults to fifty of them, and — without a
+   LinkedIn cookie — is running Google underneath anyway: fifty strangers at
+   ~$0.005 each, to keep the handful whose title mentions hiring. A site: query
+   against linkedin.com/in asks for that handful in the first place, and one
+   page of Google results costs about the price of half a profile.
+
+   Three queries go out in one run — recruiting side, hiring side, and the
+   company's own domain — because Apify charges per run as well as per page,
+   and results are told apart afterwards by the shape of their URL. The
+   employee scraper stays as a fallback for when search comes back thin, which
+   is mostly small companies whose staff Google hasn't indexed.
 
    LinkedIn never publishes email addresses, scraped or otherwise, so this does
-   NOT claim to find one. It separately looks up the company's own domain and
-   guesses the ordinary firstname.lastname pattern from it — clearly labelled
-   as a guess, everywhere it's shown, never presented as confirmed. */
+   NOT claim to find one. It reads the company's own domain out of the same
+   search and guesses the ordinary firstname.lastname pattern from it — clearly
+   labelled as a guess, everywhere it's shown, never presented as confirmed. */
 const EMPLOYEES_ACTOR = "automation-lab~linkedin-company-employees-scraper";
+/* Fallback only, and it bills per profile, so it is capped. The model reads at
+   most 60 names either way, and the actor's own default of 50 is chosen to sell
+   profiles rather than to answer the question. */
+const MAX_EMPLOYEES  = 30;
+/* Below this many people from search, the fallback is worth its money. */
+const HR_MIN_ROSTER  = 4;
+/* A roster is a fact about a company, not about a job. Two roles at the same
+   employer — which is the common case, companies post in batches — should cost
+   one lookup, and a week is well inside how fast a recruiting desk changes. */
+const HR_CACHE_DAYS  = 7;
 const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
 /* Two ways a person is worth talking to. The first is the recruiting side —
    they own the process. The second is the hiring side: whoever runs the team
@@ -752,7 +774,9 @@ async function googleFirst(query, onStatus, statusLabel){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,4000)); waited+=4;
-    if(waited>120) throw new Error("Timed out on "+statusLabel+".");
+    // Three queries can share one run now, so this waits longer than a
+    // single search would need — a timeout throws away money already spent.
+    if(waited>180) throw new Error("Timed out on "+statusLabel+".");
     const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
     status=((await pr.json()).data||{}).status||"UNKNOWN";
     if(onStatus) onStatus(`${statusLabel} — ${status.toLowerCase()}, ${waited}s`);
@@ -774,17 +798,73 @@ async function findLinkedInSlug(company, onStatus){
   return null;
 }
 
-async function findCompanyDomain(company, onStatus){
-  const items=await googleFirst(`"${company}" official website`, onStatus, `finding ${company}'s website`);
-  for(const item of items){
-    for(const res of (item.organicResults||[])){
-      try{
-        const host=new URL(res.url).hostname.replace(/^www\./,'');
-        if(host && !NOT_COMPANY_SITE.test(host)) return host;
-      }catch(e){}
-    }
+/* Google titles a LinkedIn profile "Name - Headline - Company | LinkedIn",
+   which is exactly the three fields a roster needs. Activity pages ("Jane on
+   LinkedIn: ...") share the domain but are not people, so they go. */
+function peopleFromSerp(results, company){
+  const out=[], seen={};
+  const cmp=String(company||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+  (results||[]).forEach(res=>{
+    const u=String(res.url||'');
+    if(!/linkedin\.com\/in\//i.test(u)) return;
+    const raw=String(res.title||'').trim();
+    if(/\bon linkedin\s*:/i.test(raw)) return;
+    const clean=raw.replace(/\s*[|\u2013\u2014-]\s*linkedin\s*$/i,'').trim();
+    const bits=clean.split(/\s+[\u2013\u2014|-]\s+/);
+    const name=(bits[0]||'').trim();
+    // A headline long enough to be a sentence is a name Google mangled.
+    if(!name || name.length>60 || !/[a-z]/i.test(name)) return;
+    const key=u.split(/[?#]/)[0].toLowerCase();
+    if(seen[key]) return; seen[key]=1;
+    // "Name - Headline - Company" is the usual shape, and repeating the
+    // employer back at someone reading a list of that employer's staff is
+    // noise — in the panel and in the prompt alike.
+    const rest=bits.slice(1);
+    if(rest.length && cmp && rest[rest.length-1].toLowerCase().replace(/[^a-z0-9]/g,'')===cmp) rest.pop();
+    const role=rest.join(' \u2014 ').trim() || String(res.description||'');
+    out.push({ name, role:String(role).slice(0,140), linkedin:key });
+  });
+  return out;
+}
+
+/* The company's own site, out of the same batch of results. */
+function domainFromSerp(results){
+  for(const res of (results||[])){
+    try{
+      const host=new URL(res.url).hostname.replace(/^www\./,'');
+      if(host && !NOT_COMPANY_SITE.test(host)) return host;
+    }catch(e){}
   }
   return null;
+}
+
+/* Recruiting side and hiring side asked for separately, because one OR-chain
+   long enough to cover both stops matching anything useful. The third query is
+   the domain, riding along free of a second run start. */
+function hrQueries(company, ctx){
+  const c=String(company||'').replace(/"/g,'').trim();
+  const words=roleWords(ctx).slice(0,4);
+  const qs=[`site:linkedin.com/in "${c}" (recruiter OR "talent acquisition" OR "people operations" OR "head of people" OR "hiring manager")`];
+  if(words.length)
+    qs.push(`site:linkedin.com/in "${c}" (${words.map(w=>`"${w}"`).join(' OR ')}) (head OR director OR VP OR lead OR manager)`);
+  qs.push(`"${c}" official website`);
+  return qs;
+}
+
+/* ── roster cache ── */
+const hrCacheKey = c => 'triage:hr:'+String(c||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,60);
+async function cachedRoster(company){
+  try{
+    const v=await get(hrCacheKey(company)); if(!v) return null;
+    const d=JSON.parse(v);
+    if(!d || !d.at || !(d.roster||[]).length) return null;
+    if(Date.now()-d.at > HR_CACHE_DAYS*864e5) return null;
+    return d;
+  }catch(e){ return null; }
+}
+async function storeRoster(company, roster, domain){
+  try{ await put(hrCacheKey(company),
+    JSON.stringify({at:Date.now(), roster:(roster||[]).slice(0,60), domain:domain||''})); }catch(e){}
 }
 
 function guessEmail(name, domain){
@@ -794,13 +874,14 @@ function guessEmail(name, domain){
   return `${parts[0]}.${parts[parts.length-1]}@${domain}`;
 }
 
-async function findHrContacts(company, ctx, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
-  const slug = await findLinkedInSlug(company, onStatus);
+/* The fallback. Only runs when search came back thin, and is capped, because
+   this is the line item that used to be the whole bill. */
+async function scrapeEmployees(company, onStatus){
+  const slug=await findLinkedInSlug(company, onStatus);
   if(!slug) throw new Error("Couldn't find "+company+"'s LinkedIn company page.");
   if(onStatus) onStatus(`listing ${company}'s public employees on LinkedIn…`);
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={companyUrls:[slug]};
+  const payload={companyUrls:[slug], maxEmployees:MAX_EMPLOYEES};
   let r;
   try{ r=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
@@ -825,13 +906,47 @@ async function findHrContacts(company, ctx, onStatus){
   // Output field names for this actor aren't fixed anywhere public either, so
   // this stays with the same tolerant pick()-based reading as the rest of the
   // file's Apify parsers.
-  const roster=items.map(it=>({
+  return items.map(it=>({
     name: pick(it,["name","fullName"]),
     role: String(pick(it,["headline","title","jobTitle"])||''),
     linkedin: pick(it,["profileUrl","profileURL","url"])
   })).filter(x=>x.name);
+}
 
-  if(!roster.length) throw new Error(`${company}'s LinkedIn page returned no readable employees.`);
+async function findHrContacts(company, ctx, onStatus){
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+
+  let roster=null, domain='';
+  const hit=await cachedRoster(company);
+  if(hit){
+    roster=hit.roster; domain=hit.domain||'';
+    if(onStatus) onStatus(`reusing the ${roster.length} profiles already found at ${company}…`);
+  }
+
+  if(!roster){
+    if(onStatus) onStatus(`searching for who to contact at ${company}…`);
+    const items=await googleFirst(hrQueries(company,ctx).join("\n"), onStatus,
+                                  `searching for people at ${company}`);
+    // One run, three queries, one pile of results: a profile URL is a person, a
+    // company URL is the domain, and nothing needs the query it came from.
+    const flat=[];
+    (items||[]).forEach(it=>flat.push(...(it.organicResults||[])));
+    roster=peopleFromSerp(flat, company);
+    domain=domainFromSerp(flat)||'';
+
+    if(roster.length<HR_MIN_ROSTER){
+      if(onStatus) onStatus(`search found ${roster.length} — reading ${company}'s employee list…`);
+      try{
+        const deep=await scrapeEmployees(company, onStatus);
+        deep.forEach(x=>{ if(!roster.some(r=>r.linkedin && r.linkedin===x.linkedin)) roster.push(x); });
+      }catch(e){
+        // The cheap path already having found somebody makes this survivable.
+        if(!roster.length) throw e;
+      }
+    }
+    if(!roster.length) throw new Error(`Couldn't find anyone public at ${company} to contact. Try adding someone by hand.`);
+    await storeRoster(company, roster, domain);
+  }
 
   // Ask the model first, fall back to keywords only if that call actually
   // fails. An empty answer from the model is an answer — "nobody here" is a
@@ -842,11 +957,7 @@ async function findHrContacts(company, ctx, onStatus){
   try{ people=await pickPeople(roster, company, ctx); }
   catch(e){ judged=false; people=keywordPeople(roster, ctx); }
 
-  if(!people.length) throw new Error(`Read ${roster.length} public employee${roster.length===1?'':'s'} at ${company} — none of them looked like the right desk for this role. Try adding someone by hand.`);
-
-  if(onStatus) onStatus(`found ${people.length} — checking ${company}'s domain for an email pattern…`);
-  let domain=null;
-  try{ domain=await findCompanyDomain(company, onStatus); }catch(e){}
+  if(!people.length) throw new Error(`Read ${roster.length} public profile${roster.length===1?'':'s'} at ${company} — none of them looked like the right desk for this role. Try adding someone by hand.`);
 
   return { judged, list: people.map(p=>{
     const guess = domain ? guessEmail(p.name, domain) : '';
@@ -2637,8 +2748,8 @@ function hrDialog(i){
   const ctx={ title:j.title, titles:trk.titles||[], description:j.description };
   const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
-    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Finds ${esc(j.company)} on LinkedIn and reads its public employee page for two kinds of person: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed. Costs a few cents of Apify credit.</p>
-    <p class="hint" style="margin-bottom:12px">Takes a couple of minutes. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
+    <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Searches LinkedIn for two kinds of person at ${esc(j.company)}: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed.</p>
+    <p class="hint" style="margin-bottom:12px">About a cent of Apify credit, and free for the rest of the week once a company has been looked up. Companies too small for search to find get read from their employee list instead, which costs more and takes longer. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
     <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
   d.querySelector('#hrGo').onclick=()=>{ d.remove(); startHrSearch(i, ctx); };

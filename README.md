@@ -54,7 +54,9 @@ Open `index.html`. That's the whole install.
 
 Scoring needs an API key — DeepSeek by default (cheap; a few hundred jobs costs pennies), or Anthropic. Paste it once and it's stored in your browser.
 
-An Apify token is optional, and only needed for LinkedIn and Google-based board search. ATS pulls work without it.
+An Apify token is optional, and only needed for LinkedIn search, board search and finding contacts. ATS pulls work without it.
+
+Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query, and contact lookup is a single search run (about a cent) whose results are reused for a week, falling back to the per-profile employee scraper only for companies too small for search to find. Typical use runs a few dollars a month.
 
 Nothing is uploaded and there's no account. Data lives in browser storage, so use **Backup & transfer** to keep a copy.
 
