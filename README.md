@@ -67,6 +67,7 @@ Nothing is uploaded and there's no account. Data lives in browser storage, so us
 - Multi-source ingestion with defensive field extraction against upstream schema drift, URL-first deduplication, and visible failure logging — a source that returns nothing says so rather than silently returning an empty list.
 - Confidence is tracked separately from score, so a title-only row is discounted in ranking rather than trusted equally.
 - Pipeline stages are `new / sent / live / closed`. "Due" is derived from the follow-up date rather than stored, so no row needs rewriting on a timer to stay accurate.
+- Posting age is stored as a window (`posted_lo` / `posted_hi`) with its provenance, not a single date. ATS feeds and LinkedIn state a real one; a search snippet often carries "5 days ago"; only what none of those answered is estimated by the model, which returns a range or nothing rather than a date it can't defend. The **Freshest** tab sorts on it, and rows with no date are listed apart rather than treated as old.
 
 ## Known limits
 

@@ -157,6 +157,12 @@
   .stage.s-due{color:var(--warn);border-color:#4d3129}
   .stage.s-live{color:var(--live);border-color:#33445f}
   .stage.s-closed{color:var(--dim)}
+  /* Age earns colour only at the ends of the scale. A fortnight-old posting is
+     ordinary and should not shout; a stale one should visibly recede. */
+  .stage.s-age{color:var(--muted)}
+  .stage.s-age.hot{color:var(--posted);border-color:var(--posted-dim)}
+  .stage.s-age.stale{color:var(--dim);border-color:#2a3138}
+  .stage.s-age.guess{font-style:italic}
   .chn{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
     padding:2px 7px;border-radius:2px}
   .chn.posted{color:var(--posted);background:var(--posted-dim)}
@@ -279,7 +285,108 @@ const today = () => new Date().toISOString().slice(0,10);
 const COLS = ["title","company","location","url","description","status","date_applied",
   "follow_up_date","hr_contact","pitch_sent","notes","source","query",
   "ai_score","ai_reason","ai_flags","ai_confidence","ai_reachability","channel",
-  "stage","last_touch","contacts","events","added"];
+  "stage","last_touch","contacts","events","added",
+  "posted","posted_lo","posted_hi","posted_src"];
+
+/* ═══ when was this posted ═══
+   'added' is when a row reached this app, which says nothing about the job.
+   A posting's age is the one signal that decays on its own: the same role is
+   a different bet on day 2 and on day 40, and until now nothing here showed
+   that. So it is stored as a real field with its provenance, not spelled into
+   a notes string where only a human can read it.
+
+   Four fields, because certainty varies and pretending otherwise would be the
+   whole problem. posted_lo/posted_hi bound the window, posted is the single
+   date to sort on (the midpoint of a window), and posted_src says where the
+   claim came from:
+     feed  the source stated it — ATS feeds and LinkedIn carry real dates
+     page  parsed out of a search snippet, usually "5 days ago"
+     est   the model's reading of the description, and the widest of the three
+   Cheapest and most reliable first: nothing is asked of the model that a feed
+   already answered for free. */
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+const isoOf = d => (d instanceof Date && !isNaN(d)) ? d.toISOString().slice(0,10) : '';
+function shiftDays(base, n){
+  const d=new Date(String(base)+"T00:00:00Z");
+  if(isNaN(d)) return '';
+  d.setUTCDate(d.getUTCDate()-n);
+  return isoOf(d);
+}
+/* A job cannot have been posted tomorrow, and one older than three years is a
+   parse gone wrong rather than a very patient employer. Both are dropped
+   rather than shown, because a confidently wrong date is worse than none. */
+function saneDate(iso, base){
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(String(iso||''))) return '';
+  base=base||today();
+  // A day or two into the future is a timezone, and worth keeping as today.
+  // Anything beyond that is bad data, and dropping it matters more than most:
+  // a future date sorts to the very top of the freshest list.
+  if(iso>base) return dayDiff(base,iso)<=2 ? base : '';
+  return dayDiff(iso,base)>1095 ? '' : iso;
+}
+function parseWhen(txt, base){
+  const t=String(txt||'').trim();
+  if(!t) return '';
+  base=base||today();
+  if(/^\d{13}$/.test(t)) return saneDate(isoOf(new Date(parseInt(t,10))),base);
+  if(/^\d{10}$/.test(t)) return saneDate(isoOf(new Date(parseInt(t,10)*1000)),base);
+  const iso=t.match(/(\d{4})-(\d{2})-(\d{2})/);
+  if(iso) return saneDate(iso[0],base);
+  if(/\b(just\s*now|today|moments?\s+ago|hours?\s+ago|minutes?\s+ago)\b/i.test(t)) return base;
+  if(/\byesterday\b/i.test(t)) return shiftDays(base,1);
+  const rel=t.match(/\b(a|an|\d{1,3})\s*(day|week|month|year)s?\s+ago\b/i);
+  if(rel){
+    const n=/^\d+$/.test(rel[1])?parseInt(rel[1],10):1;
+    const per={day:1,week:7,month:30,year:365}[rel[2].toLowerCase()];
+    return saneDate(shiftDays(base,n*per),base);
+  }
+  // "Aug 30, 2026" / "August 30" / "30 Aug 2026". A missing year means the most
+  // recent time that day/month happened, which is what a careers page means.
+  let mo=0,day=0,yr=0;
+  let m=t.match(/\b([a-z]{3,9})\.?\s+(\d{1,2})\b(?:[,\s]+(\d{4}))?/i);
+  if(m && MONTHS[m[1].slice(0,3).toLowerCase()]){ mo=MONTHS[m[1].slice(0,3).toLowerCase()]; day=+m[2]; yr=+(m[3]||0); }
+  if(!mo){
+    m=t.match(/\b(\d{1,2})\s+([a-z]{3,9})\.?\b(?:[,\s]+(\d{4}))?/i);
+    if(m && MONTHS[m[2].slice(0,3).toLowerCase()]){ day=+m[1]; mo=MONTHS[m[2].slice(0,3).toLowerCase()]; yr=+(m[3]||0); }
+  }
+  if(!mo || !day || day>31) return '';
+  const pad=n=>String(n).padStart(2,'0');
+  if(yr) return saneDate(`${yr}-${pad(mo)}-${pad(day)}`,base);
+  const thisYear=+base.slice(0,4);
+  const guess=`${thisYear}-${pad(mo)}-${pad(day)}`;
+  return saneDate(guess<=base ? guess : `${thisYear-1}-${pad(mo)}-${pad(day)}`, base);
+}
+/* The single date a window sorts on. */
+function midDate(lo, hi){
+  if(!lo) return hi||'';
+  if(!hi) return lo;
+  const a=new Date(lo+"T00:00:00Z"), b=new Date(hi+"T00:00:00Z");
+  if(isNaN(a)||isNaN(b)) return lo;
+  return isoOf(new Date((a.getTime()+b.getTime())/2));
+}
+/* Days since posting, or null when genuinely unknown — which is not the same
+   as old, and the tab keeps the two apart. */
+function ageOf(j){
+  const d=saneDate(j&&j.posted);
+  return d ? Math.max(0, dayDiff(d, today())) : null;
+}
+const spanTxt = n => n<1 ? 'today' : n===1 ? '1d' : n<21 ? n+'d' : n<70 ? Math.round(n/7)+'w' : Math.round(n/30)+'mo';
+/* Both ends of a window in the same unit, chosen by the older end. */
+function spanPair(a,b){
+  const unit = b<21 ? [1,'d'] : b<70 ? [7,'w'] : [30,'mo'];
+  const f = n => Math.max(unit[0]===1?0:1, Math.round(n/unit[0]))+unit[1];
+  return f(a)+'\u2013'+f(b);
+}
+/* Exact dates read as a point, estimates as the window they really are. */
+function ageLabel(j){
+  const n=ageOf(j); if(n===null) return '';
+  const lo=saneDate(j.posted_lo), hi=saneDate(j.posted_hi);
+  if(lo&&hi&&lo!==hi){
+    const a=Math.max(0,dayDiff(hi,today())), b=Math.max(0,dayDiff(lo,today()));
+    if(a!==b) return `~${spanPair(a,b)} ago`;
+  }
+  return n<1 ? 'today' : spanTxt(n)+' ago';
+}
 
 /* Pipeline stages. Deliberately few — every extra state is one more decision
    the person has to make about a row instead of acting on it.
@@ -671,6 +778,10 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
       j.company = (bits.length>1 ? bits[1] : "").slice(0,120) || "[from search — verify]";
       j.url = u;
       j.description = String(res.description||"").slice(0,900);
+      // Google prefixes a lot of job snippets with "5 days ago \u2014 ..." or a
+      // plain date. It is free and more reliable than anything inferred from
+      // the posting's own prose, so it is worth reading before the model is.
+      setPosted(j, String(res.description||"").slice(0,40), 'page');
       j.source = "Board search"; j.query = term; j.status="New"; j.channel="posted";
       j.notes = "Found via "+ (u.replace(/^https?:\/\//,'').split('/')[0]);
       out.push(j);
@@ -714,6 +825,10 @@ async function apifySearch(query, count, onStatus){
     j.location= pick(it,["location","jobLocation"]) || "";
     j.url     = pick(it,["link","jobUrl","url","postUrl","jobLink"],"url") || "";
     j.description = String(pick(it,["descriptionText","description","jobDescription","details"],"desc")||"").slice(0,1200);
+    // This actor has never documented its date field either, and has shipped
+    // ISO strings, epoch millis and "3 days ago" under different names.
+    // parseWhen takes all three, so read broadly and let it normalise.
+    setPosted(j, pick(it,["postedAt","listedAt","postedDate","publishedAt","postedTime","postDate"],"posted"), 'feed');
     const cli = pick(it,["companyLinkedinUrl","companyUrl"],"companylinkedin");
     j.notes   = cli ? "Company LinkedIn: "+cli : "";
     j.source  = "LinkedIn (live)"; j.query = query; j.status="New"; j.channel="posted";
@@ -1372,7 +1487,8 @@ async function addSuggested(list, checkHiring){
         j.location=x.location||''; j.url=x.url||'';
         j.description=(x.desc||'').slice(0,4000);
         j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
-        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'', x.posted?'Posted '+x.posted:'', vel]
+        setPosted(j, x.posted, 'feed');
+        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'', vel]
           .filter(Boolean).join(' · ');
         return j;
       });
@@ -1483,8 +1599,10 @@ Typical titles in this family: ${(t.titles||[]).join(', ')||'various'}
 HONEST GAPS (they cannot claim these): ${(prof.gaps||[]).join('; ')||'none stated'}
 ROLE SHAPES TO RULE OUT: ${(prof.wrong_shapes||[]).join('; ')||'none stated'}
 
+TODAY'S DATE IS ${today()}. Use it for any date reasoning below.
+
 Return ONLY a JSON object, no preamble, no markdown fences:
-{"results":[{"id":"...","score":0,"reachability":0,"confidence":"high","reason":"...","flags":["..."]}]}
+{"results":[{"id":"...","score":0,"reachability":0,"confidence":"high","reason":"...","flags":["..."],"posted":null}]}
 
 For EACH job:
 - id: exactly as given
@@ -1493,6 +1611,7 @@ For EACH job:
 - confidence: "high" (real job description) | "medium" (short snippet) | "low" (title and company only)
 - reason: ONE sentence, max 20 words, specific. If fit and reachability diverge sharply, say why.
 - flags: from this set only: ["strong_fit","seniority_too_high","seniority_too_low","credential_gated","wrong_role_shape","location_ineligible","thin_data","high_competition","non_traditional_friendly","rare_combination_fit"]
+- posted: when the text carries evidence of WHEN it was posted, the window that evidence allows, as {"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}. Otherwise null.
 
 Rules:
 - The candidate is based in ${prof.location||'their stated location'}. A role requiring presence somewhere else with no remote allowance scores below 20 on FIT and gets "location_ineligible".
@@ -1501,10 +1620,29 @@ Rules:
 - A job that needs the candidate's rare combination of skills should score higher — flag "rare_combination_fit".
 - Do not invent details. Inferring from a title alone means confidence "low" and flag "thin_data".
 - Do not inflate. Most jobs are mediocre. The distribution should be wide on both axes.
+- A job given to you with a "posted" value already has a real date from its source. Return posted null for it; do not restate or revise it.
+- Evidence for posted means the text says something datable: an explicit date, "posted last week", an application deadline, an interview or start date, a named quarter or term. A window as wide as three months is a good answer when that is all the evidence supports. Widen the window rather than picking a date you cannot defend.
+- The subject matter of a job is NOT evidence of its age. No datable statement means posted null. Guessing here is worse than useless, because it sorts a stale job to the top of the freshest list.
+- posted "to" must never be later than today, and "from" never later than "to".
 - One entry per input job. JSON object only.`;
 }
 
 /* ═══ jobs ═══ */
+/* One way in for a posting date, so provenance and the sort key can never
+   disagree. lo/hi collapse to the same day for an exact date; a window keeps
+   both and sorts on the middle. Anything unparseable leaves the row undated,
+   which the Freshest tab shows honestly rather than guessing at. */
+function setPosted(j, when, src, hi){
+  const lo=parseWhen(when);
+  if(!lo) return false;
+  const top=hi?parseWhen(hi):'';
+  j.posted_lo=lo;
+  j.posted_hi=(top&&top>=lo)?top:lo;
+  j.posted=midDate(j.posted_lo,j.posted_hi);
+  j.posted_src=src||'feed';
+  return true;
+}
+
 function blank(){ const o={}; COLS.forEach(c=>o[c]=''); o.status='New'; o.pitch_sent='No'; o.channel='posted'; o.stage='new'; o.contacts='[]'; o.events='[]'; o.added=today(); return o; }
 function keyOf(j){
   const u=String(j.url||'').trim();
@@ -1583,10 +1721,16 @@ function toCSV(rows,cols){
 
 /* ═══ scoring run ═══ */
 async function scoreBatch(batch, prof, track){
-  const jobs = batch.map(b=>({ id:String(b.i),
-    title:String(b.j.title||''), company:String(b.j.company||''),
-    location:String(b.j.location||''),
-    description:String(b.j.description||'').slice(0,1100)||'(no description available)' }));
+  const jobs = batch.map(b=>{
+    const o={ id:String(b.i),
+      title:String(b.j.title||''), company:String(b.j.company||''),
+      location:String(b.j.location||''),
+      description:String(b.j.description||'').slice(0,1100)||'(no description available)' };
+    // Anything a feed already dated is stated, not asked about — the model is
+    // the last and least reliable source here, never a second opinion.
+    if(saneDate(b.j.posted)) o.posted=b.j.posted;
+    return o;
+  });
   const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), 1400);
   const parsed = grabJSON(txt);
   const items = Array.isArray(parsed)?parsed:(parsed.results||[]);
@@ -1596,7 +1740,8 @@ async function scoreBatch(batch, prof, track){
     reach:Math.max(0,Math.min(100,parseInt(it.reachability,10)||45)),
     conf:String(it.confidence||'low').toLowerCase(),
     reason:String(it.reason||'').slice(0,220),
-    flags:(it.flags||[]).join(',') }; });
+    flags:(it.flags||[]).join(','),
+    posted:it.posted&&typeof it.posted==='object'?it.posted:null }; });
   return out;
 }
 
@@ -1613,7 +1758,10 @@ async function runScoring(all){
       batch.forEach(b=>{ const r=res[String(b.i)]; if(!r) return;
         const j=p.jobs[b.i];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
-        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags; });
+        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags;
+        // Only ever fills a gap. A date from a feed outranks the model's
+        // reading of the same posting, and re-scoring must not overwrite it.
+        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
     }catch(e){
       if(e.message==='NEEDKEY'){
         busy=false; render(); keyDialog(()=>runScoring(all)); return;
@@ -1717,8 +1865,8 @@ async function runAts(lines){
         j.url=x.url||'';
         j.description=(x.desc||'').slice(0,4000);
         j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
-        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'',
-                 x.posted?'Posted '+x.posted:''].filter(Boolean).join(' \u00b7 ');
+        setPosted(j, x.posted, 'feed');
+        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:''].filter(Boolean).join(' \u00b7 ');
         return j;
       });
       added+=addJobs(jobs);
@@ -2043,6 +2191,7 @@ function jobCard(j,i,hi){
       <div class="flags" style="margin-top:7px">
         <span class="chn ${ch}">${ch==='cold'?'cold approach':'posted role'}</span>
         <span class="stage s-${stLabel}">${esc(stLabel)}</span>
+        ${ageChip(j)}
         ${st==='sent'&&silent?`<span class="stage s-sent">${silent}d silent</span>`:''}
         ${cts.length?`<span class="stage">${cts.length} contact${cts.length>1?'s':''}</span>`:''}
       </div></div>
@@ -2114,6 +2263,54 @@ function nextStep(){
   return {cls:'calm',h:'Clear for today',
     s:'Everything scored has been actioned or closed. Pull in more roles when you want the next batch.',
     b:'Find more jobs', act:'suggest'};
+}
+
+/* Fresh is under a fortnight, stale is over two months; in between is just
+   how old most live postings are. The title says where the date came from,
+   because an estimate and a feed date look identical otherwise. */
+function ageChip(j){
+  const n=ageOf(j); if(n===null) return '';
+  const src=String(j.posted_src||'');
+  const cls=n<=14?'hot':n>60?'stale':'';
+  const how=src==='feed'?'stated by the source'
+          :src==='page'?'read from the search result'
+          :src==='est' ?'estimated from the description \u2014 treat as approximate'
+          :'';
+  return `<span class="stage s-age ${cls} ${src==='est'?'guess':''}" title="Posted ${esc(j.posted_lo===j.posted_hi?j.posted:j.posted_lo+' to '+j.posted_hi)}${how?' \u2014 '+how:''}">${esc(ageLabel(j))}</span>`;
+}
+
+/* Freshest first, which is the one ordering the rest of the app cannot give.
+   Rank answers "is this worth doing", recency answers "is it still there" —
+   an eight-week-old posting is usually filled or abandoned however well it
+   scores. Undated rows are listed at the end rather than dropped: not knowing
+   when something was posted is not the same as it being old. */
+function renderFresh(){
+  const p=P();
+  const all=p.jobs.map((j,i)=>({j,i})).filter(x=>inRange(x.j));
+  const dated=all.filter(x=>ageOf(x.j)!==null).sort((a,b)=>{
+    const d=ageOf(a.j)-ageOf(b.j);
+    return d || rankOf(b.j)-rankOf(a.j);   // same age: better job first
+  });
+  const undated=all.filter(x=>ageOf(x.j)===null);
+  if(!all.length) return `<div class="empty"><b>Nothing to show</b>Add some jobs first.</div>`;
+  if(!dated.length) return `<div class="empty"><b>No posting dates yet</b>
+    None of these ${all.length} rows carry a date. ATS pulls and LinkedIn searches bring one with them; for everything else, scoring estimates a window from the description.</div>`;
+  const week=dated.filter(x=>ageOf(x.j)<=7).length;
+  const fortnight=dated.filter(x=>ageOf(x.j)<=14).length;
+  const old=dated.filter(x=>ageOf(x.j)>60).length;
+  const sect=(title,sub,rows)=>rows.length?`<div class="sect">
+    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
+    <p class="sect-sub">${sub}</p>
+    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
+  return `<div class="stats">
+      <div class="stat"><div class="k num" style="color:var(--posted)">${week}</div><div class="l">this week</div></div>
+      <div class="stat"><div class="k num">${fortnight}</div><div class="l">last 14 days</div></div>
+      <div class="stat"><div class="k num" style="color:var(--dim)">${old}</div><div class="l">over 60 days</div></div>
+      <div class="stat"><div class="k num" style="color:var(--dim)">${undated.length}</div><div class="l">undated</div></div>
+    </div>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 16px">Newest posting first. An italic age is estimated from the description rather than stated by the source \u2014 hover any of them for the window and where it came from.</p>
+    ${sect('Freshest first','Recency is not quality \u2014 check the score before you spend a morning on one. But a stale posting is often already filled.',dated)}
+    ${sect('Date unknown','No source date and nothing datable in the description. Age here is genuinely unknown, not old.',undated)}`;
 }
 
 function renderToday(){
@@ -2284,6 +2481,7 @@ function renderApp(){
         <div class="tab ${TAB==='list'?'on':''}" data-tab="list">Today</div>
         <div class="tab ${TAB==='follow'?'on':''}" data-tab="follow">Follow-ups${
           followCount?` <span class="tabct${followDue?' due':''}">${followCount}</span>`:''}</div>
+        <div class="tab ${TAB==='fresh'?'on':''}" data-tab="fresh">Freshest</div>
         <div class="tab ${TAB==='all'?'on':''}" data-tab="all">Everything</div>
         <div class="spacer"></div>
         <div class="tab ${CHFILT==='all'?'on':''}" data-ch="all">All</div>
@@ -2305,6 +2503,7 @@ function renderApp(){
       </div>
       <div ${TAB==='list'?'':'style="display:none"'}>${renderToday()}</div>
       <div ${TAB==='follow'?'':'style="display:none"'}>${renderFollowups()}</div>
+      <div ${TAB==='fresh'?'':'style="display:none"'}>${renderFresh()}</div>
       <div ${TAB==='all'?'':'style="display:none"'}>
         ${all.length?`<div class="listhead">
             <span style="color:var(--muted);font-size:12px">${all.length} in range</span>
