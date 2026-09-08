@@ -1664,6 +1664,43 @@ function rankOf(j){
   return Math.pow(fitOf(j),0.65)*Math.pow(reachOf(j),0.35)*conf;
 }
 const isOpen = j => stOf(j)!=='closed';
+
+/* ═══ trimming the list ═══
+   A list that has been running for weeks fills with roles that were never
+   worth an application, and scrolling past them is a tax on every session.
+   So: keep the best, bin the rest.
+
+   Two things are never binned, and the distinction matters more than the
+   number 50. A row you have acted on is the ONLY record that you applied
+   there, who you spoke to and what they said — that history exists nowhere
+   else and no score justifies deleting it. And a row that was never scored
+   has not been judged, so calling it "not top 50" would be a lie; it is
+   probably something you pulled in five minutes ago. Both are protected, so
+   the total kept can exceed 50, and the confirm says so plainly rather than
+   quietly deleting something you would want back. */
+const KEEP_TOP = 50;
+function isTouched(j){
+  return stOf(j)!=='new'
+      || String(j.pitch_sent||'').trim().toLowerCase()==='yes'
+      || String(j.status||'').trim().toLowerCase()==='applied'
+      || listOf(j,'contacts').length>0
+      || listOf(j,'events').length>0;
+}
+function trimPlan(jobs){
+  const safe=[], pool=[];
+  (jobs||[]).forEach(j=>{ (isTouched(j)||!isScored(j) ? safe : pool).push(j); });
+  // Rank decides. Age only breaks ties, and only now that rows carry one:
+  // between two equally good roles, the fresher one is likelier to still exist.
+  pool.sort((a,b)=>{
+    const d=rankOf(b)-rankOf(a); if(d) return d;
+    const x=ageOf(a), y=ageOf(b);
+    if(x===null&&y===null) return 0;
+    if(x===null) return 1;
+    if(y===null) return -1;
+    return x-y;
+  });
+  return { safe, best:pool.slice(0,KEEP_TOP), drop:pool.slice(KEEP_TOP) };
+}
 const chOf   = j => String(j.channel||'posted').trim().toLowerCase()==='cold' ? 'cold' : 'posted';
 const stOf   = j => { const v=String(j.stage||'').trim().toLowerCase();
   if(STAGES.includes(v)) return v;
@@ -2313,38 +2350,58 @@ function renderFresh(){
     ${sect('Date unknown','No source date and nothing datable in the description. Age here is genuinely unknown, not old.',undated)}`;
 }
 
-function renderToday(){
-  const p=P();
-  const all=p.jobs.map((j,i)=>({j,i}));
-  const live=all.filter(x=>stOf(x.j)==='live')
-                .sort((a,b)=>daysSilent(b.j)-daysSilent(a.j));
-  const due =all.filter(x=>isDue(x.j))
-                .sort((a,b)=>daysSilent(b.j)-daysSilent(a.j));
-  const fresh=all.filter(x=>stOf(x.j)==='new'&&isScored(x.j)&&inRange(x.j))
-                 .sort((a,b)=>rankOf(b.j)-rankOf(a.j)).slice(0,10);
-  const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).length;
-  const doneToday=all.filter(x=>x.j.last_touch===today()).length;
+/* ═══ Work Today ═══
+   This replaced a "Today" tab whose three sections were, in order: replies,
+   overdue chases, and a hardcoded top ten of new work. The first two were
+   already duplicated verbatim in Follow-ups, and the third was a worse version
+   of this. Nothing was lost by deleting it: the priority it encoded — that a
+   live conversation outranks any new application — lives in the nextStep
+   banner, which sits above every tab and checks follow-ups first.
 
+   What this answers is narrower and more useful: of everything scored, which
+   are actually worth an application today. Two bands, because "worth doing"
+   and "worth doing first" are different answers and a flat list of forty gives
+   neither.
+
+   Deliberately ignores the map's drag-selection. A box drawn on the map
+   yesterday silently shortening this list tomorrow morning would be the kind
+   of invisible state that makes a tool untrustworthy. The Posted/Cold toggle
+   is honoured because it is visible in the tab bar, right there, always. */
+const WORK_FIT=65, WORK_REACH=45, STRONG_FIT=75, STRONG_REACH=55;
+const worthDoing = j => isScored(j) && isOpen(j) && stOf(j)==='new'
+  && fitOf(j)>=WORK_FIT && reachOf(j)>=WORK_REACH;
+
+function renderWork(){
+  const p=P();
+  // Channel filter yes, RANGE no — see above.
+  const pool=p.jobs.map((j,i)=>({j,i}))
+    .filter(x=>worthDoing(x.j) && (CHFILT==='all'||chOf(x.j)===CHFILT))
+    .sort((a,b)=>rankOf(b.j)-rankOf(a.j));
+  const strong=pool.filter(x=>fitOf(x.j)>=STRONG_FIT&&reachOf(x.j)>=STRONG_REACH);
+  const rest  =pool.filter(x=>!strong.includes(x));
+  const scored=p.jobs.filter(isScored).length;
+  const unscored=p.jobs.length-scored;
+
+  const rule=`<p style="color:var(--muted);font-size:12px;margin:0 0 16px">Everything scored at <b>fit ${WORK_FIT}+</b> and <b>reachability ${WORK_REACH}+</b> that you haven't actioned yet. Not filtered by the map selection \u2014 this is the whole list, every day.</p>`;
+
+  if(!pool.length){
+    return `<div class="empty"><b>${scored?'Nothing clears the bar right now':'Nothing scored yet'}</b>
+      ${scored
+        ? `${scored} scored, none of them at fit ${WORK_FIT}+ and reachability ${WORK_REACH}+ and still untouched. Either they have all been actioned, or this batch was weak \u2014 pull in more roles.`
+        : `Add some jobs and score them.${unscored?` ${unscored} are waiting to be scored.`:''}`}</div>`;
+  }
   const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
     <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
     <p class="sect-sub">${sub}</p>
     ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
-
-  if(!live.length&&!due.length&&!fresh.length){
-    return `<div class="empty"><b>${p.jobs.length?'Nothing needs you today':'No jobs yet'}</b>
-      ${p.jobs.length
-        ? (waiting?`${waiting} still waiting on a reply. Come back when one comes due.`:'Add and score some jobs to get started.')
-        : 'Find jobs on the left, then score them.'}</div>`;
-  }
   return `<div class="stats">
-      <div class="stat"><div class="k num">${doneToday}</div><div class="l">touched today</div></div>
-      <div class="stat"><div class="k num" style="color:var(--live)">${live.length}</div><div class="l">in conversation</div></div>
-      <div class="stat"><div class="k num" style="color:var(--warn)">${due.length}</div><div class="l">need chasing</div></div>
-      <div class="stat"><div class="k num" style="color:var(--neutral)">${waiting}</div><div class="l">waiting</div></div>
+      <div class="stat"><div class="k num" style="color:var(--signal)">${strong.length}</div><div class="l">do these first</div></div>
+      <div class="stat"><div class="k num">${rest.length}</div><div class="l">worth a shot</div></div>
+      <div class="stat"><div class="k num" style="color:var(--dim)">${unscored}</div><div class="l">unscored</div></div>
     </div>
-    ${sect('live','Reply to these','Someone real is on the other end. This is worth more than any new application.',live)}
-    ${sect('due','Chase these','Sent, and gone quiet past the follow-up date. One nudge, then let it go.',due)}
-    ${sect('','Start these','Ranked by fit and reachability. Work down, don\'t browse.',fresh)}`;
+    ${rule}
+    ${sect('live','Do these first',`Fit ${STRONG_FIT}+ and reachability ${STRONG_REACH}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
+    ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',rest)}`;
 }
 
 /* ═══ follow-ups ═══
@@ -2465,6 +2522,9 @@ function renderApp(){
           <button class="btn-sm" id="btnKey" style="flex:1">${KEY?'Keys':'Set up keys'}</button>
           <button class="btn-sm" id="btnExport" style="flex:1">Export CSV</button></div>
         <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnTrim" style="width:100%">Trim to top ${KEEP_TOP}</button></div>
+        <p class="hint">Bins the scored roles you never acted on that rank below the top ${KEEP_TOP}. Anything you applied to, contacted or logged against is kept whatever it scored.</p>
+        <div class="btn-row" style="margin-top:8px">
           <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
         <div class="hint">Stored in this browser only \u2014 clearing site data wipes it. Take a backup.</div>
       </div>
@@ -2478,7 +2538,7 @@ function renderApp(){
       </div>`:''; })()}
       <div class="tabs">
         <div class="tab ${TAB==='map'?'on':''}" data-tab="map">The map</div>
-        <div class="tab ${TAB==='list'?'on':''}" data-tab="list">Today</div>
+        <div class="tab ${TAB==='work'?'on':''}" data-tab="work">Work Today</div>
         <div class="tab ${TAB==='follow'?'on':''}" data-tab="follow">Follow-ups${
           followCount?` <span class="tabct${followDue?' due':''}">${followCount}</span>`:''}</div>
         <div class="tab ${TAB==='fresh'?'on':''}" data-tab="fresh">Freshest</div>
@@ -2501,7 +2561,7 @@ function renderApp(){
         ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
       </div>
-      <div ${TAB==='list'?'':'style="display:none"'}>${renderToday()}</div>
+      <div ${TAB==='work'?'':'style="display:none"'}>${renderWork()}</div>
       <div ${TAB==='follow'?'':'style="display:none"'}>${renderFollowups()}</div>
       <div ${TAB==='fresh'?'':'style="display:none"'}>${renderFresh()}</div>
       <div ${TAB==='all'?'':'style="display:none"'}>
@@ -2526,7 +2586,7 @@ function renderApp(){
     const a=$('#btnNext').dataset.next;
     if(a==='suggest') return suggestDialog();
     if(a==='score')   return runScoring(false);
-    if(a==='today'){ TAB='list'; return render(); }
+    if(a==='today'){ TAB='work'; return render(); }
     if(a==='follow'){ TAB='follow'; return render(); }
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
@@ -2547,6 +2607,21 @@ function renderApp(){
     const b=new Blob([toCSV(P().jobs,COLS)],{type:'text/csv'});
     const a=document.createElement('a'); a.href=URL.createObjectURL(b);
     a.download='job_tracker.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+  $('#btnTrim').onclick=async()=>{
+    const pr=P(), plan=trimPlan(pr.jobs);
+    if(!plan.drop.length){
+      alert(`Nothing to trim. ${pr.jobs.length} job${pr.jobs.length===1?'':'s'} here, and none of them are scored, untouched and below the top ${KEEP_TOP}.`);
+      return;
+    }
+    const held=plan.safe.filter(j=>isTouched(j)).length, unscored=plan.safe.length-held;
+    const keeping=[`the top ${plan.best.length} by rank`,
+      held?`${held} you have already actioned`:'',
+      unscored?`${unscored} not yet scored`:''].filter(Boolean).join(', ');
+    if(!confirm(`Delete ${plan.drop.length} job${plan.drop.length===1?'':'s'}?\n\nKeeping ${keeping} \u2014 ${plan.safe.length+plan.best.length} in total.\n\nThis cannot be undone. Export CSV first if you want a copy.`)) return;
+    const kill=new Set(plan.drop);
+    pr.jobs=pr.jobs.filter(j=>!kill.has(j));
+    RANGE=null; await save(); render();
+  };
   $('#btnClear').onclick=async()=>{ if(!confirm('Delete every job for this profile? Your profile stays.')) return;
     P().jobs=[]; RANGE=null; await save(); render(); };
   $('#btnKey').onclick=()=>keyDialog(()=>render());
