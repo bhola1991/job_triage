@@ -407,6 +407,7 @@ let KEY  = '';           // LLM key (DeepSeek or Anthropic)
 let PROV = 'deepseek';   // 'deepseek' | 'anthropic'
 let APIFY= '';           // Apify token for live LinkedIn search
 let CHFILT = 'all';      // 'all' | 'posted' | 'cold'
+let AUTO  = true;        // score whatever a pull brings in, without being asked
 let VIEW = 'onb';        // 'onb' | 'app'
 let ONB  = { step:0, raw:'', fileName:'', parsed:null, track:null, error:'',
              assessing:false, assessed:null, assessErr:'', wantText:'' };
@@ -444,6 +445,7 @@ async function load(){
   KEY   = (await get('triage:key'))   || '';
   PROV  = (await get('triage:prov'))  || 'deepseek';
   APIFY = (await get('triage:apify')) || '';
+  AUTO  = (await get('triage:auto')) !== '0';   // on unless turned off
 }
 
 /* ═══ Apify: live LinkedIn search ═══
@@ -1473,7 +1475,7 @@ async function addSuggested(list, checkHiring){
   let added=addJobs(cold);
   await save(); render();
 
-  if(!checkHiring){ busy=false; render(); setSearchInfo(`Added ${added} cold targets. Score them next.`); return; }
+  if(!checkHiring){ busy=false; render(); setSearchInfo(`Added ${added} cold targets.`); await autoScore(); return; }
 
   try{
     const {found,misses}=await atsSearch(list.map(c=>c.name), setSearchInfo);
@@ -1499,10 +1501,12 @@ async function addSuggested(list, checkHiring){
     }
     busy=false; await save(); render();
     setSearchInfo(`${found.length} of ${list.length} are hiring — ${roles} open roles pulled. `
-      + `${misses.length} stay cold approaches. Score them all next.`);
+      + `${misses.length} stay cold approaches.`);
+    await autoScore();
   }catch(e){
     busy=false; await save(); render();
     setSearchInfo(`Added ${added} cold targets. Couldn't check hiring: ${e.message}`);
+    await autoScore();
   }
 }
 
@@ -1782,7 +1786,7 @@ async function scoreBatch(batch, prof, track){
   return out;
 }
 
-async function runScoring(all){
+async function runScoring(all, auto){
   const p=P(); if(!p || busy) return;
   const targets = p.jobs.map((j,i)=>({j,i})).filter(b=> all || !isScored(b.j));
   if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
@@ -1801,7 +1805,10 @@ async function runScoring(all){
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
     }catch(e){
       if(e.message==='NEEDKEY'){
-        busy=false; render(); keyDialog(()=>runScoring(all)); return;
+        busy=false;
+        // Asked for: ask for the key. Ran on its own: say so and stay put.
+        if(auto){ setInfo('Scoring needs an API key. Set one up under Data.'); render(); return; }
+        render(); keyDialog(()=>runScoring(all)); return;
       }
       failed+=batch.length; console.error(e);
     }
@@ -1814,6 +1821,37 @@ async function runScoring(all){
   setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
   await save(); render();
 }
+/* ═══ auto-scoring ═══
+   An unscored job is invisible to everything that matters here — it is not on
+   the map, not in Work Today, not ranked. So the gap between pulling jobs in
+   and scoring them was a step with no decision in it, which is the kind of
+   step worth deleting.
+
+   Three things stop it rather than surprising someone. It never opens the key
+   dialog: a modal appearing on its own after a search is startling, and the
+   message in the Score block says the same thing without seizing the page. It
+   refuses above AUTO_MAX, because a 400-row CSV import should not silently
+   start a long paid run — that is a decision, and the button is right there
+   for it. And it can be turned off, since it does spend money, even if the
+   amounts are small enough that most people will not care. */
+const AUTO_MAX = 60;
+async function autoScore(){
+  if(!AUTO || busy) return;
+  const p=P(); if(!p) return;
+  const n=p.jobs.filter(j=>!isScored(j)).length;
+  if(!n) return;
+  // Anthropic works with no key inside the Claude viewer; DeepSeek never does.
+  if(!KEY && PROV!=='anthropic'){
+    setInfo(`${n} unscored \u2014 add a key and they will be scored automatically.`);
+    return;
+  }
+  if(n>AUTO_MAX){
+    setInfo(`${n} unscored \u2014 too many to score automatically. Use "Score new jobs" when you are ready.`);
+    return;
+  }
+  await runScoring(false, true);
+}
+
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
 function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
 
@@ -1838,7 +1876,8 @@ async function runSearch(queries){
   busy=false; await save(); render();
   setSearchInfo(failed
     ? `Added ${total}. ${failed} search${failed>1?'es':''} failed.`
-    : `Added ${total} new. Now score them.`);
+    : `Added ${total} new.`);
+  await autoScore();
 }
 
 async function runBoards(trk, prof){
@@ -1855,8 +1894,9 @@ async function runBoards(trk, prof){
     const n=addJobs(jobs);
     await save(); busy=false; render();
     setSearchInfo(n
-      ? `Added ${n} from ${boards.length} boards. Score them next.`
+      ? `Added ${n} from ${boards.length} boards.`
       : `Searched ${boards.length} boards, nothing new came back.`);
+    await autoScore();
   }catch(e){
     busy=false; render();
     if(e.message==='NEEDAPIFY'){ apifyDialog(()=>runBoards(trk,prof)); return; }
@@ -1914,6 +1954,7 @@ async function runAts(lines){
       (added?`Added ${added} new. `:'Nothing new. ')
       + notes.join(' \u00b7 ')
       + (misses.length?` \u00b7 not found: ${misses.slice(0,4).join(', ')}`:''));
+    if(added) await autoScore();
   }catch(e){
     busy=false; render(); setSearchInfo(e.message);
   }
@@ -1959,7 +2000,7 @@ function coldDialog(){
     j.description=d.querySelector('#cDesc').value.trim();
     j.source='Cold list'; j.channel='cold';
     if(!j.company){ alert('Needs a company name.'); return; }
-    addJobs([j]); await save(); render(); d.remove();
+    addJobs([j]); await save(); render(); d.remove(); await autoScore();
   };
 }
 
@@ -2514,6 +2555,9 @@ function renderApp(){
         <div id="scoreInfo" class="hint"></div>
         <button class="btn-sm" id="btnRescore" style="margin-top:8px;width:100%" ${busy?'disabled':''}>Rescore everything</button>
         <div class="hint">Rescore after changing direction — the same jobs will land in different places.</div>
+        <label class="hint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
+          <input type="checkbox" id="cbAuto" ${AUTO?'checked':''} style="accent-color:var(--signal);cursor:pointer">
+          Score new jobs automatically as they arrive</label>
       </div>
       <div class="block"><span class="eyebrow">Data</span>
         <div class="btn-row">
@@ -2624,6 +2668,11 @@ function renderApp(){
   };
   $('#btnClear').onclick=async()=>{ if(!confirm('Delete every job for this profile? Your profile stays.')) return;
     P().jobs=[]; RANGE=null; await save(); render(); };
+  if($('#cbAuto')) $('#cbAuto').onchange=async e=>{
+    AUTO=!!e.target.checked; await put('triage:auto', AUTO?'1':'0');
+    // Turning it on with a backlog already sitting there should clear it.
+    if(AUTO) await autoScore(); else setInfo('');
+  };
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
@@ -2893,6 +2942,7 @@ async function onCsv(text){
         + (skipped?` \u00b7 ${skipped} example row${skipped>1?'s':''} skipped`:'');
     }
   }
+  if(added) await autoScore();
 }
 
 function pasteJobDialog(){
@@ -2911,7 +2961,7 @@ function pasteJobDialog(){
     j.location=d.querySelector('#pLoc').value.trim(); j.url=d.querySelector('#pUrl').value.trim();
     j.description=d.querySelector('#pDesc').value.trim(); j.source='Manual';
     if(!j.title){ alert('Needs a title at minimum.'); return; }
-    addJobs([j]); await save(); render(); d.remove(); };
+    addJobs([j]); await save(); render(); d.remove(); await autoScore(); };
 }
 
 function showJob(i){
