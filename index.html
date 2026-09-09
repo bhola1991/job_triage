@@ -1,6 +1,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Job Triage</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<meta name="theme-color" content="#131A21">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -428,14 +435,62 @@ const P = () => DB.profiles[DB.current] || null;
    Use whichever is actually available. */
 const HAS_WS = typeof window.storage !== 'undefined' && window.storage
                && typeof window.storage.get === 'function';
-async function put(k,v){
+
+/* ═══ accounts and cloud sync ═══
+   Optional, and off unless config.js has been filled in. An unconfigured copy
+   runs exactly as it always did — no account, no server, data in this browser
+   — because the alternative is that a missing config file bricks the app for
+   everyone, which is not a trade worth making for a feature nobody asked to be
+   mandatory.
+
+   The put/get shim below is why this is a small change rather than a rewrite:
+   the app has always talked to storage through two functions, so pointing them
+   at Postgres leaves every caller untouched. One table, one row per key per
+   user, protected by row-level security in the database rather than by any
+   check in this file — a bug up here must not be able to leak somebody's CV.
+
+   API keys are the deliberate exception and stay local. Uploading a person's
+   DeepSeek and Apify credentials would add real liability and buy nothing:
+   they are per-device by nature, and a stolen database should not also be a
+   stolen set of API keys. */
+const CFG   = window.TRIAGE_CONFIG || {};
+const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
+const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+let USER = null;                      // the signed-in auth user, or null
+/* Never leaves the device it was typed on. */
+const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
+const cloudNow = () => !!(SB && USER);
+
+async function putLocal(k,v){
   if(HAS_WS){ try{ await window.storage.set(k,v); return; }catch(e){} }
   try{ localStorage.setItem(k,v); }catch(e){ console.error('save failed',e); }
 }
-async function get(k){
+async function getLocal(k){
   if(HAS_WS){ try{ const r=await window.storage.get(k); return r?r.value:null; }catch(e){ return null; } }
   try{ return localStorage.getItem(k); }catch(e){ return null; }
 }
+async function put(k,v){
+  if(!cloudNow() || LOCAL_ONLY.test(k)) return putLocal(k,v);
+  // Written locally as well, always. A failed round trip must not silently
+  // lose the thing the user just did, and it doubles as the offline copy.
+  await putLocal(k,v);
+  try{
+    const {error}=await SB.from('user_state')
+      .upsert({user_id:USER.id,k,v,updated_at:new Date().toISOString()},{onConflict:'user_id,k'});
+    if(error) throw error;
+    syncNote('');
+  }catch(e){ syncNote("Offline \u2014 saved on this device, will not sync until you reload with a connection."); }
+}
+async function get(k){
+  if(!cloudNow() || LOCAL_ONLY.test(k)) return getLocal(k);
+  try{
+    const {data,error}=await SB.from('user_state').select('v').eq('user_id',USER.id).eq('k',k).maybeSingle();
+    if(error) throw error;
+    if(data && typeof data.v==='string'){ await putLocal(k,data.v); return data.v; }
+    return null;
+  }catch(e){ return getLocal(k); }   // offline: last known good
+}
+function syncNote(t){ const e=$('#syncInfo'); if(e){ e.textContent=t; e.style.display=t?'block':'none'; } }
 async function save(){ await put('triage:db', JSON.stringify(DB)); }
 async function load(){
   try{
@@ -2090,12 +2145,20 @@ function renderOnb(){
   }
 
   $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
-      <span class="sub" style="color:var(--muted);font-size:12px">fit &times; reachability</span></div>
+      <span class="sub" style="color:var(--muted);font-size:12px">fit &times; reachability</span>
+      ${CLOUD&&USER?`<div class="spacer"></div>
+        <span class="sub" style="color:var(--dim);font-size:12px">${esc(USER.email||'')}</span>
+        <button class="btn-sm" id="onbSignOut">Sign out</button>`:''}</div>
     <div class="onb">
       <div class="steps">${steps.map((s,i)=>
         `<div class="stp ${i===ONB.step?'on':''} ${i<ONB.step?'did':''}">${i+1} &nbsp;${s}</div>`).join('')}</div>
       ${body}</div>`;
 
+  if($('#onbSignOut')) $('#onbSignOut').onclick=async()=>{
+    try{ await putLocal('triage:db',''); }catch(e){}
+    try{ await SB.auth.signOut(); }catch(e){}
+    USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
+  };
   if(ONB.step===0){
     hookDrop($('#dropProf'),$('#fileProf'),onProfileFile);
     $('#pasteProf').onclick=e=>{ e.preventDefault(); pasteProfileDialog(); };
@@ -2505,7 +2568,9 @@ function renderApp(){
     <span class="pill ${p.jobs.length?'on':''}">${p.jobs.length} jobs</span>
     <span class="pill ${scored.length?'on':''}">${scored.length} scored</span>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
+    ${CLOUD&&USER?`<button class="btn-sm" id="btnSignOut" title="${esc(USER.email||'')}">Sign out</button>`:''}
   </div>
+  <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
   <div class="wrap">
     <div class="side">
       <div class="block"><span class="eyebrow">Direction</span>
@@ -2570,6 +2635,9 @@ function renderApp(){
         <p class="hint">Bins the scored roles you never acted on that rank below the top ${KEEP_TOP}. Anything you applied to, contacted or logged against is kept whatever it scored.</p>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
+        ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
+          <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
+        <p class="hint">Erases every profile, job, CV and note stored against ${esc(USER.email||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
         <div class="hint">Stored in this browser only \u2014 clearing site data wipes it. Take a backup.</div>
       </div>
     </div>
@@ -2672,6 +2740,24 @@ function renderApp(){
     AUTO=!!e.target.checked; await put('triage:auto', AUTO?'1':'0');
     // Turning it on with a backlog already sitting there should clear it.
     if(AUTO) await autoScore(); else setInfo('');
+  };
+  if($('#btnSignOut')) $('#btnSignOut').onclick=async()=>{
+    if(!confirm('Sign out? Anything saved is in your account and will be here when you come back.')) return;
+    // The local copy is this account's data sitting on a possibly shared
+    // machine. Signing out should actually remove it, not just hide it.
+    try{ await putLocal('triage:db',''); }catch(e){}
+    try{ await SB.auth.signOut(); }catch(e){}
+    USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
+  };
+  if($('#btnWipe')) $('#btnWipe').onclick=async()=>{
+    if(!confirm('Delete every profile, job, CV and note in this account, on every device?\n\nThis cannot be undone. Export CSV first if you want a copy.')) return;
+    if(!confirm('Last check — this really is permanent. Delete it all?')) return;
+    try{
+      const {error}=await SB.rpc('delete_my_data');
+      if(error) throw error;
+    }catch(e){ alert("Couldn't delete: "+((e&&e.message)||'unknown error')); return; }
+    try{ await putLocal('triage:db',''); }catch(e){}
+    DB={profiles:{},current:null}; VIEW='onb'; RANGE=null; render();
   };
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
@@ -3312,7 +3398,128 @@ document.addEventListener('click',async e=>{
   await save(); render();
 });
 
-function render(){ (VIEW==='app'&&P()) ? renderApp() : renderOnb(); }
-load().then(()=>{ if(DB.current&&DB.profiles[DB.current]) VIEW='app'; render(); });
+/* ═══ sign in ═══
+   Only ever reached when config.js is filled in. The copy is deliberate about
+   what changes by having an account, because "your CV stays in your browser"
+   stopped being true the moment this screen existed and pretending otherwise
+   would be the dishonest kind of onboarding. */
+let AUTH = { mode:'in', msg:'', err:'', busy:false, email:'', pass:'' };
+
+function renderAuth(){
+  const up = AUTH.mode==='up';
+  $('#root').innerHTML=`
+  <div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede">${up?'Make an account':'Sign in'}</p>
+    <p class="say">${up
+      ? 'Your CV, your jobs and your notes are stored in the cloud so they follow you between devices. You can delete all of it, permanently, from inside the app.'
+      : 'Welcome back.'}</p>
+    <div class="card">
+      <label class="lab">Email</label>
+      <input id="auEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
+      <label class="lab" style="margin-top:12px">Password</label>
+      <input id="auPass" type="password" autocomplete="${up?'new-password':'current-password'}" placeholder="${up?'At least 8 characters':''}" value="${esc(AUTH.pass)}">
+      ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
+      ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go" id="auGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'\u2026':(up?'Create account':'Sign in')}</button>
+        <button class="btn-sm" id="auSwap">${up?'I already have one':'Make an account'}</button>
+      </div>
+      ${up?'':`<p class="say" style="margin:12px 0 0;font-size:12.5px"><a href="#" class="lnk" id="auReset">Forgot your password?</a></p>`}
+    </div>
+    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="PRIVACY.md" target="_blank" rel="noopener">privacy notice</a>. Your API keys are never uploaded \u2014 they stay in this browser.</p>
+  </div>`;
+
+  // Swapping mode or hitting an error re-renders the form, which would throw
+  // away what was typed. Read it back into state before anything re-renders.
+  const stash=()=>{ AUTH.email=($('#auEmail').value||'').trim(); AUTH.pass=$('#auPass').value||''; };
+  const go=async ()=>{
+    stash();
+    const email=AUTH.email, pass=AUTH.pass;
+    if(!email||!pass){ AUTH.err='Email and password, please.'; return renderAuth(); }
+    if(up && pass.length<8){ AUTH.err='Passwords need to be at least 8 characters.'; return renderAuth(); }
+    AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderAuth();
+    try{
+      const {data,error} = up
+        ? await SB.auth.signUp({email,password:pass})
+        : await SB.auth.signInWithPassword({email,password:pass});
+      if(error) throw error;
+      // Sign-up with email confirmation on returns a user but no session; the
+      // onAuthStateChange handler covers the case where it returns one.
+      if(up && !(data && data.session)){
+        AUTH.busy=false; AUTH.msg='Check your email to confirm the account, then sign in.'; AUTH.mode='in';
+        return renderAuth();
+      }
+    }catch(e){
+      AUTH.busy=false; AUTH.err=(e&&e.message)||'That did not work.'; return renderAuth();
+    }
+    AUTH.busy=false; AUTH.pass='';
+  };
+  $('#auGo').onclick=go;
+  $('#auPass').onkeydown=e=>{ if(e.key==='Enter') go(); };
+  $('#auSwap').onclick=()=>{ stash(); AUTH.mode=up?'in':'up'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
+  if($('#auReset')) $('#auReset').onclick=async e=>{
+    e.preventDefault();
+    stash();
+    const email=AUTH.email;
+    if(!email){ AUTH.err='Put your email in first, then press this.'; return renderAuth(); }
+    try{ await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); }catch(err){}
+    // Said the same way whether or not the address exists: telling a stranger
+    // which emails have accounts here is not information worth giving away.
+    AUTH.err=''; AUTH.msg='If that address has an account, a reset link is on its way.';
+    renderAuth();
+  };
+}
+
+function render(){
+  if(CLOUD && !USER) return renderAuth();
+  (VIEW==='app'&&P()) ? renderApp() : renderOnb();
+}
+
+/* Carries a browser-only setup into the account the first time someone signs
+   in, so making an account does not read as having lost everything. Only ever
+   fills an empty account — it must never overwrite what is already up there. */
+async function migrateLocal(){
+  try{
+    if(await get('triage:db')) return;
+    const local=await getLocal('triage:db');
+    if(!local) return;
+    const d=JSON.parse(local);
+    if(!d || !d.profiles || !Object.keys(d.profiles).length) return;
+    await put('triage:db', local);
+    DB.profiles=d.profiles||{}; DB.current=d.current||null;
+  }catch(e){}
+}
+
+async function afterAuth(){
+  DB={profiles:{},current:null}; VIEW='onb';
+  await load();
+  if(cloudNow()) await migrateLocal();
+  if(DB.current&&DB.profiles[DB.current]) VIEW='app';
+  render();
+}
+
+async function boot(){
+  if(CLOUD){
+    try{
+      const {data}=await SB.auth.getSession();
+      USER=(data&&data.session&&data.session.user)||null;
+    }catch(e){ USER=null; }
+    let last=USER?USER.id:null;
+    SB.auth.onAuthStateChange((_ev,sess)=>{
+      const now=(sess&&sess.user)||null;
+      if((now?now.id:null)===last) return;      // token refreshes are not events
+      last=now?now.id:null; USER=now; afterAuth();
+    });
+  }
+  await afterAuth();
+  if('serviceWorker' in navigator){
+    // file:// has no service worker support and does not need one.
+    if(location.protocol==='http:'||location.protocol==='https:'){
+      navigator.serviceWorker.register('sw.js').catch(()=>{});
+    }
+  }
+}
+boot();
 })();
 </script>

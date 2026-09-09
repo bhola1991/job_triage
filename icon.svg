@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#131A21"/>
+  <!-- The two axes the whole app is built on: fit up, reachability across. -->
+  <path d="M104 408 L104 120" stroke="#2B3945" stroke-width="14" stroke-linecap="round"/>
+  <path d="M104 408 L408 408" stroke="#2B3945" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="336" cy="168" r="34" fill="#E8B04B"/>
+  <circle cx="232" cy="256" r="22" fill="#4FB3A5"/>
+  <circle cx="168" cy="330" r="16" fill="#6B7A87"/>
+</svg>

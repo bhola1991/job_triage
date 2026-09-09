@@ -1,0 +1,14 @@
+{
+  "name": "Job Triage",
+  "short_name": "Job Triage",
+  "description": "Reads a CV, finds jobs, and scores each one on fit and on whether they'll actually reply.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#131A21",
+  "theme_color": "#131A21",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

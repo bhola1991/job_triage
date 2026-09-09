@@ -60,6 +60,27 @@ Apify bills per unit of work, so the app is built to ask for as little as it can
 
 Nothing is uploaded and there's no account. Data lives in browser storage, so use **Backup & transfer** to keep a copy.
 
+## Turning on accounts
+
+Accounts are **off** until `config.js` is filled in. Unconfigured, the app behaves exactly as described above — no server, no login, data in the browser. That fallback is deliberate: a missing config must never break the app.
+
+To switch it on:
+
+1. Create a project at [supabase.com](https://supabase.com) (the free tier is enough to start).
+2. Open the SQL editor and run [`schema.sql`](schema.sql) once. It creates one table and the row-level-security policies that keep each account's rows unreachable from any other session.
+3. In **Settings → API**, copy the project URL and the `anon` / public key into `config.js`.
+4. Commit and push. The next load will ask people to sign in.
+
+The `anon` key belongs in the browser — that is what it is for, and every table is protected by row-level security, so the key alone grants nothing without a session. The **`service_role` key bypasses row-level security and must never appear in `config.js`, in this repository, or anywhere a browser can reach.**
+
+What syncs: profiles, CVs, jobs, scores, notes, contacts and history. What does not: **API keys**, which stay in the browser they were typed into. Uploading someone's DeepSeek and Apify credentials would add real liability and buy nothing.
+
+Running it with accounts on makes you a data controller for other people's CVs. [`PRIVACY.md`](PRIVACY.md) is a starting point, not legal advice — add a contact address before you invite anyone, and keep the in-app **Delete everything in my account** working.
+
+## Installing it as an app
+
+`manifest.json` and `sw.js` make it installable — home-screen icon, no browser chrome, opens offline. Nothing to configure; it works as soon as the site is served over HTTPS, which GitHub Pages already does. The service worker is network-first, so a deploy reaches people immediately instead of being shadowed by a cached copy.
+
 ## Architecture notes
 
 - One HTML file. No build step, no dependencies, no backend.
