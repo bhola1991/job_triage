@@ -1,10 +1,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Job Triage</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-
 <style>
   :root{
     --ink:#131A21; --panel:#19222B; --panel2:#1F2A34; --line:#2B3945;
@@ -16,8 +12,8 @@
     --cold:#4FB3A5;   --cold-dim:#1f3f3b;
     --neutral:#6B7A87;
     --live:#7FA9E8;   /* an active conversation - the most valuable state */
-    --disp:'Space Grotesk',system-ui,sans-serif;
-    --mono:'IBM Plex Mono',ui-monospace,monospace;
+    --disp:system-ui,-apple-system,'Segoe UI',sans-serif;
+    --mono:ui-monospace,'Cascadia Mono','Consolas',monospace;
   }
   *{box-sizing:border-box}
   #app{background:
@@ -301,8 +297,9 @@ let PROV = 'deepseek';   // 'deepseek' | 'anthropic'
 let APIFY= '';           // Apify token for live LinkedIn search
 let CHFILT = 'all';      // 'all' | 'posted' | 'cold'
 let VIEW = 'onb';        // 'onb' | 'app'
-let ONB  = { step:0, raw:'', fileName:'', parsed:null, track:null, error:'',
-             assessing:false, assessed:null, assessErr:'', wantText:'' };
+const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
+  error:'', assessing:false, assessed:null, assessErr:'', wantText:'' });
+let ONB = blankOnb();
 let RANGE = null, TAB = 'map', busy = false;
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
 /* Long-running work lives here rather than behind a modal, so the app stays
@@ -361,10 +358,9 @@ function buildLiUrl(query){
   return "https://www.linkedin.com/jobs/search?keywords="+kw+"&location="+
          encodeURIComponent(loc+", India");
 }
-const pick = (item,keys,contains) => {
+const pick = (item,keys) => {
   const map={}; Object.keys(item).forEach(k=>map[k.toLowerCase()]=k);
   for(const c of keys){ const k=map[c.toLowerCase()]; if(k&&item[k]) return item[k]; }
-  if(contains){ for(const lk in map){ if(lk.includes(contains)&&item[map[lk]]) return item[map[lk]]; } }
   return "";
 };
 
@@ -466,34 +462,48 @@ function parseAtsTarget(line){
   return out;
 }
 
+/* Every Apify feature in this file is the same three steps: start a run, poll it
+   until it stops, read its dataset. Only the actor, the payload, the polling
+   cadence and the wording of the status line differ, so those are the arguments
+   and the rest lives here once.
+
+   Throws on every failure, including a missing token (NEEDAPIFY), which the
+   callers already special-case to re-prompt for one. */
+async function apifyRun(actor, payload, opts){
+  const o = opts || {}, every = o.every || 6000, cap = o.cap || 600;
+  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
+  let r;
+  try{ r=await fetch(APIFY_BASE+"/acts/"+actor+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  catch(e){ throw new Error("Couldn't reach Apify."); }
+  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+  if(!r.ok) throw new Error("Apify returned "+r.status);
+  const d=(await r.json()).data||{};
+  if(!d.id) throw new Error("Apify wouldn't start the run.");
+  // The loop condition already exits on SUCCEEDED; only a hard failure needs a throw.
+  let status="RUNNING", waited=0;
+  while(status==="RUNNING"||status==="READY"){
+    await new Promise(z=>setTimeout(z,every)); waited+=every/1000;
+    if(waited>cap) throw new Error(`Apify timed out after ${Math.round(cap/60)} minutes.`);
+    const pr=await fetch(APIFY_BASE+"/acts/"+actor+"/runs/"+d.id,{headers:H});
+    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(o.onStatus) o.onStatus(`${o.label||'working'} — ${status.toLowerCase()}, ${waited}s`);
+    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
+  }
+  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
+  return (await dr.json())||[];
+}
+
 /* Last resort: ask Google where this company's board lives. This is exactly the
    manual step it saves — one search per company, and the slug falls out of the
-   URL. Needs the Apify token; without it, unfound companies are just reported. */
+   URL. Needs the Apify token; atsSearch treats a throw here as "not found". */
 async function findBoardsViaGoogle(names, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) return {};
   const qs=names.slice(0,10).map(n=>
     `"${n}" (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)`);
   if(!qs.length) return {};
-  if(onStatus) onStatus(`looking up ${qs.length} careers page${qs.length>1?'s':''}\u2026`);
-  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={queries:qs.join("\n"),languageCode:"en",maxPagesPerQuery:1,resultsPerPage:5,mobileResults:false};
-  let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
-  catch(e){ return {}; }
-  if(!r.ok) return {};
-  const d=(await r.json()).data||{};
-  let status="RUNNING", waited=0;
-  while(status==="RUNNING"||status==="READY"){
-    await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>300) return {};
-    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`looking up careers pages \u2014 ${status.toLowerCase()}, ${waited}s`);
-    if(status==="SUCCEEDED") break;
-    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) return {};
-  }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
-  const items=await dr.json();
+  const items=await apifyRun(APIFY_GOOGLE,
+    {queries:qs.join("\n"),languageCode:"en",maxPagesPerQuery:1,resultsPerPage:5,mobileResults:false},
+    {every:6000,cap:300,onStatus,label:`looking up ${qs.length} careers page${qs.length>1?'s':''}`});
   const map={};
   (items||[]).forEach(item=>{
     const term=((item.searchQuery||{}).term)||"";
@@ -566,6 +576,22 @@ async function atsSearch(lines, onStatus){
    approach will land than any static company attribute: a team adding roles is
    building, a team that stopped is not. Snapshot on every pull so the delta is
    there next time. */
+/* One ATS hit becomes job rows. Shared by "pull a company I know" and the
+   hiring check inside company suggestions, which differ only in whether a
+   velocity note rides along in the row. */
+function rowsFromAts(hit, vel){
+  return hit.rows.map(x=>{
+    const j=blank();
+    j.title=x.title||'[No Title]'; j.company=hit.name||hit.slug;
+    j.location=x.location||''; j.url=x.url||'';
+    j.description=(x.desc||'').slice(0,4000);
+    j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
+    j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'',
+             x.posted?'Posted '+x.posted:'', vel||''].filter(Boolean).join(' · ');
+    return j;
+  });
+}
+
 async function recordVelocity(slug, count){
   const p=P(); if(!p) return;
   p.velocity = p.velocity || {};
@@ -607,34 +633,12 @@ function buildBoardQueries(titles, boards, where){
 }
 
 async function apifyBoardSearch(queries, countryCode, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
-  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
   // Schema confirmed against apify.com/apify/google-search-scraper:
   // queries is a newline-separated STRING, not an array.
-  const payload={queries:queries.join("\n"),countryCode:countryCode||"",
-    languageCode:"en",maxPagesPerQuery:1,resultsPerPage:10,mobileResults:false};
-  let r;
-  try{
-    r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
-  }catch(e){ throw new Error("Couldn't reach Apify."); }
-  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
-  if(!r.ok) throw new Error("Apify returned "+r.status);
-  const d=(await r.json()).data||{};
-  const runId=d.id, dsId=d.defaultDatasetId;
-  if(!runId) throw new Error("Apify wouldn't start the run.");
-
-  let status="RUNNING", waited=0;
-  while(status==="RUNNING"||status==="READY"){
-    await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
-    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+runId,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`searching ${queries.length} board queries — ${status.toLowerCase()}, ${waited}s`);
-    if(status==="SUCCEEDED") break;
-    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
-  }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
-  const items=await dr.json();
+  const items=await apifyRun(APIFY_GOOGLE,
+    {queries:queries.join("\n"),countryCode:countryCode||"",languageCode:"en",
+     maxPagesPerQuery:1,resultsPerPage:10,mobileResults:false},
+    {every:6000,cap:600,onStatus,label:`searching ${queries.length} board queries`});
 
   const out=[];
   (items||[]).forEach(item=>{
@@ -661,31 +665,9 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
 }
 
 async function apifySearch(query, count, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
-  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={urls:[buildLiUrl(query)],count:Math.max(count||10,10),scrapeCompany:true};
-  let r;
-  try{
-    r = await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)});
-  }catch(e){ throw new Error("Couldn't reach Apify."); }
-  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
-  if(!r.ok) throw new Error("Apify returned "+r.status);
-  const d=(await r.json()).data||{};
-  const runId=d.id, dsId=d.defaultDatasetId;
-  if(!runId) throw new Error("Apify wouldn't start the run.");
-
-  let status="RUNNING", waited=0;
-  while(status==="RUNNING"||status==="READY"){
-    await new Promise(z=>setTimeout(z,6000)); waited+=6;
-    if(waited>600) throw new Error("Apify timed out after 10 minutes.");
-    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_ACTOR+"/runs/"+runId,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(query+" — "+status.toLowerCase()+", "+waited+"s");
-    if(status==="SUCCEEDED") break;
-    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
-  }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
-  const items=await dr.json();
+  const items=await apifyRun(APIFY_ACTOR,
+    {urls:[buildLiUrl(query)],count:Math.max(count||10,10),scrapeCompany:true},
+    {every:6000,cap:600,onStatus,label:query});
   if(items && items[0] && items[0].error) throw new Error("Apify rejected the input: "+items[0].error);
 
   return (items||[]).map(it=>{
@@ -693,9 +675,9 @@ async function apifySearch(query, count, onStatus){
     j.title   = pick(it,["title","jobTitle","position"]) || "[No Title]";
     j.company = pick(it,["companyName","company","company_name"]) || "[Unknown]";
     j.location= pick(it,["location","jobLocation"]) || "";
-    j.url     = pick(it,["link","jobUrl","url","postUrl","jobLink"],"url") || "";
-    j.description = String(pick(it,["descriptionText","description","jobDescription","details"],"desc")||"").slice(0,1200);
-    const cli = pick(it,["companyLinkedinUrl","companyUrl"],"companylinkedin");
+    j.url     = pick(it,["link","jobUrl","url","postUrl","jobLink"]) || "";
+    j.description = String(pick(it,["descriptionText","description","jobDescription","details"])||"").slice(0,1200);
+    const cli = pick(it,["companyLinkedinUrl","companyUrl"]);
     j.notes   = cli ? "Company LinkedIn: "+cli : "";
     j.source  = "LinkedIn (live)"; j.query = query; j.status="New"; j.channel="posted";
     return j;
@@ -715,52 +697,10 @@ async function apifySearch(query, count, onStatus){
    as a guess, everywhere it's shown, never presented as confirmed. */
 const EMPLOYEES_ACTOR = "automation-lab~linkedin-company-employees-scraper";
 const NOT_COMPANY_SITE = /linkedin\.com|indeed\.com|glassdoor\.com|wellfound\.com|angel\.co|crunchbase\.com|facebook\.com|twitter\.com|x\.com|instagram\.com|ycombinator\.com|builtin\.com|monster\.com|ziprecruiter\.com|ambitionbox\.com|ridewheel\.com/i;
-/* Two ways a person is worth talking to. The first is the recruiting side —
-   they own the process. The second is the hiring side: whoever runs the team
-   the role sits in, matched by pairing a leadership word with a word from the
-   job you're actually chasing, so a "Head of Data" surfaces for a data role
-   and stays out of the way for a design one. */
-/* Stems take \w* deliberately: the closing \b otherwise anchors to the end of
-   the alternative, so a bare "recruit" never matches "Recruiter" — which is
-   how almost every one of these people actually writes their title. */
-const HR_TITLE   = /\b(hr|human resources|recruit\w*|talent\w*|sourc(er|ers|ing)|staffing|people (team|ops|operations|partner)|people & culture|hiring manager|head of people|chief people)\b/i;
-const LEAD_TITLE = /\b(head of|director|vp|vice president|chief|founder|co-?founder|lead|manager|principal)\b/i;
-const TITLE_NOISE = /^(a|an|the|and|or|of|for|at|in|to|with|senior|junior|staff|principal|lead|head|chief|vp|vice|president|director|manager|associate|assistant|i|ii|iii|jr|sr|remote|hybrid|onsite|full|part|time|contract|intern)$/i;
-
-/* Words from the role being chased, used to decide whether a department head
-   is relevant. Deliberately crude — a shared noun like "data" or "design" is
-   a good enough signal, and anything cleverer starts inventing relevance. */
-function roleWords(ctx){
-  const src=[(ctx&&ctx.title)||'', ...(((ctx&&ctx.titles)||[]).slice(0,6))].join(' ');
-  const out=new Set();
-  String(src).toLowerCase().split(/[^a-z+#]+/).forEach(w=>{
-    if(w.length>=3 && !TITLE_NOISE.test(w)) out.add(w);
-  });
-  return Array.from(out);
-}
-
 async function googleFirst(query, onStatus, statusLabel){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
-  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={queries:query,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false};
-  let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
-  catch(e){ throw new Error("Couldn't reach Apify."); }
-  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
-  if(!r.ok) throw new Error("Apify returned "+r.status);
-  const d=(await r.json()).data||{};
-  let status="RUNNING", waited=0;
-  while(status==="RUNNING"||status==="READY"){
-    await new Promise(z=>setTimeout(z,4000)); waited+=4;
-    if(waited>120) throw new Error("Timed out on "+statusLabel+".");
-    const pr=await fetch(APIFY_BASE+"/acts/"+APIFY_GOOGLE+"/runs/"+d.id,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`${statusLabel} — ${status.toLowerCase()}, ${waited}s`);
-    if(status==="SUCCEEDED") break;
-    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
-  }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
-  return (await dr.json())||[];
+  return apifyRun(APIFY_GOOGLE,
+    {queries:query,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false},
+    {every:4000,cap:120,onStatus,label:statusLabel});
 }
 
 async function findLinkedInSlug(company, onStatus){
@@ -795,32 +735,10 @@ function guessEmail(name, domain){
 }
 
 async function findHrContacts(company, ctx, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
   const slug = await findLinkedInSlug(company, onStatus);
   if(!slug) throw new Error("Couldn't find "+company+"'s LinkedIn company page.");
-  if(onStatus) onStatus(`listing ${company}'s public employees on LinkedIn…`);
-  const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  const payload={companyUrls:[slug]};
-  let r;
-  try{ r=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs",{method:"POST",headers:H,body:JSON.stringify(payload)}); }
-  catch(e){ throw new Error("Couldn't reach Apify."); }
-  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
-  if(!r.ok) throw new Error("Apify returned "+r.status);
-  const d=(await r.json()).data||{};
-  const runId=d.id, dsId=d.defaultDatasetId;
-  if(!runId) throw new Error("Apify wouldn't start the run.");
-  let status="RUNNING", waited=0;
-  while(status==="RUNNING"||status==="READY"){
-    await new Promise(z=>setTimeout(z,5000)); waited+=5;
-    if(waited>240) throw new Error("Apify timed out after 4 minutes.");
-    const pr=await fetch(APIFY_BASE+"/acts/"+EMPLOYEES_ACTOR+"/runs/"+runId,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
-    if(onStatus) onStatus(`scanning ${company}'s employees — ${status.toLowerCase()}, ${waited}s`);
-    if(status==="SUCCEEDED") break;
-    if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
-  }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+dsId+"/items?clean=true&format=json",{headers:H});
-  const items=(await dr.json())||[];
+  const items=await apifyRun(EMPLOYEES_ACTOR, {companyUrls:[slug]},
+    {every:5000,cap:240,onStatus,label:`scanning ${company}'s employees`});
 
   // Output field names for this actor aren't fixed anywhere public either, so
   // this stays with the same tolerant pick()-based reading as the rest of the
@@ -833,14 +751,19 @@ async function findHrContacts(company, ctx, onStatus){
 
   if(!roster.length) throw new Error(`${company}'s LinkedIn page returned no readable employees.`);
 
-  // Ask the model first, fall back to keywords only if that call actually
-  // fails. An empty answer from the model is an answer — "nobody here" is a
-  // real finding, and second-guessing it with a keyword sweep would just put
-  // back the false positives the model was brought in to remove.
+  // The model reads the roster. An empty answer from it is an answer — "nobody
+  // here" is a real finding, which is why there is no keyword sweep second-
+  // guessing it and putting back the false positives it was brought in to remove.
   if(onStatus) onStatus(`reading ${roster.length} profiles for who is worth contacting…`);
-  let people=[], judged=true;
+  let people=[];
   try{ people=await pickPeople(roster, company, ctx); }
-  catch(e){ judged=false; people=keywordPeople(roster, ctx); }
+  catch(e){
+    // The roster has already been fetched and paid for, but nothing has judged
+    // it. Say that plainly, rather than falling through to the "none of them
+    // looked right" throw below, which would claim the model looked and didn't.
+    throw new Error(`Read ${roster.length} public employee${roster.length===1?'':'s'} at ${company}, but the model didn't run, so none of them have been judged: `
+      + (e.message==='NEEDKEY' ? 'no API key is set for scoring.' : e.message));
+  }
 
   if(!people.length) throw new Error(`Read ${roster.length} public employee${roster.length===1?'':'s'} at ${company} — none of them looked like the right desk for this role. Try adding someone by hand.`);
 
@@ -848,7 +771,7 @@ async function findHrContacts(company, ctx, onStatus){
   let domain=null;
   try{ domain=await findCompanyDomain(company, onStatus); }catch(e){}
 
-  return { judged, list: people.map(p=>{
+  return { list: people.map(p=>{
     const guess = domain ? guessEmail(p.name, domain) : '';
     return {
       name: p.name,
@@ -907,19 +830,6 @@ Rules:
       why: String(pk.why||'').slice(0,90) });
   });
   return out;
-}
-
-/* The fallback, and what this used to do on its own. Crude by nature: a shared
-   noun stands in for relevance, which is why the model gets first refusal. */
-function keywordPeople(roster, ctx){
-  const words=roleWords(ctx);
-  const out=roster.filter(p=>{
-    const low=String(p.role||'').toLowerCase();
-    if(HR_TITLE.test(p.role)) { p.tier='recruiting'; return true; }
-    if(LEAD_TITLE.test(p.role) && words.some(w=>low.includes(w))) { p.tier='hiring'; return true; }
-    return false;
-  });
-  return out.sort((a,b)=> (a.tier==='recruiting'?0:1) - (b.tier==='recruiting'?0:1));
 }
 
 /* ═══ LLM ═══
@@ -1233,16 +1143,7 @@ async function addSuggested(list, checkHiring){
     for(const hit of found){
       await recordVelocity(hit.slug,hit.rows.length);
       const vel=velocityNote(hit.slug);
-      const jobs=hit.rows.map(x=>{
-        const j=blank();
-        j.title=x.title||'[No Title]'; j.company=hit.name||hit.slug;
-        j.location=x.location||''; j.url=x.url||'';
-        j.description=(x.desc||'').slice(0,4000);
-        j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
-        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'', x.posted?'Posted '+x.posted:'', vel]
-          .filter(Boolean).join(' · ');
-        return j;
-      });
+      const jobs=rowsFromAts(hit, vel);
       roles+=addJobs(jobs);
       // This company is advertising, so the placeholder cold row is redundant.
       const ci=p.jobs.findIndex(j=>j.channel==='cold'&&j.source==='Suggested'&&j.company===(hit.name||hit.slug));
@@ -1311,7 +1212,7 @@ Use ONLY what is in the profile. Do not invent experience.`, 1600);
 }
 
 function diffTag(d){
-  return (d==='moonshot'||d==='stretch') ? 'hard' : d==='easy' ? 'easy' : 'mid';
+  return d==='moonshot' ? 'hard' : d==='easy' ? 'easy' : 'mid';
 }
 
 /* Shown after an assessment. The verdict is the point — the lists are supporting
@@ -1513,7 +1414,7 @@ async function runSearch(queries){
       total+=n; setSearchInfo(`${total} new so far…`);
       await save();
     }catch(e){
-      if(e.message==='NEEDAPIFY'){ busy=false; render(); apifyDialog(()=>runSearch(queries)); return; }
+      if(e.message==='NEEDAPIFY'){ busy=false; render(); keyDialog(()=>runSearch(queries)); return; }
       failed++; console.error(e); setSearchInfo(e.message);
     }
   }
@@ -1541,7 +1442,7 @@ async function runBoards(trk, prof){
       : `Searched ${boards.length} boards, nothing new came back.`);
   }catch(e){
     busy=false; render();
-    if(e.message==='NEEDAPIFY'){ apifyDialog(()=>runBoards(trk,prof)); return; }
+    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,prof)); return; }
     setSearchInfo(e.message);
   }
 }
@@ -1576,18 +1477,7 @@ async function runAts(lines){
     for(const hit of found){
       await recordVelocity(hit.slug,hit.rows.length);
       const vel=velocityNote(hit.slug);
-      const jobs=hit.rows.map(x=>{
-        const j=blank();
-        j.title=x.title||'[No Title]';
-        j.company=hit.name||hit.slug;
-        j.location=x.location||'';
-        j.url=x.url||'';
-        j.description=(x.desc||'').slice(0,4000);
-        j.source=hit.label; j.query=hit.slug; j.channel='posted'; j.stage='new';
-        j.notes=[x.dept?'Team: '+x.dept:'', x.pay?'Pay: '+x.pay:'',
-                 x.posted?'Posted '+x.posted:''].filter(Boolean).join(' \u00b7 ');
-        return j;
-      });
+      const jobs=rowsFromAts(hit);
       added+=addJobs(jobs);
       notes.push(`${hit.name||hit.slug} \u2192 ${hit.label}${hit.viaGoogle?' (found via search)':''}: ${hit.rows.length} open${vel?' \u2014 '+vel:''}`);
     }
@@ -1599,23 +1489,6 @@ async function runAts(lines){
   }catch(e){
     busy=false; render(); setSearchInfo(e.message);
   }
-}
-
-function apifyDialog(retry){
-  const d=modal(`<div class="eyebrow">Live search</div>
-    <h2 style="margin:6px 0 10px">Add your Apify token</h2>
-    <p style="color:var(--muted);font-size:13px;margin:0 0 4px">Searching LinkedIn runs through Apify, the same service your Python scanner uses. Paste the same token.</p>
-    <p class="hint" style="margin-bottom:12px">Find it at <span style="color:var(--cool)">console.apify.com → Settings → API &amp; Integrations</span>. Stored only in this browser — but it is a real credential, so don't share this file with the token saved in it.</p>
-    <label class="lab">Token</label>
-    <input type="text" id="av" placeholder="apify_api_..." value="${esc(APIFY||'')}" autocomplete="off">
-    <div class="btn-row" style="margin-top:12px">
-      <button class="btn-go btn-sm" id="aSave">Save token</button>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
-  d.querySelector('#aSave').onclick=async()=>{
-    const v=d.querySelector('#av').value.trim();
-    if(!v.startsWith('apify_api_')){ alert('Apify tokens start with apify_api_'); return; }
-    APIFY=v; await put('triage:apify',v); d.remove(); if(retry) retry();
-  };
 }
 
 /* ═══ cold target ═══
@@ -1707,7 +1580,7 @@ function renderOnb(){
     body=`<p class="lede">Which direction are you going?</p>
       <p class="say">This changes what counts as a good job. You can switch later and rescore.</p>
       ${(p.tracks||[]).map(t=>`<div class="trk ${ONB.track===t.id?'sel':''}" data-track="${esc(t.id)}">
-        <div class="tl">${esc(t.label)} <span class="tag ${t.difficulty==='easy'?'easy':(t.difficulty==='moonshot'||t.difficulty==='stretch')?'hard':'mid'}">${esc(t.difficulty||'')}</span></div>
+        <div class="tl">${esc(t.label)} <span class="tag ${diffTag(t.difficulty)}">${esc(t.difficulty||'')}</span></div>
         <p class="tw">${esc(t.why||'')}</p>
         ${(t.titles||[]).length?`<div class="chips" style="margin-top:9px">${t.titles.slice(0,6).map(x=>`<span class="chip">${esc(x)}</span>`).join('')}</div>`:''}
       </div>`).join('')}
@@ -1760,7 +1633,7 @@ function renderOnb(){
   }
   if(ONB.step===1 && ONB.parsed){
     $('#onbNext').onclick=()=>{ ONB.step=2; ONB.track=(ONB.parsed.tracks[0]||{}).id; render(); };
-    $('#onbBack').onclick=()=>{ ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''}; render(); };
+    $('#onbBack').onclick=()=>{ ONB=blankOnb(); render(); };
   }
   if(ONB.step===2){
     document.querySelectorAll('[data-track]').forEach(el=>el.onclick=()=>{ ONB.track=el.dataset.track; render(); });
@@ -1822,7 +1695,7 @@ async function finishOnb(){
   const id = 'p_'+Date.now().toString(36);
   DB.profiles[id]={ profile:ONB.parsed, raw:ONB.raw, track:ONB.track, jobs:[], created:today() };
   DB.current=id; VIEW='app';
-  ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''};
+  ONB=blankOnb();
   await save(); render();
 }
 
@@ -1837,14 +1710,14 @@ function plotSVG(){
     const y=PL.y+(1-v/100)*PL.h, x=PL.x+(v/100)*PL.w, mid=v===50;
     g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
     g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
-    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="IBM Plex Mono" font-size="9" fill="#56656F">${v}</text>`;
-    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="IBM Plex Mono" font-size="9" fill="#56656F">${v}</text>`;
+    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="#56656F">${v}</text>`;
+    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="#56656F">${v}</text>`;
   }
   g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+14}" text-anchor="end">APPLY TODAY</text>`;
   g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
   g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
-  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#7D8C99" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
-  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#7D8C99">REACHABILITY</text>`;
+  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="#7D8C99" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
+  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="#7D8C99">REACHABILITY</text>`;
   if(RANGE){
     const a=plotXY(RANGE.f1,RANGE.r1), b=plotXY(RANGE.f0,RANGE.r0);
     g+=`<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" fill="#E8B04B" fill-opacity=".07" stroke="#E8B04B" stroke-width="1" stroke-dasharray="4 3"/>`;
@@ -1864,7 +1737,7 @@ fit ${f} · reach ${r} · ${chOf(j)}</title>`;
       ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="${col}" fill-opacity=".08" stroke="${col}" stroke-width="1.6" stroke-opacity="${RANGE&&!inR?.3:(inR&&open?.95:.5)}">${tip}</rect>`
       : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${dim}" stroke="${col}" stroke-width="1" stroke-opacity="${RANGE&&!inR?.3:1}">${tip}</circle>`;
   });
-  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="Space Grotesk" font-size="13" fill="#56656F">Nothing scored yet</text>`;
+  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#56656F">Nothing scored yet</text>`;
   return g;
 }
 
@@ -1983,6 +1856,12 @@ function nextStep(){
     b:'Find more jobs', act:'suggest'};
 }
 
+/* One section of job cards, shared by the two list views. */
+const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
+    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
+    <p class="sect-sub">${sub}</p>
+    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
+
 function renderToday(){
   const p=P();
   const all=p.jobs.map((j,i)=>({j,i}));
@@ -1994,11 +1873,6 @@ function renderToday(){
                  .sort((a,b)=>rankOf(b.j)-rankOf(a.j)).slice(0,10);
   const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).length;
   const doneToday=all.filter(x=>x.j.last_touch===today()).length;
-
-  const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
-    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
-    <p class="sect-sub">${sub}</p>
-    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
 
   if(!live.length&&!due.length&&!fresh.length){
     return `<div class="empty"><b>${p.jobs.length?'Nothing needs you today':'No jobs yet'}</b>
@@ -2030,11 +1904,6 @@ function renderFollowups(){
   const live   =all.filter(x=>stOf(x.j)==='live').sort(bySilent);
   const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).sort(bySilent);
   const closed =all.filter(x=>stOf(x.j)==='closed').length;
-
-  const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
-    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
-    <p class="sect-sub">${sub}</p>
-    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
 
   if(!due.length&&!live.length&&!waiting.length){
     return `<div class="empty"><b>Nothing sent yet</b>
@@ -2194,7 +2063,6 @@ function renderApp(){
     const a=$('#btnNext').dataset.next;
     if(a==='suggest') return suggestDialog();
     if(a==='score')   return runScoring(false);
-    if(a==='today'){ TAB='list'; return render(); }
     if(a==='follow'){ TAB='follow'; return render(); }
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
@@ -2205,16 +2073,14 @@ function renderApp(){
   if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
     `<div class="eyebrow">Your assessment</div>${trackVerdict(trk)}
      <div class="btn-row" style="margin-top:16px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
-  $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB={step:0,raw:'',fileName:'',parsed:null,track:null,error:'',assessing:false,assessed:null,assessErr:'',wantText:''}; render(); };
+  $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB=blankOnb(); render(); };
   $('#btnPaste').onclick=pasteJobDialog;
   $('#btnScore').onclick=()=>runScoring(false);
   $('#btnRescore').onclick=()=>{ if(confirm('Rescore every job? Existing scores get overwritten.')) runScoring(true); };
   $('#btnReset').onclick=()=>{ RANGE=null; render(); };
   $('#btnExport').onclick=()=>{
     if(!P().jobs.length){ alert('Nothing to export yet.'); return; }
-    const b=new Blob([toCSV(P().jobs,COLS)],{type:'text/csv'});
-    const a=document.createElement('a'); a.href=URL.createObjectURL(b);
-    a.download='job_tracker.csv'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href),2000); };
+    downloadFile('job_tracker.csv', toCSV(P().jobs,COLS), 'text/csv'); };
   $('#btnClear').onclick=async()=>{ if(!confirm('Delete every job for this profile? Your profile stays.')) return;
     P().jobs=[]; RANGE=null; await save(); render(); };
   $('#btnKey').onclick=()=>keyDialog(()=>render());
@@ -2656,11 +2522,11 @@ function startHrSearch(i, ctx){
             status:'starting…', state:'running', profileId:DB.current, key:keyOf(j), result:null };
   TASKS.push(t); renderTasks();
   findHrContacts(j.company, ctx, s=>{ t.status=s; renderTasks(); })
-    .then(res=>{ t.state='done'; t.result=res.list; t.judged=res.judged;
-      t.status=res.list.length+' worth looking at'+(res.judged?'':' (keyword match — the model was unavailable)');
+    .then(res=>{ t.state='done'; t.result=res.list;
+      t.status=res.list.length+' worth looking at';
       renderTasks(); })
     .catch(e=>{
-      if(e.message==='NEEDAPIFY'){ dropTask(t.id); apifyDialog(()=>startHrSearch(i,ctx)); return; }
+      if(e.message==='NEEDAPIFY'){ dropTask(t.id); keyDialog(()=>startHrSearch(i,ctx)); return; }
       // A failed run is still worth a couple of cents of context, so say what
       // went wrong rather than silently dropping the toast.
       t.state='error'; t.status=e.message; renderTasks();
@@ -2713,25 +2579,58 @@ function noteDialog(i){
     await save(); d.remove(); render(); };
 }
 
-async function draftPitch(i,isChase){
-  const p=P(), j=p.jobs[i]; if(!j) return;
-  const prof=p.profile;
-  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
-  const d=modal(`<div class="eyebrow">Outreach</div><h2 style="margin:6px 0 14px">${esc(j.title)} · ${esc(j.company)}</h2><p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
-  try{
-    const txt=await claude(
-`Write a short cold outreach message for a job seeker.
-
-WHO THEY ARE
+/* Who the message is from. Identical in both drafters bar the heading and
+   whether the skills line is worth the tokens. */
+const senderBlock=(prof,raw,heading,skills)=>`${heading}
 Name: ${prof.name}
 Based in: ${prof.location||''}
 In short: ${prof.headline||''}
 Real strengths: ${(prof.strengths||[]).join('; ')}
-${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
-Skills: ${(prof.hard_skills||[]).join(', ')}
+${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}${skills?`
+Skills: ${(prof.hard_skills||[]).join(', ')}`:''}
 
 FULL PROFILE (source of truth — invent nothing beyond this):
-${String(p.raw||'').slice(0,9000)}
+${String(raw||'').slice(0,9000)}`;
+
+/* Draft a message, show it, let them copy it. The two drafters below differ
+   only in the prompt they build and the buttons they want alongside Copy. */
+async function draftMessage(o){
+  const head=`<div class="eyebrow">${o.eyebrow}</div>
+    <h2 style="margin:6px 0 14px">${o.head}</h2>`;
+  const d=modal(head+`<p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
+  try{
+    const txt=await claude(o.prompt, o.maxTok);
+    d.querySelector('.box').innerHTML=head+`
+      <textarea id="msgTxt" rows="${o.rows}">${esc(txt)}</textarea>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn-go btn-sm" id="msgCopy">Copy</button>
+        ${(o.extras||[]).map(x=>`<button class="btn-sm" id="${x.id}">${x.label}</button>`).join('')}
+        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
+    const box=()=>d.querySelector('#msgTxt');
+    d.querySelector('#msgCopy').onclick=()=>{ box().select();
+      navigator.clipboard.writeText(box().value).then(()=>{ d.querySelector('#msgCopy').textContent='Copied'; },()=>{}); };
+    (o.extras||[]).forEach(x=>{ const b=d.querySelector('#'+x.id); if(b) b.onclick=()=>x.run(box().value, d); });
+  }catch(e){
+    d.remove();
+    if(e.message==='NEEDKEY'){ keyDialog(o.retry); return; }
+    modal(`<div class="eyebrow">${o.eyebrow}</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
+  }
+}
+
+async function draftPitch(i,isChase){
+  const p=P(), j=p.jobs[i]; if(!j) return;
+  const prof=p.profile;
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
+  return draftMessage({
+    eyebrow:'Outreach', head:`${esc(j.title)} · ${esc(j.company)}`, rows:10, maxTok:1000,
+    retry:()=>draftPitch(i,isChase),
+    extras:[{id:'msgSave', label:'Save to notes', run:async(text)=>{
+      j.notes=(j.notes?j.notes+' | ':'')+text;
+      j.pitch_sent='Drafted'; await save(); render(); }}],
+    prompt:`Write a short cold outreach message for a job seeker.
+
+${senderBlock(prof,p.raw,'WHO THEY ARE',true)}
 
 TARGET COMPANY: ${j.company}
 TARGET ROLE: ${j.title}
@@ -2757,25 +2656,7 @@ Rules:
 - Plain language. No buzzwords, no em-dashes, no "passionate about".
 - Invent nothing not in the profile above.
 
-Return only the message text.`, 1000);
-    d.querySelector('.box').innerHTML=`<div class="eyebrow">Outreach</div>
-      <h2 style="margin:6px 0 14px">${esc(j.title)} · ${esc(j.company)}</h2>
-      <textarea id="pitchTxt" rows="10">${esc(txt)}</textarea>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn-go btn-sm" id="pitchCopy">Copy</button>
-        <button class="btn-sm" id="pitchSave">Save to notes</button>
-        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
-    d.querySelector('#pitchCopy').onclick=()=>{ const t=d.querySelector('#pitchTxt'); t.select();
-      navigator.clipboard.writeText(t.value).then(()=>{ d.querySelector('#pitchCopy').textContent='Copied'; },()=>{}); };
-    d.querySelector('#pitchSave').onclick=async()=>{
-      j.notes=(j.notes?j.notes+' | ':'')+d.querySelector('#pitchTxt').value;
-      j.pitch_sent='Drafted'; await save(); render(); d.remove(); };
-  }catch(e){
-    d.remove();
-    if(e.message==='NEEDKEY'){ keyDialog(()=>draftPitch(i)); return; }
-    modal(`<div class="eyebrow">Outreach</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
-  }
+Return only the message text.`});
 }
 
 /* One person, one LinkedIn InMail. Separate from draftPitch because that one
@@ -2788,20 +2669,14 @@ async function draftInmail(i,ci){
   const p=P(), j=p.jobs[i]; if(!j) return;
   const c=listOf(j,'contacts')[ci]; if(!c) return;
   const prof=p.profile;
-  const d=modal(`<div class="eyebrow">InMail draft</div><h2 style="margin:6px 0 14px">${esc(c.name||'them')} · ${esc(j.company)}</h2><p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
-  try{
-    const txt=await claude(
-`Write a short LinkedIn InMail message from a job seeker to one specific person.
+  return draftMessage({
+    eyebrow:'InMail draft', head:`${esc(c.name||'them')} · ${esc(j.company)}`, rows:8, maxTok:700,
+    retry:()=>draftInmail(i,ci),
+    extras: c.linkedin ? [{id:'msgOpen', label:'Open their profile',
+      run:()=>window.open(c.linkedin,'_blank','noopener')}] : [],
+    prompt:`Write a short LinkedIn InMail message from a job seeker to one specific person.
 
-WHO IT'S FROM
-Name: ${prof.name}
-Based in: ${prof.location||''}
-In short: ${prof.headline||''}
-Real strengths: ${(prof.strengths||[]).join('; ')}
-${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}`:''}
-
-FULL PROFILE (source of truth — invent nothing beyond this):
-${String(p.raw||'').slice(0,9000)}
+${senderBlock(prof,p.raw,"WHO IT'S FROM",false)}
 
 WHO IT'S TO: ${c.name||'(name unknown)'}${c.role?', '+c.role:''} at ${j.company}
 
@@ -2821,23 +2696,7 @@ Rules:
 - Plain language. No buzzwords, no em-dashes, no "passionate about".
 - Invent nothing not in the profile above.
 
-Return only the message text.`, 700);
-    d.querySelector('.box').innerHTML=`<div class="eyebrow">InMail draft</div>
-      <h2 style="margin:6px 0 14px">${esc(c.name||'them')} · ${esc(j.company)}</h2>
-      <textarea id="inmailTxt" rows="8">${esc(txt)}</textarea>
-      <div class="btn-row" style="margin-top:12px">
-        <button class="btn-go btn-sm" id="inmailCopy">Copy</button>
-        ${c.linkedin?`<button class="btn-sm" id="inmailOpen">Open their profile</button>`:''}
-        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
-    d.querySelector('#inmailCopy').onclick=()=>{ const t=d.querySelector('#inmailTxt'); t.select();
-      navigator.clipboard.writeText(t.value).then(()=>{ d.querySelector('#inmailCopy').textContent='Copied'; },()=>{}); };
-    if(c.linkedin) d.querySelector('#inmailOpen').onclick=()=>window.open(c.linkedin,'_blank','noopener');
-  }catch(e){
-    d.remove();
-    if(e.message==='NEEDKEY'){ keyDialog(()=>draftInmail(i,ci)); return; }
-    modal(`<div class="eyebrow">InMail draft</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
-  }
+Return only the message text.`});
 }
 
 document.addEventListener('click',async e=>{
