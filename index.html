@@ -140,6 +140,29 @@
   .main{padding:20px 22px 60px;min-width:0}
   .sheet-head{display:none}
 
+  /* Sidebar disclosures. Everything in this column is either something you do
+     every session (pick a direction, run a search) or something you do twice a
+     year (export, trim, rotate a key), and all of it was drawn at one weight.
+     The rare half now sits behind one of these. Native <details>, so the open
+     and closed states cost no script. */
+  .fold{border:1px solid var(--line);border-radius:5px;background:var(--panel2);margin-top:12px}
+  .fold > summary{list-style:none;cursor:pointer;padding:9px 11px;font-size:12.5px;
+    display:flex;align-items:center;gap:8px;color:var(--text)}
+  .fold > summary::-webkit-details-marker{display:none}
+  .fold > summary::after{content:'';width:6px;height:6px;margin-left:auto;
+    border-right:1.5px solid var(--muted);border-bottom:1.5px solid var(--muted);
+    transform:translateY(-2px) rotate(45deg);transition:transform .16s}
+  .fold[open] > summary::after{transform:translateY(1px) rotate(-135deg)}
+  .fold:hover{border-color:var(--cool)}
+  .fold > .foldbody{padding:2px 11px 12px}
+  /* Scoring runs on its own, so its ordinary state is a fact to read rather
+     than a button to press. The button lives in the fold, for the two cases
+     that need it: auto switched off, or a backlog past the auto cap. */
+  .sidestat{display:flex;align-items:center;gap:8px;font-size:12px;
+    color:var(--muted);padding:2px 0 4px}
+  .sdot{width:6px;height:6px;border-radius:50%;background:var(--dim);flex-shrink:0}
+  .sdot.on{background:var(--good)}
+
   /* ── narrow screens ──
      This column used to sit BELOW the job list: the old rule was
      .main{order:1}.side{order:2}, which on a phone put every control — search,
@@ -177,7 +200,7 @@
       position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
     .main{padding-bottom:96px}
     /* Everything in the sheet is a touch target now, not a pointer target. */
-    .side button,.side select,.side .drop{min-height:44px}
+    .side button,.side select,.side .drop,.side summary{min-height:44px}
     #toolbar{display:flex}
     #scrim{display:block}
   }
@@ -485,6 +508,10 @@ let RANGE = null, TAB = 'map', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
+/* Which sidebar disclosures are open. Held here rather than left as DOM state
+   because render() rebuilds #root from scratch: a panel that shut itself every
+   time you used something inside it would be worse than no panel at all. */
+let SIDE_OPEN = { add:false, score:false, data:false };
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
 /* Where to search. null means nobody has chosen, which reads as the profile's
    own location -- so the box arrives filled in. Held here rather than left in
@@ -2480,6 +2507,11 @@ function renderFollowups(){
 }
 
 function renderApp(){
+  /* Read the disclosures back before the markup that replaces them is built.
+     The toggle event fires asynchronously, so a render triggered promptly after
+     a click would run before it and rebuild the panel shut -- which is the one
+     thing SIDE_OPEN exists to stop. The DOM is the truth; ask it here. */
+  document.querySelectorAll('[data-fold]').forEach(d=>{ SIDE_OPEN[d.dataset.fold]=d.open; });
   const p=P(), prof=p.profile;
   const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const scored=p.jobs.filter(isScored), inr=scored.filter(inRange);
@@ -2522,61 +2554,76 @@ function renderApp(){
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
       </div>
-      <div class="block"><span class="eyebrow">Find new jobs</span>
+      <div class="block"><span class="eyebrow">Find work</span>
         <label class="lab">Location</label>
         <input type="text" id="sqLoc" placeholder="anywhere"
           value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
         <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
         <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
           ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
-        <p class="hint">${PORTALS.length} general portals — LinkedIn, Upwork, Indeed and the rest — plus this field's own registries, all through Google in one run.</p>
-        <button class="btn-go btn-sm" id="btnSuggest" style="width:100%;margin-top:10px" ${busy?'disabled':''}>
-          Suggest companies for me</button>
-        <p class="hint">Names the places worth approaching, then checks which are hiring. Start here if you don't know who to target.</p>
-        <button class="btn-sm" id="btnAts" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
-          Pull a company I already know</button>
-        <p class="hint">Free and live \u2014 no token needed. Full job descriptions from the company's own feed.</p>
         ${(trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
-             <p class="hint">This field's own registries, searched alongside the portals. These are the ones a general portal misses.</p>`
-          : `<p class="hint">No specialist registries for this track — the general portals are the whole search here.</p>`}
+             <p class="hint">${PORTALS.length} general portals plus these registries, through Google in one run.</p>`
+          : `<p class="hint">${PORTALS.length} general portals through Google. This track named no specialist registries.</p>`}
         <div id="searchInfo" class="hint"></div>
-      </div>
-      <div class="block"><span class="eyebrow">Add jobs</span>
-        <div class="drop" id="dropCsv">Drop a <b>jobs .csv</b><br>or click to choose</div>
-        <input type="file" id="fileCsv" accept=".csv,.txt" style="display:none">
-        <div class="btn-row" style="margin-top:8px">
-          <button class="btn-sm" id="btnPaste" style="flex:1">Add by hand</button>
-          <button class="btn-sm" id="btnCold" style="flex:1">Add a company</button></div>
-        <div id="csvInfo" class="hint"></div>
+
+        <details class="fold" data-fold="add" ${SIDE_OPEN.add?'open':''}>
+          <summary>Other ways to add</summary>
+          <div class="foldbody">
+            <button class="btn-go btn-sm" id="btnSuggest" style="width:100%" ${busy?'disabled':''}>
+              Suggest companies for me</button>
+            <p class="hint">Names the places worth approaching, then checks which are hiring. Start here if you don't know who to target.</p>
+            <button class="btn-sm" id="btnAts" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
+              Pull a company I already know</button>
+            <p class="hint">Free and live \u2014 no token needed. Full job descriptions from the company's own feed.</p>
+            <div class="drop" id="dropCsv" style="margin-top:10px">Drop a <b>jobs .csv</b><br>or click to choose</div>
+            <input type="file" id="fileCsv" accept=".csv,.txt" style="display:none">
+            <div class="btn-row" style="margin-top:8px">
+              <button class="btn-sm" id="btnPaste" style="flex:1">Add by hand</button>
+              <button class="btn-sm" id="btnCold" style="flex:1">Add a company</button></div>
+            <div id="csvInfo" class="hint"></div>
+          </div>
+        </details>
       </div>
       <div class="block"><span class="eyebrow">Score</span>
-        <button class="btn-go" id="btnScore" style="width:100%" ${busy?'disabled':''}>
-          ${busy?'<span class="spin"></span> Scoring…':'Score new jobs'}</button>
+        <div class="sidestat">
+          <span class="sdot ${AUTO&&!busy?'on':''}"></span>
+          <span style="flex:1">${busy?'Scoring\u2026':AUTO?'Scoring new jobs automatically':'Auto-scoring is off'}</span>
+          <span class="num">${scored.length}/${p.jobs.length}</span>
+        </div>
         ${busy?'<div class="prog"><i id="progBar" style="width:0"></i></div>':''}
         <div id="scoreInfo" class="hint"></div>
-        <button class="btn-sm" id="btnRescore" style="margin-top:8px;width:100%" ${busy?'disabled':''}>Rescore everything</button>
-        <div class="hint">Rescore after changing direction — the same jobs will land in different places.</div>
-        <label class="hint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
-          <input type="checkbox" id="cbAuto" ${AUTO?'checked':''} style="accent-color:var(--signal);cursor:pointer">
-          Score new jobs automatically as they arrive</label>
+        <details class="fold" data-fold="score" ${SIDE_OPEN.score?'open':''}>
+          <summary>Scoring controls</summary>
+          <div class="foldbody">
+            <button class="btn-go btn-sm" id="btnScore" style="width:100%" ${busy?'disabled':''}>
+              ${busy?'<span class="spin"></span> Scoring…':'Score new jobs'}</button>
+            <button class="btn-sm" id="btnRescore" style="margin-top:8px;width:100%" ${busy?'disabled':''}>Rescore everything</button>
+            <p class="hint">Rescore after changing direction — the same jobs will land in different places.</p>
+            <label class="hint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
+              <input type="checkbox" id="cbAuto" ${AUTO?'checked':''} style="accent-color:var(--signal);cursor:pointer">
+              Score new jobs automatically as they arrive</label>
+          </div>
+        </details>
       </div>
-      <div class="block"><span class="eyebrow">Data</span>
-        <div class="btn-row">
-          <button class="btn-go btn-sm" id="btnData" style="width:100%">Backup &amp; transfer</button></div>
-        <div class="btn-row" style="margin-top:7px">
-          <button class="btn-sm" id="btnKey" style="flex:1">${KEY?'Keys':'Set up keys'}</button>
-          <button class="btn-sm" id="btnExport" style="flex:1">Export CSV</button></div>
-        <div class="btn-row" style="margin-top:7px">
-          <button class="btn-sm" id="btnTrim" style="width:100%">Trim to top ${KEEP_TOP}</button></div>
-        <p class="hint">Bins the scored roles you never acted on that rank below the top ${KEEP_TOP}. Anything you applied to, contacted or logged against is kept whatever it scored.</p>
-        <div class="btn-row" style="margin-top:8px">
-          <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
-        ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
-          <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
-        <p class="hint">Erases every profile, job, CV and note stored against ${esc(userName()||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
-        <div class="hint">Stored in this browser only \u2014 clearing site data wipes it. Take a backup.</div>
-      </div>
+      <details class="fold block" data-fold="data" ${SIDE_OPEN.data?'open':''}>
+        <summary>Data &amp; keys</summary>
+        <div class="foldbody">
+          <button class="btn-go btn-sm" id="btnData" style="width:100%">Backup &amp; transfer</button>
+          <div class="btn-row" style="margin-top:7px">
+            <button class="btn-sm" id="btnKey" style="flex:1">${KEY?'Keys':'Set up keys'}</button>
+            <button class="btn-sm" id="btnExport" style="flex:1">Export CSV</button></div>
+          <div class="btn-row" style="margin-top:7px">
+            <button class="btn-sm" id="btnTrim" style="width:100%">Trim to top ${KEEP_TOP}</button></div>
+          <p class="hint">Bins the scored roles you never acted on that rank below the top ${KEEP_TOP}. Anything you applied to, contacted or logged against is kept whatever it scored.</p>
+          <div class="btn-row" style="margin-top:8px">
+            <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
+          ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
+            <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
+          <p class="hint">Erases every profile, job, CV and note stored against ${esc(userName()||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
+          <p class="hint">${CLOUD&&USER?'Saved to your account and to this browser.':'Stored in this browser only \u2014 clearing site data wipes it. Take a backup.'}</p>
+        </div>
+      </details>
     </div>
     <div class="main">
       ${(()=>{ const n=nextStep(); return n?`<div class="next ${n.cls}">
@@ -2655,7 +2702,10 @@ function renderApp(){
   $('#btnPaste').onclick=pasteJobDialog;
   $('#btnScore').onclick=()=>runScoring(false);
   $('#btnRescore').onclick=()=>{ if(confirm('Rescore every job? Existing scores get overwritten.')) runScoring(true); };
-  $('#btnReset').onclick=()=>{ RANGE=null; render(); };
+  // Only rendered on the map tab. Unguarded, this threw on every other tab --
+  // and because these bindings are one straight run, everything below it went
+  // unbound too: export, trim, clear, the auto-score box, keys, search.
+  if($('#btnReset')) $('#btnReset').onclick=()=>{ RANGE=null; render(); };
   $('#btnExport').onclick=()=>{
     if(!P().jobs.length){ alert('Nothing to export yet.'); return; }
     downloadFile('job_tracker.csv', toCSV(P().jobs,COLS), 'text/csv'); };
