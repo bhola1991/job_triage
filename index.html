@@ -570,14 +570,15 @@ let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'' });
 let ONB = blankOnb();
-let RANGE = null, TAB = 'map', busy = false;
+let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
-/* Which sidebar disclosures are open. Held here rather than left as DOM state
-   because render() rebuilds #root from scratch: a panel that shut itself every
-   time you used something inside it would be worse than no panel at all. */
-let SIDE_OPEN = { add:false, score:false, data:false };
+/* Which disclosures are open, sidebar and lists alike. Held here rather than
+   left as DOM state because render() rebuilds #root from scratch: a panel that
+   shut itself every time you used something inside it would be worse than no
+   panel at all. Keys appear as folds do; an unknown one reads as closed. */
+let FOLDS = { add:false, score:false, data:false };
 
 /* ═══ theme ═══
    'auto' follows the operating system, which is the right default because the
@@ -609,7 +610,10 @@ if(window.matchMedia){
   if(mq.addEventListener) mq.addEventListener('change', onSys);
   else if(mq.addListener) mq.addListener(onSys);
 }
-let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
+/* Three different questions, deliberately kept apart. 'rank' is is this worth
+   doing, 'new' is when did this reach me, 'posted' is when did the employer
+   list it -- and the last two are not the same thing at all. */
+let SORT = 'rank';       // 'rank' | 'new' (added) | 'posted' (listed)
 /* Where to search. null means nobody has chosen, which reads as the profile's
    own location -- so the box arrives filled in. Held here rather than left in
    the input because starting a search re-renders the sidebar, and a control
@@ -621,7 +625,6 @@ let WHERE = null;
    before anything appears. Nobody scrolls 800 cards; they work the top and
    search for the rest. */
 const LIST_CAP = 60;
-let SHOWN = LIST_CAP;
 /* Long-running work lives here rather than behind a modal, so the app stays
    usable while an Apify run polls. Deliberately not persisted: a run belongs
    to the page that started it, and a task restored after a reload would have
@@ -1836,6 +1839,40 @@ const isOpen = j => stOf(j)!=='closed';
    the total kept can exceed 50, and the confirm says so plainly rather than
    quietly deleting something you would want back. */
 const KEEP_TOP = 50;
+
+/* ═══ retention ═══
+   A tracker that only ever grows stops being a list of what to do and becomes
+   an archive to scroll past. The rows safe to drop are the ones nothing ever
+   happened to: they are not a record of anything, because there is nothing to
+   record. Ten days is the window -- a posting you have not touched in that time
+   is one you decided against without saying so, and the posting itself has
+   probably gone.
+
+   What is never dropped is anything carrying history. A row you applied to,
+   messaged someone at, or logged a note against is the ONLY record that any of
+   it happened, and it exists nowhere else -- the same reason trimPlan() refuses
+   to bin it however badly it scores.
+
+   isTouched() cannot be reused here. It counts any stage other than 'new' as
+   touched, so a job closed on sight would be protected by it, which is exactly
+   backwards: those are the rows this is for. */
+const KEEP_UNTOUCHED_DAYS = 10;
+const hasHistory = j =>
+     String(j.pitch_sent||'').trim().toLowerCase()==='yes'
+  || !!String(j.date_applied||'').trim()
+  || listOf(j,'contacts').length>0
+  || listOf(j,'events').length>0;
+/* No 'added' means the row predates the field and its age cannot be known, so
+   it is left alone rather than guessed at. */
+const staleUntouched = j => !hasHistory(j) && !!j.added
+  && dayDiff(j.added, today()) > KEEP_UNTOUCHED_DAYS;
+let PURGED = 0;
+function purgeUntouched(){
+  const p=P(); if(!p||!p.jobs) return 0;
+  const n=p.jobs.length;
+  p.jobs=p.jobs.filter(j=>!staleUntouched(j));
+  return n-p.jobs.length;
+}
 function isTouched(j){
   return stOf(j)!=='new'
       || String(j.pitch_sent||'').trim().toLowerCase()==='yes'
@@ -2364,7 +2401,20 @@ function byNewest(list){
     return b.i-a.i;
   });
 }
-function sortedAll(){ const r=ranked(); return SORT==='new' ? byNewest(r) : r; }
+/* Freshest first. Rank says whether a job is worth doing; age says whether it
+   is still there, and an eight-week-old posting is usually filled however well
+   it scores. Undated rows sort last: not knowing when something was posted is
+   not the same as it being old. */
+function byPosted(list){
+  return list.slice().sort((a,b)=>{
+    const x=ageOf(a.j), y=ageOf(b.j);
+    if(x===null&&y===null) return rankOf(b.j)-rankOf(a.j);
+    if(x===null) return 1;
+    if(y===null) return -1;
+    return (x-y) || (rankOf(b.j)-rankOf(a.j));
+  });
+}
+const sortList = rows => SORT==='new' ? byNewest(rows) : SORT==='posted' ? byPosted(rows) : rows;
 
 function flagHtml(s){
   const good=['strong_fit','non_traditional_friendly','rare_combination_fit'];
@@ -2372,16 +2422,6 @@ function flagHtml(s){
   return String(s||'').split(',').filter(Boolean).map(f=>
     `<span class="flag ${good.includes(f)?'g':bad.includes(f)?'r':''}">${esc(f.replace(/_/g,' '))}</span>`).join('');
 }
-/* Draws the first SHOWN of a list, plus the control that lengthens it. */
-function cappedCards(rows){
-  const shown = rows.slice(0, SHOWN), left = rows.length - shown.length;
-  return shown.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')
-    + (left>0 ? `<div class="btn-row" style="margin:14px 0 4px">
-        <button class="btn-sm" id="btnMore">Show ${Math.min(LIST_CAP,left)} more</button>
-        <span style="color:var(--dim);font-size:12px;align-self:center">${left} not shown</span>
-      </div>` : '');
-}
-
 function jobCard(j,i,hi){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j);
   const cls = st==='live' ? 'st-live' : due ? 'st-due' : 'ch-'+ch;
@@ -2488,114 +2528,92 @@ function ageChip(j){
    an eight-week-old posting is usually filled or abandoned however well it
    scores. Undated rows are listed at the end rather than dropped: not knowing
    when something was posted is not the same as it being old. */
-function renderFresh(){
-  const p=P();
-  const all=p.jobs.map((j,i)=>({j,i})).filter(x=>inRange(x.j));
-  const dated=all.filter(x=>ageOf(x.j)!==null).sort((a,b)=>{
-    const d=ageOf(a.j)-ageOf(b.j);
-    return d || rankOf(b.j)-rankOf(a.j);   // same age: better job first
-  });
-  const undated=all.filter(x=>ageOf(x.j)===null);
-  if(!all.length) return `<div class="empty"><b>Nothing to show</b>Add some jobs first.</div>`;
-  if(!dated.length) return `<div class="empty"><b>No posting dates yet</b>
-    None of these ${all.length} rows carry a date. ATS pulls bring one with them and board searches usually do; for everything else, scoring estimates a window from the description.</div>`;
-  // Dated first: an undated row is the least useful thing this tab can show.
-  const dShown=dated.slice(0,SHOWN);
-  const uShown=undated.slice(0,Math.max(0,SHOWN-dShown.length));
-  const hiddenHere=(dated.length-dShown.length)+(undated.length-uShown.length);
-  const week=dated.filter(x=>ageOf(x.j)<=7).length;
-  const fortnight=dated.filter(x=>ageOf(x.j)<=14).length;
-  const old=dated.filter(x=>ageOf(x.j)>60).length;
-  return `<div class="stats">
-      <div class="stat"><div class="k num" style="color:var(--posted)">${week}</div><div class="l">this week</div></div>
-      <div class="stat"><div class="k num">${fortnight}</div><div class="l">last 14 days</div></div>
-      <div class="stat"><div class="k num" style="color:var(--dim)">${old}</div><div class="l">over 60 days</div></div>
-      <div class="stat"><div class="k num" style="color:var(--dim)">${undated.length}</div><div class="l">undated</div></div>
-    </div>
-    <p style="color:var(--muted);font-size:12px;margin:0 0 16px">Newest posting first. An italic age is estimated from the description rather than stated by the source \u2014 hover any of them for the window and where it came from.</p>
-    ${sect('','Freshest first','Recency is not quality \u2014 check the score before you spend a morning on one. But a stale posting is often already filled.',dShown)}
-    ${sect('','Date unknown','No source date and nothing datable in the description. Age here is genuinely unknown, not old.',uShown)}
-    ${hiddenHere>0?`<div class="btn-row" style="margin:14px 0 4px">
-        <button class="btn-sm" id="btnMore">Show ${Math.min(LIST_CAP,hiddenHere)} more</button>
-        <span style="color:var(--dim);font-size:12px;align-self:center">${hiddenHere} not shown</span>
-      </div>`:''}`;
-}
-
-/* One section of job cards. Three views render these and had a private copy each. */
+/* One section of job cards. Every list view renders these and had a private
+   copy each. */
 const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
     <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
     <p class="sect-sub">${sub}</p>
     ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
 
-/* ═══ Work Today ═══
-   This replaced a "Today" tab whose three sections were, in order: replies,
-   overdue chases, and a hardcoded top ten of new work. The first two were
-   already duplicated verbatim in Follow-ups, and the third was a worse version
-   of this. Nothing was lost by deleting it: the priority it encoded — that a
-   live conversation outranks any new application — lives in the nextStep
-   banner, which sits above every tab and checks follow-ups first.
+/* The same section, folded away: rows that are real but not what you came for
+   -- under the bar, not yet scored, already closed. Reachable without being
+   scrolled past. Capped, because a fold can hold hundreds. */
+const foldSect=(key,title,sub,rows)=>rows.length?`<details class="fold" data-fold="${key}" ${FOLDS[key]?'open':''} style="margin-bottom:26px">
+    <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
+    <div class="foldbody">
+      <p class="sect-sub">${sub}</p>
+      ${rows.slice(0,LIST_CAP).map(x=>jobCard(x.j,x.i)).join('')}
+      ${rows.length>LIST_CAP?`<p class="hint">${rows.length-LIST_CAP} more not shown. Narrow with the channel filter, or sort to bring what you want to the top.</p>`:''}
+    </div></details>`:'';
 
-   What this answers is narrower and more useful: of everything scored, which
-   are actually worth an application today. Two bands, because "worth doing"
-   and "worth doing first" are different answers and a flat list of forty gives
-   neither.
+/* ═══ Unapplied ═══
+   Everything still to decide on, in the order worth deciding it. Two bands
+   above the bar, because "worth doing" and "worth doing first" are different
+   answers and a flat list of forty gives neither. Under the bar and not-yet-
+   scored both fold away rather than vanish: a low score is a judgement, and an
+   unscored row has not been judged at all.
 
-   Deliberately ignores the map's drag-selection. A box drawn on the map
-   yesterday silently shortening this list tomorrow morning would be the kind
-   of invisible state that makes a tool untrustworthy. The Posted/Cold toggle
-   is honoured because it is visible in the tab bar, right there, always. */
+   Honours the channel filter, which is right there in the header. Ignores the
+   map's drag-selection on purpose -- a box drawn yesterday quietly shortening
+   this list tomorrow morning is the kind of invisible state that makes a tool
+   untrustworthy. */
 const WORK_FIT=65, WORK_REACH=45, STRONG_FIT=75, STRONG_REACH=55;
-const worthDoing = j => isScored(j) && isOpen(j) && stOf(j)==='new'
-  && fitOf(j)>=WORK_FIT && reachOf(j)>=WORK_REACH;
 
-function renderWork(){
+function renderUnapplied(){
   const p=P();
-  // Channel filter yes, RANGE no — see above.
-  const pool=p.jobs.map((j,i)=>({j,i}))
-    .filter(x=>worthDoing(x.j) && (CHFILT==='all'||chOf(x.j)===CHFILT))
-    .sort((a,b)=>rankOf(b.j)-rankOf(a.j));
-  const strong=pool.filter(x=>fitOf(x.j)>=STRONG_FIT&&reachOf(x.j)>=STRONG_REACH);
-  const rest  =pool.filter(x=>!strong.includes(x));
-  const scored=p.jobs.filter(isScored).length;
-  const unscored=p.jobs.length-scored;
+  const mine=p.jobs.map((j,i)=>({j,i}))
+    .filter(x=>isOpen(x.j) && stOf(x.j)==='new' && (CHFILT==='all'||chOf(x.j)===CHFILT));
+  if(!mine.length) return `<div class="empty"><b>Nothing waiting</b>
+    Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>`;
 
-  const rule=`<p style="color:var(--muted);font-size:12px;margin:0 0 16px">Everything scored at <b>fit ${WORK_FIT}+</b> and <b>reachability ${WORK_REACH}+</b> that you haven't actioned yet. Not filtered by the map selection \u2014 this is the whole list, every day.</p>`;
+  const scored=mine.filter(x=>isScored(x.j));
+  const unscored=mine.filter(x=>!isScored(x.j));
+  const isStrong=x=>fitOf(x.j)>=STRONG_FIT&&reachOf(x.j)>=STRONG_REACH;
+  const overBar=x=>fitOf(x.j)>=WORK_FIT&&reachOf(x.j)>=WORK_REACH;
+  const strong=sortList(scored.filter(isStrong));
+  const worth =sortList(scored.filter(x=>!isStrong(x)&&overBar(x)));
+  const below =sortList(scored.filter(x=>!overBar(x)));
 
-  if(!pool.length){
-    return `<div class="empty"><b>${scored?'Nothing clears the bar right now':'Nothing scored yet'}</b>
-      ${scored
-        ? `${scored} scored, none of them at fit ${WORK_FIT}+ and reachability ${WORK_REACH}+ and still untouched. Either they have all been actioned, or this batch was weak \u2014 pull in more roles.`
-        : `Add some jobs and score them.${unscored?` ${unscored} are waiting to be scored.`:''}`}</div>`;
-  }
-  return `<div class="stats">
-      <div class="stat"><div class="k num" style="color:var(--signal)">${strong.length}</div><div class="l">do these first</div></div>
-      <div class="stat"><div class="k num">${rest.length}</div><div class="l">worth a shot</div></div>
-      <div class="stat"><div class="k num" style="color:var(--dim)">${unscored}</div><div class="l">unscored</div></div>
+  return `<div class="listhead">
+      <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
+      <div class="spacer"></div>
+      <span class="eyebrow">Sort</span>
+      <div class="segs">
+        <button class="seg ${SORT==='rank'?'on':''}" data-sort="rank">Best</button>
+        <button class="seg ${SORT==='posted'?'on':''}" data-sort="posted">Recently posted</button>
+        <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Recently added</button>
+      </div>
     </div>
-    ${rule}
     ${sect('live','Do these first',`Fit ${STRONG_FIT}+ and reachability ${STRONG_REACH}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
-    ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',rest)}`;
+    ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
+    ${(!strong.length&&!worth.length)?`<div class="empty"><b>Nothing clears the bar</b>
+      ${scored.length?`${scored.length} scored here, none at fit ${WORK_FIT}+ and reachability ${WORK_REACH}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
+    ${foldSect('below','Below the bar',`Scored under fit ${WORK_FIT} or reachability ${WORK_REACH}. Kept, because a score is a judgement rather than a fact.`,below)}
+    ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}`;
 }
 
-/* ═══ follow-ups ═══
-   Everything already sent, which is a different question from "what should I
-   do today". Today drops a thing off its list the moment it isn't due; this
-   keeps it, because the pipeline you've already paid for is the part most
-   people lose track of. Ordered by how long it has been silent. */
-function renderFollowups(){
+/* ═══ Applied — review ═══
+   Everything already sent, which is a different question from what to do next.
+   Cold approaches land here too: the app calls those contacted rather than
+   applied, but the review is the same one. Ordered by how long it has been
+   silent, because that is what decides whether to chase.
+
+   Closed sits folded at the bottom. Anything that got this far carries history
+   -- who you spoke to, what they said -- so it is never deleted, only tidied
+   away. Rows closed without ever being sent never reach here: they carry
+   nothing, and retention clears them on its own. */
+function renderApplied(){
   const p=P();
-  const all=p.jobs.map((j,i)=>({j,i}));
+  const all=p.jobs.map((j,i)=>({j,i})).filter(x=>CHFILT==='all'||chOf(x.j)===CHFILT);
   const bySilent=(a,b)=>daysSilent(b.j)-daysSilent(a.j);
   const due    =all.filter(x=>isDue(x.j)).sort(bySilent);
   const live   =all.filter(x=>stOf(x.j)==='live').sort(bySilent);
   const waiting=all.filter(x=>stOf(x.j)==='sent'&&!isDue(x.j)).sort(bySilent);
-  const closed =all.filter(x=>stOf(x.j)==='closed').length;
+  const closed =all.filter(x=>stOf(x.j)==='closed').sort(bySilent);
 
-
-  if(!due.length&&!live.length&&!waiting.length){
+  if(!due.length&&!live.length&&!waiting.length&&!closed.length){
     return `<div class="empty"><b>Nothing sent yet</b>
-      Anything you mark applied or contacted lands here, so you can chase it without hunting through the whole list.
-      ${closed?`<br><span style="font-size:12px">${closed} closed.</span>`:''}</div>`;
+      Anything you mark applied or contacted lands here, so you can chase it without hunting through the whole list.</div>`;
   }
   const oldest=[...due,...waiting,...live].reduce((m,x)=>Math.max(m,daysSilent(x.j)),0);
   return `<div class="stats">
@@ -2606,15 +2624,90 @@ function renderFollowups(){
     </div>
     ${sect('due','Overdue a chase',`Past the ${FOLLOWUP_DAYS}-day mark with no reply. One nudge is worth sending; a second rarely is.`,due)}
     ${sect('live','In conversation','Someone replied. Keep these moving before anything else.',live)}
-    ${sect('','Still waiting','Sent recently and not yet due. Nothing to do but leave them alone.',waiting)}`;
+    ${sect('','Still waiting','Sent recently and not yet due. Nothing to do but leave them alone.',waiting)}
+    ${foldSect('closed','Closed','Ended, withdrawn or turned down. Kept for the record \u2014 reopening puts one back in Unapplied.',closed)}`;
+}
+
+/* ═══ Dashboard ═══
+   The three things a list cannot show: the shape of the pipeline, how old the
+   board has got, and what has actually been happening lately. The activity feed
+   is built from the per-job event logs, which until now could only be read one
+   job at a time -- every note, reply and application is already in there. */
+function renderDash(){
+  const p=P(), jobs=p.jobs;
+  if(!jobs.length) return `<div class="empty"><b>Nothing to summarise yet</b>
+    Find some roles and this fills in: what is in the pipeline, how fresh it is, and what you have been doing.</div>`;
+
+  const cnt=st=>jobs.filter(j=>stOf(j)===st).length;
+  const nNew=cnt('new'), nSent=cnt('sent'), nLive=cnt('live'), nClosed=cnt('closed');
+  const dated=jobs.filter(j=>ageOf(j)!==null);
+  const week=dated.filter(j=>ageOf(j)<=7).length;
+  const fortnight=dated.filter(j=>ageOf(j)<=14).length;
+  const stale=dated.filter(j=>ageOf(j)>60).length;
+  const undated=jobs.length-dated.length;
+  const goingSoon=jobs.filter(j=>!hasHistory(j)&&j.added)
+    .filter(j=>{const left=KEEP_UNTOUCHED_DAYS-dayDiff(j.added,today()); return left>=0&&left<=2;}).length;
+
+  const feed=[];
+  jobs.forEach((j,i)=>listOf(j,'events').forEach(e=>feed.push({on:e.on,kind:e.kind,text:e.text,j,i})));
+  feed.sort((a,b)=>String(b.on).localeCompare(String(a.on)));
+
+  const row=(label,n,col)=>{
+    const w=jobs.length?Math.round(n/jobs.length*100):0;
+    return `<div style="display:flex;align-items:center;gap:11px;margin-bottom:8px">
+      <span style="width:96px;font-size:12px;color:var(--muted)">${label}</span>
+      <span style="flex:1;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:${w}%;background:${col}"></i></span>
+      <span class="num" style="width:36px;text-align:right;font-size:12.5px">${n}</span></div>`;
+  };
+
+  return `<div class="sect">
+      <div class="sect-h"><h3>Pipeline</h3><span class="ct">${jobs.length}</span></div>
+      <p class="sect-sub">Where everything stands. A live conversation is worth more than any number of new rows.</p>
+      <div class="card">
+        ${row('Unapplied',nNew,'var(--signal)')}
+        ${row('Sent',nSent,'var(--neutral)')}
+        ${row('In conversation',nLive,'var(--live)')}
+        ${row('Closed',nClosed,'var(--dim)')}
+      </div>
+    </div>
+
+    <div class="sect">
+      <div class="sect-h"><h3>Freshness</h3><span class="ct">${dated.length} dated</span></div>
+      <p class="sect-sub">How old the board has got. A stale posting is usually filled however well it scores \u2014 an italic age on a card was estimated rather than stated.</p>
+      <div class="stats" style="margin-top:0">
+        <div class="stat"><div class="k num" style="color:var(--posted)">${week}</div><div class="l">this week</div></div>
+        <div class="stat"><div class="k num">${fortnight}</div><div class="l">last 14 days</div></div>
+        <div class="stat"><div class="k num" style="color:var(--dim)">${stale}</div><div class="l">over 60 days</div></div>
+        <div class="stat"><div class="k num" style="color:var(--dim)">${undated}</div><div class="l">undated</div></div>
+      </div>
+      <p class="hint" style="margin-top:0">Untouched rows are cleared ${KEEP_UNTOUCHED_DAYS} days after they arrive.${
+        PURGED?` ${PURGED} went on this load.`:''}${
+        goingSoon?` ${goingSoon} due to go within two days \u2014 act on one to keep it.`:''}</p>
+    </div>
+
+    <div class="sect">
+      <div class="sect-h"><h3>Recent activity</h3><span class="ct">${feed.length}</span></div>
+      <p class="sect-sub">Everything you have logged, newest first, across every job.</p>
+      ${feed.length?`<div class="card">${feed.slice(0,14).map(e=>`
+        <div class="ct-row" style="align-items:baseline">
+          <span class="num" style="font-size:11px;color:var(--dim);width:72px;flex-shrink:0">${esc(e.on)}</span>
+          <span class="stage" style="flex-shrink:0">${esc(e.kind)}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:13px">${esc(e.j.company||'\u2014')}<span style="color:var(--muted)"> \u00b7 ${esc(e.j.title||'')}</span></div>
+            ${e.text?`<div style="font-size:12px;color:var(--muted)">${esc(e.text)}</div>`:''}
+          </div>
+          <button class="btn-sm" data-act="open" data-i="${e.i}" style="flex-shrink:0">Open</button>
+        </div>`).join('')}</div>`
+      :`<div class="empty">Nothing logged yet. Marking a job applied, or logging a note on one, writes its first line here.</div>`}
+    </div>`;
 }
 
 function renderApp(){
   /* Read the disclosures back before the markup that replaces them is built.
      The toggle event fires asynchronously, so a render triggered promptly after
      a click would run before it and rebuild the panel shut -- which is the one
-     thing SIDE_OPEN exists to stop. The DOM is the truth; ask it here. */
-  document.querySelectorAll('[data-fold]').forEach(d=>{ SIDE_OPEN[d.dataset.fold]=d.open; });
+     thing FOLDS exists to stop. The DOM is the truth; ask it here. */
+  document.querySelectorAll('[data-fold]').forEach(d=>{ FOLDS[d.dataset.fold]=d.open; });
   const p=P(), prof=p.profile;
   const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const scored=p.jobs.filter(isScored), inr=scored.filter(inRange);
@@ -2623,11 +2716,10 @@ function renderApp(){
   const posted=p.jobs.filter(j=>chOf(j)==='posted').length;
   const cold=p.jobs.filter(j=>chOf(j)==='cold').length;
   const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
-  const followCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
-  const followDue=p.jobs.some(isDue);
+  const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
+  const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
+  const appliedDue=p.jobs.some(isDue);
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
-  const top=ranked().filter(x=>isOpen(x.j)).slice(0,10);
-  const all=sortedAll();
 
   $('#root').innerHTML=`
   <div class="topbar">
@@ -2677,7 +2769,7 @@ function renderApp(){
           : `<p class="hint">${PORTALS.length} general portals through Google. This track named no specialist registries.</p>`}
         <div id="searchInfo" class="hint"></div>
 
-        <details class="fold" data-fold="add" ${SIDE_OPEN.add?'open':''}>
+        <details class="fold" data-fold="add" ${FOLDS.add?'open':''}>
           <summary>Other ways to add</summary>
           <div class="foldbody">
             <button class="btn-go btn-sm" id="btnSuggest" style="width:100%" ${busy?'disabled':''}>
@@ -2703,7 +2795,7 @@ function renderApp(){
         </div>
         ${busy?'<div class="prog"><i id="progBar" style="width:0"></i></div>':''}
         <div id="scoreInfo" class="hint"></div>
-        <details class="fold" data-fold="score" ${SIDE_OPEN.score?'open':''}>
+        <details class="fold" data-fold="score" ${FOLDS.score?'open':''}>
           <summary>Scoring controls</summary>
           <div class="foldbody">
             <button class="btn-go btn-sm" id="btnScore" style="width:100%" ${busy?'disabled':''}>
@@ -2716,7 +2808,7 @@ function renderApp(){
           </div>
         </details>
       </div>
-      <details class="fold block" data-fold="data" ${SIDE_OPEN.data?'open':''}>
+      <details class="fold block" data-fold="data" ${FOLDS.data?'open':''}>
         <summary>Data &amp; keys</summary>
         <div class="foldbody">
           <button class="btn-go btn-sm" id="btnData" style="width:100%">Backup &amp; transfer</button>
@@ -2743,16 +2835,20 @@ function renderApp(){
         <button class="btn-go" id="btnNext" data-next="${esc(n.act)}" ${busy?'disabled':''}>${esc(n.b)}</button>
       </div>`:''; })()}
       <div class="tabs">
-        <div class="tab ${TAB==='map'?'on':''}" data-tab="map">The map</div>
-        <div class="tab ${TAB==='work'?'on':''}" data-tab="work">Work Today</div>
-        <div class="tab ${TAB==='follow'?'on':''}" data-tab="follow">Follow-ups${
-          followCount?` <span class="tabct${followDue?' due':''}">${followCount}</span>`:''}</div>
-        <div class="tab ${TAB==='fresh'?'on':''}" data-tab="fresh">Freshest</div>
-        <div class="tab ${TAB==='all'?'on':''}" data-tab="all">Everything</div>
+        <div class="tab ${TAB==='unapplied'?'on':''}" data-tab="unapplied">Unapplied${
+          unappliedCount?` <span class="tabct">${unappliedCount}</span>`:''}</div>
+        <div class="tab ${TAB==='applied'?'on':''}" data-tab="applied">Applied${
+          appliedCount?` <span class="tabct${appliedDue?' due':''}">${appliedCount}</span>`:''}</div>
+        <div class="tab ${TAB==='map'?'on':''}" data-tab="map">Map</div>
+        <div class="tab ${TAB==='dash'?'on':''}" data-tab="dash">Dashboard</div>
         <div class="spacer"></div>
-        <div class="tab ${CHFILT==='all'?'on':''}" data-ch="all">All</div>
-        <div class="tab ${CHFILT==='posted'?'on':''}" data-ch="posted">Posted ●</div>
-        <div class="tab ${CHFILT==='cold'?'on':''}" data-ch="cold">Cold □</div>
+        <!-- A different kind of control from the four above, so a different
+             shape: these filter what a view shows, they do not change the view. -->
+        <div class="segs" style="margin-bottom:7px">
+          <button class="seg ${CHFILT==='all'?'on':''}" data-ch="all">All</button>
+          <button class="seg ${CHFILT==='posted'?'on':''}" data-ch="posted">Posted ●</button>
+          <button class="seg ${CHFILT==='cold'?'on':''}" data-ch="cold">Cold □</button>
+        </div>
       </div>
       ${TAB!=='map'?'':`
       <div>
@@ -2768,21 +2864,9 @@ function renderApp(){
         ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
       </div>`}
-      ${TAB!=='work'   ? '' : `<div>${renderWork()}</div>`}
-      ${TAB!=='follow' ? '' : `<div>${renderFollowups()}</div>`}
-      ${TAB!=='fresh'  ? '' : `<div>${renderFresh()}</div>`}
-      ${TAB!=='all'    ? '' : `<div>
-        ${all.length?`<div class="listhead">
-            <span style="color:var(--muted);font-size:12px">${all.length} in range</span>
-            <div class="spacer"></div>
-            <span class="eyebrow">Sort</span>
-            <div class="segs">
-              <button class="seg ${SORT==='rank'?'on':''}" data-sort="rank">Best first</button>
-              <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Newest first</button>
-            </div>
-          </div>${cappedCards(all)}`
-          :`<div class="empty"><b>Nothing to show</b>Add jobs and score them.</div>`}
-      </div>`}
+      ${TAB!=='unapplied' ? '' : `<div>${renderUnapplied()}</div>`}
+      ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
+      ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
   </div>
   <div id="scrim"></div>
@@ -2790,15 +2874,14 @@ function renderApp(){
     <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
   </div>`;
 
-  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SHOWN=LIST_CAP; render(); });
-  if($('#btnMore')) $('#btnMore').onclick=()=>{ SHOWN+=LIST_CAP; render(); };
-  document.querySelectorAll('.tab[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
-  document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; SHOWN=LIST_CAP; render(); });
+  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
+  document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
+  document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
   if($('#btnNext')) $('#btnNext').onclick=()=>{
     const a=$('#btnNext').dataset.next;
     if(a==='suggest') return suggestDialog();
     if(a==='score')   return runScoring(false);
-    if(a==='follow'){ TAB='follow'; return render(); }
+    if(a==='follow'){ TAB='applied'; return render(); }
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
   hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
@@ -3778,6 +3861,12 @@ async function afterAuth(){
     DB.current = Object.keys(DB.profiles).find(id=>usable(DB.profiles[id])) || null;
   }
   if(DB.current&&usable(DB.profiles[DB.current])) VIEW='app';
+  // After the profile resolves and before the first paint, so the list drawn is
+  // the list that will still be there on the next load. Saved only if it bit.
+  try{
+    PURGED = purgeUntouched();
+    if(PURGED) await save();
+  }catch(e){ console.warn('retention pass failed:', e && e.message); }
   render();
   // After the render, not before: render() rebuilds #root and would wipe it.
   if(CLOUD_DOWN) syncNote('Could not reach your account just now — working from this device. Anything you change is saved here and will sync when you reload with a connection.');
