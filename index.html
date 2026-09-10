@@ -135,11 +135,52 @@
 
   /* ── main app ── */
   .wrap{display:grid;grid-template-columns:288px 1fr}
-  @media(max-width:900px){.wrap{grid-template-columns:1fr}.main{order:1}.side{order:2}}
   .side{border-right:1px solid var(--line);padding:18px;background:var(--panel);
     min-height:calc(100vh - 60px)}
-  @media(max-width:900px){.side{border-right:none;border-top:1px solid var(--line);min-height:0}}
   .main{padding:20px 22px 60px;min-width:0}
+  .sheet-head{display:none}
+
+  /* ── narrow screens ──
+     This column used to sit BELOW the job list: the old rule was
+     .main{order:1}.side{order:2}, which on a phone put every control — search,
+     add, score, backup — underneath however many cards were on screen. With
+     the list capped at 60 that is a very long scroll to reach the search box,
+     and the controls are the reason you opened the app.
+
+     So on a narrow screen the sidebar stops being a column and becomes a sheet,
+     opened from a bar pinned to the bottom of the viewport where a thumb
+     already rests. Taking it out of flow is also what makes the order rules
+     unnecessary rather than merely wrong. */
+  /* Below the sheet, above everything else. Toasts sit at 40 and the modal
+     layer at 50, so an open sheet never covers a dialog it opened. */
+  #toolbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:44;
+    gap:10px;align-items:center;
+    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top:1px solid var(--line);
+    background:linear-gradient(180deg,var(--panel),var(--panel2));
+    box-shadow:0 -4px 18px rgba(0,0,0,.4)}
+  #toolbar button{min-height:44px}
+  #scrim{display:none;position:fixed;inset:0;z-index:43;background:rgba(8,12,16,.6)}
+
+  /* Turned on below, after the base rules above -- a media query carries no
+     extra specificity, so these have to come second to win. */
+  @media(max-width:900px){
+    .wrap{grid-template-columns:1fr}
+    .side{position:fixed;left:0;right:0;bottom:0;z-index:45;
+      max-height:82vh;overflow:auto;min-height:0;
+      border-right:none;border-top:1px solid var(--line);
+      border-radius:12px 12px 0 0;box-shadow:0 -14px 44px rgba(0,0,0,.6);
+      padding-bottom:calc(18px + env(safe-area-inset-bottom));
+      transform:translateY(101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
+    .side.open{transform:translateY(0)}
+    .sheet-head{display:flex;align-items:center;gap:10px;margin:-4px 0 16px;
+      position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
+    .main{padding-bottom:96px}
+    /* Everything in the sheet is a touch target now, not a pointer target. */
+    .side button,.side select,.side .drop{min-height:44px}
+    #toolbar{display:flex}
+    #scrim{display:block}
+  }
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
 
@@ -441,6 +482,9 @@ const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'' });
 let ONB = blankOnb();
 let RANGE = null, TAB = 'map', busy = false;
+/* Narrow screens only: is the tools sheet showing. Never read above 900px,
+   where the sidebar is simply a column and the sheet CSS does not apply. */
+let TOOLS = false;
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
 /* Where to search. null means nobody has chosen, which reads as the profile's
    own location -- so the box arrives filled in. Held here rather than left in
@@ -2463,7 +2507,12 @@ function renderApp(){
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
   <div class="wrap">
-    <div class="side">
+    <div class="side ${TOOLS?'open':''}">
+      <div class="sheet-head">
+        <span class="eyebrow">Tools</span>
+        <div class="spacer"></div>
+        <button class="btn-sm" id="tbClose">Close</button>
+      </div>
       <div class="block"><span class="eyebrow">Direction</span>
         <select id="trackSel">${(prof.tracks||[]).map(t=>
           `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
@@ -2578,6 +2627,10 @@ function renderApp(){
           :`<div class="empty"><b>Nothing to show</b>Add jobs and score them.</div>`}
       </div>`}
     </div>
+  </div>
+  <div id="scrim"></div>
+  <div id="toolbar">
+    <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
   </div>`;
 
   document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SHOWN=LIST_CAP; render(); });
@@ -2652,6 +2705,11 @@ function renderApp(){
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
+  const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
+  if($('#tbTools')) $('#tbTools').onclick=toggleTools;
+  if($('#tbClose')) $('#tbClose').onclick=toggleTools;
+  // Tapping the dimmed page behind the sheet is the gesture everyone tries first.
+  if($('#scrim')) $('#scrim').onclick=()=>{ TOOLS=false; render(); };
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
   bindPlot();
