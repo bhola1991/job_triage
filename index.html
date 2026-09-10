@@ -418,6 +418,13 @@ const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
 let ONB = blankOnb();
 let RANGE = null, TAB = 'map', busy = false;
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
+/* Every job card is roughly 1.5KB of HTML. At 800 jobs the two long lists were
+   drawing 1,600 cards between them on every single render -- 2.7MB of innerHTML
+   and 46,000 nodes -- which on a mid-range machine is seconds of blank screen
+   before anything appears. Nobody scrolls 800 cards; they work the top and
+   search for the rest. */
+const LIST_CAP = 60;
+let SHOWN = LIST_CAP;
 /* Long-running work lives here rather than behind a modal, so the app stays
    usable while an Apify run polls. Deliberately not persisted: a run belongs
    to the page that started it, and a task restored after a reload would have
@@ -2214,6 +2221,16 @@ function flagHtml(s){
   return String(s||'').split(',').filter(Boolean).map(f=>
     `<span class="flag ${good.includes(f)?'g':bad.includes(f)?'r':''}">${esc(f.replace(/_/g,' '))}</span>`).join('');
 }
+/* Draws the first SHOWN of a list, plus the control that lengthens it. */
+function cappedCards(rows){
+  const shown = rows.slice(0, SHOWN), left = rows.length - shown.length;
+  return shown.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')
+    + (left>0 ? `<div class="btn-row" style="margin:14px 0 4px">
+        <button class="btn-sm" id="btnMore">Show ${Math.min(LIST_CAP,left)} more</button>
+        <span style="color:var(--dim);font-size:12px;align-self:center">${left} not shown</span>
+      </div>` : '');
+}
+
 function jobCard(j,i,hi){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j);
   const cls = st==='live' ? 'st-live' : due ? 'st-due' : 'ch-'+ch;
@@ -2331,6 +2348,10 @@ function renderFresh(){
   if(!all.length) return `<div class="empty"><b>Nothing to show</b>Add some jobs first.</div>`;
   if(!dated.length) return `<div class="empty"><b>No posting dates yet</b>
     None of these ${all.length} rows carry a date. ATS pulls and LinkedIn searches bring one with them; for everything else, scoring estimates a window from the description.</div>`;
+  // Dated first: an undated row is the least useful thing this tab can show.
+  const dShown=dated.slice(0,SHOWN);
+  const uShown=undated.slice(0,Math.max(0,SHOWN-dShown.length));
+  const hiddenHere=(dated.length-dShown.length)+(undated.length-uShown.length);
   const week=dated.filter(x=>ageOf(x.j)<=7).length;
   const fortnight=dated.filter(x=>ageOf(x.j)<=14).length;
   const old=dated.filter(x=>ageOf(x.j)>60).length;
@@ -2341,8 +2362,12 @@ function renderFresh(){
       <div class="stat"><div class="k num" style="color:var(--dim)">${undated.length}</div><div class="l">undated</div></div>
     </div>
     <p style="color:var(--muted);font-size:12px;margin:0 0 16px">Newest posting first. An italic age is estimated from the description rather than stated by the source \u2014 hover any of them for the window and where it came from.</p>
-    ${sect('','Freshest first','Recency is not quality \u2014 check the score before you spend a morning on one. But a stale posting is often already filled.',dated)}
-    ${sect('','Date unknown','No source date and nothing datable in the description. Age here is genuinely unknown, not old.',undated)}`;
+    ${sect('','Freshest first','Recency is not quality \u2014 check the score before you spend a morning on one. But a stale posting is often already filled.',dShown)}
+    ${sect('','Date unknown','No source date and nothing datable in the description. Age here is genuinely unknown, not old.',uShown)}
+    ${hiddenHere>0?`<div class="btn-row" style="margin:14px 0 4px">
+        <button class="btn-sm" id="btnMore">Show ${Math.min(LIST_CAP,hiddenHere)} more</button>
+        <span style="color:var(--dim);font-size:12px;align-self:center">${hiddenHere} not shown</span>
+      </div>`:''}`;
 }
 
 /* One section of job cards. Three views render these and had a private copy each. */
@@ -2549,7 +2574,8 @@ function renderApp(){
         <div class="tab ${CHFILT==='posted'?'on':''}" data-ch="posted">Posted ●</div>
         <div class="tab ${CHFILT==='cold'?'on':''}" data-ch="cold">Cold □</div>
       </div>
-      <div ${TAB==='map'?'':'style="display:none"'}>
+      ${TAB!=='map'?'':`
+      <div>
         <div class="plotwrap"><div class="plothead">
           <span class="eyebrow">Drag a box to select · click a dot to open the posting</span><div class="spacer"></div>
           <span class="num" style="font-size:11px;color:${RANGE?'var(--signal)':'var(--muted)'}">${RANGE
@@ -2561,11 +2587,11 @@ function renderApp(){
           .map(([k,l])=>`<div class="stat"><div class="k num">${k}</div><div class="l">${l}</div></div>`).join('')}</div>
         ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
-      </div>
-      <div ${TAB==='work'?'':'style="display:none"'}>${renderWork()}</div>
-      <div ${TAB==='follow'?'':'style="display:none"'}>${renderFollowups()}</div>
-      <div ${TAB==='fresh'?'':'style="display:none"'}>${renderFresh()}</div>
-      <div ${TAB==='all'?'':'style="display:none"'}>
+      </div>`}
+      ${TAB!=='work'   ? '' : `<div>${renderWork()}</div>`}
+      ${TAB!=='follow' ? '' : `<div>${renderFollowups()}</div>`}
+      ${TAB!=='fresh'  ? '' : `<div>${renderFresh()}</div>`}
+      ${TAB!=='all'    ? '' : `<div>
         ${all.length?`<div class="listhead">
             <span style="color:var(--muted);font-size:12px">${all.length} in range</span>
             <div class="spacer"></div>
@@ -2574,15 +2600,16 @@ function renderApp(){
               <button class="seg ${SORT==='rank'?'on':''}" data-sort="rank">Best first</button>
               <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Newest first</button>
             </div>
-          </div>${all.map(x=>jobCard(x.j,x.i,rankOf(x.j)>55)).join('')}`
+          </div>${cappedCards(all)}`
           :`<div class="empty"><b>Nothing to show</b>Add jobs and score them.</div>`}
-      </div>
+      </div>`}
     </div>
   </div>`;
 
-  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
+  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SHOWN=LIST_CAP; render(); });
+  if($('#btnMore')) $('#btnMore').onclick=()=>{ SHOWN+=LIST_CAP; render(); };
   document.querySelectorAll('.tab[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
-  document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
+  document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; SHOWN=LIST_CAP; render(); });
   if($('#btnNext')) $('#btnNext').onclick=()=>{
     const a=$('#btnNext').dataset.next;
     if(a==='suggest') return suggestDialog();
