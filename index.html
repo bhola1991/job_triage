@@ -10,23 +10,91 @@
 <script src="config.js"></script>
 
 <style>
+  /* ═══ colour ═══
+     Green, red and white. Every hue in the file resolves through a name below,
+     so the two themes are the same design at two lightnesses rather than two
+     designs -- and nothing outside this block hardcodes a colour.
+
+     The semantics the old amber/teal palette carried are all still here, moved
+     onto what green-red-white can actually distinguish:
+       green   the primary action, and a posted role: the ordinary good thing
+       red     overdue, destructive, wrong: the only colour that interrupts
+       white   temperature. A cold approach is DESATURATED because nobody has
+               answered yet; a live conversation is the brightest thing on the
+               screen because somebody has. That reading inverts in the light
+               theme, where live becomes the deepest ink rather than the palest.
+     Reachability stays deliberately grey. It is a second axis, not a verdict,
+     and it must never compete with the channel colours for attention. */
   :root{
-    --ink:#131A21; --panel:#19222B; --panel2:#1F2A34; --line:#2B3945;
-    --text:#E2E8ED; --muted:#7D8C99; --dim:#56656F;
-    --signal:#E8B04B; --cool:#5FA8C7; --warn:#C4634A; --good:#6FB98F;
-    /* Two channel families. Posted roles are amber, cold approaches teal.
-       Reachability moves to neutral grey so it stops competing with them. */
-    --posted:#E8B04B; --posted-dim:#4a3d22;
-    --cold:#4FB3A5;   --cold-dim:#1f3f3b;
-    --neutral:#6B7A87;
-    --live:#7FA9E8;   /* an active conversation - the most valuable state */
+    color-scheme:dark;
+    --ink:#0E1411; --panel:#151D18; --panel2:#1C2620; --line:#29372F;
+    --text:#E9F0EB; --muted:#8B9C92; --dim:#798B81;
+
+    --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#08150E;
+    --cool:#4FB58C;
+    --warn:#E2685C;   --warn-line:#5A2E2A;
+    --good:#6FD79D;   --good-line:#2C5540;
+
+    --posted:#56C88A; --posted-dim:#1F3A2A;
+    --cold:#A9BCB1;   --cold-dim:#23302A;
+--neutral:#86988D;--neutral-line:#364339;
+    --live:#FFFFFF;   --live-line:#4A5A50;
+    --stale-line:#232E28;
+
+    /* tints and washes -- the same names in both themes, different weights */
+    --glow1:rgba(86,200,138,.07); --glow2:rgba(233,240,235,.04);
+    --signal-tint:rgba(86,200,138,.12); --signal-tint2:rgba(86,200,138,.03);
+    --signal-glow:rgba(86,200,138,.28);
+    --good-tint:rgba(111,215,157,.10);
+    --warn-tint:rgba(226,104,92,.13); --warn-chip:#4A2622;
+    --live-tint:rgba(255,255,255,.07);
+    --plot-fade:#3A4A41;
+    --veil:rgba(6,11,8,.82); --veil-lite:rgba(6,11,8,.6);
+    --shadow:0 1px 2px rgba(0,0,0,.25);
+    --shadow-md:0 10px 30px rgba(0,0,0,.5);
+    --shadow-lg:0 20px 60px rgba(0,0,0,.5);
+
     --disp:system-ui,-apple-system,'Segoe UI',sans-serif;
     --mono:ui-monospace,'Cascadia Mono',Consolas,monospace;
   }
+
+  /* The light theme is the same palette read from the other end. Green and red
+     darken so they hold contrast on white; the temperature reading flips, so a
+     live conversation is now the deepest green on the page rather than the
+     palest thing. Shadows lose most of their weight -- a heavy shadow on white
+     reads as dirt rather than as depth. */
+  :root[data-theme="light"]{
+    color-scheme:light;
+    --ink:#F6F9F7; --panel:#FFFFFF; --panel2:#EDF3EF; --line:#D3DFD8;
+    --text:#131C17; --muted:#56675D; --dim:#63736A;
+
+    --signal:#157F42; --signal-hi:#0F6635; --on-signal:#FFFFFF;
+    --cool:#177A47;
+    --warn:#C33B2E;   --warn-line:#EEBAB4;
+    --good:#157F42;   --good-line:#A8D8BC;
+
+    --posted:#157F42; --posted-dim:#DCF0E4;
+    --cold:#55665C;   --cold-dim:#E6EDE8;
+    --neutral:#65756B; --neutral-line:#C6D3CB;
+    --live:#0B3D22;   --live-line:#A8D8BC;
+    --stale-line:#E2E9E4;
+
+    --glow1:rgba(21,127,66,.07); --glow2:rgba(19,28,23,.03);
+    --signal-tint:rgba(21,127,66,.11); --signal-tint2:rgba(21,127,66,.03);
+    --signal-glow:rgba(21,127,66,.24);
+    --good-tint:rgba(21,127,66,.10);
+    --warn-tint:rgba(195,59,46,.10); --warn-chip:#FBE4E1;
+    --live-tint:rgba(11,61,34,.07);
+    --plot-fade:#B4C4BA;
+    --veil:rgba(19,28,23,.42); --veil-lite:rgba(19,28,23,.3);
+    --shadow:0 1px 2px rgba(19,28,23,.06);
+    --shadow-md:0 8px 24px rgba(19,28,23,.12);
+    --shadow-lg:0 18px 50px rgba(19,28,23,.18);
+  }
   *{box-sizing:border-box}
   #app{background:
-      radial-gradient(1200px 500px at 15% -10%, rgba(232,176,75,.07), transparent 60%),
-      radial-gradient(900px 500px at 100% 0%, rgba(95,168,199,.06), transparent 55%),
+      radial-gradient(1200px 500px at 15% -10%, var(--glow1), transparent 60%),
+      radial-gradient(900px 500px at 100% 0%, var(--glow2), transparent 55%),
       var(--ink);
     color:var(--text);font-family:var(--disp);
     font-size:14px;line-height:1.5;min-height:100vh;margin:0}
@@ -59,7 +127,7 @@
   .who .lc{font-size:11px;color:var(--muted);line-height:1.2}
   .pill{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;
     border:1px solid var(--line);color:var(--muted);white-space:nowrap}
-  .pill.on{color:var(--good);border-color:#31513f}
+  .pill.on{color:var(--good);border-color:var(--good-line)}
 
   /* Tappable UI shouldn't behave like text on a touch screen — without this a
      tap that lingers a few ms selects the label or throws up a callout menu
@@ -73,10 +141,10 @@
   button:active:not(:disabled){transform:translateY(0)}
   button:disabled{opacity:.38;cursor:not-allowed}
   button:focus-visible{outline:2px solid var(--cool);outline-offset:2px}
-  .btn-go{background:var(--signal);color:#16202a;border-color:var(--signal);font-weight:700;
-    box-shadow:0 1px 2px rgba(0,0,0,.2)}
-  .btn-go:hover:not(:disabled){background:#f0c163;color:#16202a;border-color:#f0c163;
-    box-shadow:0 4px 14px rgba(232,176,75,.28),0 1px 2px rgba(0,0,0,.2)}
+  .btn-go{background:var(--signal);color:var(--on-signal);border-color:var(--signal);font-weight:700;
+    box-shadow:var(--shadow)}
+  .btn-go:hover:not(:disabled){background:var(--signal-hi);color:var(--on-signal);border-color:var(--signal-hi);
+    box-shadow:0 4px 14px var(--signal-glow),var(--shadow)}
   .btn-sm{padding:5px 9px;font-size:12px}
   .btn-row{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
 
@@ -113,15 +181,15 @@
   .stp.did{color:var(--good)}
 
   .card{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:18px;
-    box-shadow:0 1px 2px rgba(0,0,0,.25)}
+    box-shadow:var(--shadow)}
   .card + .card{margin-top:12px}
   .kv{display:grid;grid-template-columns:132px 1fr;gap:8px 14px;font-size:13px}
   .kv .k{color:var(--muted);font-size:12px}
   .chips{display:flex;gap:6px;flex-wrap:wrap}
   .chip{font-size:11.5px;padding:3px 8px;border-radius:2px;background:var(--panel2);
     border:1px solid var(--line);color:var(--muted)}
-  .chip.g{color:var(--good);border-color:#31513f}
-  .chip.r{color:var(--warn);border-color:#4d3129}
+  .chip.g{color:var(--good);border-color:var(--good-line)}
+  .chip.r{color:var(--warn);border-color:var(--warn-line)}
 
   .trk{border:1px solid var(--line);border-radius:4px;padding:15px;cursor:pointer;
     transition:.14s;background:var(--panel);margin-bottom:10px}
@@ -181,9 +249,9 @@
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
     border-top:1px solid var(--line);
     background:linear-gradient(180deg,var(--panel),var(--panel2));
-    box-shadow:0 -4px 18px rgba(0,0,0,.4)}
+    box-shadow:var(--shadow-md)}
   #toolbar button{min-height:44px}
-  #scrim{display:none;position:fixed;inset:0;z-index:43;background:rgba(8,12,16,.6)}
+  #scrim{display:none;position:fixed;inset:0;z-index:43;background:var(--veil-lite)}
 
   /* Turned on below, after the base rules above -- a media query carries no
      extra specificity, so these have to come second to win. */
@@ -192,7 +260,7 @@
     .side{position:fixed;left:0;right:0;bottom:0;z-index:45;
       max-height:82vh;overflow:auto;min-height:0;
       border-right:none;border-top:1px solid var(--line);
-      border-radius:12px 12px 0 0;box-shadow:0 -14px 44px rgba(0,0,0,.6);
+      border-radius:12px 12px 0 0;box-shadow:var(--shadow-lg);
       padding-bottom:calc(18px + env(safe-area-inset-bottom));
       transform:translateY(101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
     .side.open{transform:translateY(0)}
@@ -208,7 +276,7 @@
   .block > .eyebrow{display:block;margin-bottom:9px}
 
   .plotwrap{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;
-    box-shadow:0 1px 2px rgba(0,0,0,.25)}
+    box-shadow:var(--shadow)}
   .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
   svg.plot{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
   /* Cold targets are drawn as unfilled squares, so without this only the 1.6px
@@ -222,32 +290,30 @@
   .stat .l{font-size:11px;color:var(--muted);margin-top:3px}
 
   .job{border:1px solid var(--line);border-left:2px solid var(--dim);border-radius:3px;
-    background:var(--panel);padding:13px 15px;margin-bottom:9px;box-shadow:0 1px 2px rgba(0,0,0,.2)}
+    background:var(--panel);padding:13px 15px;margin-bottom:9px;box-shadow:var(--shadow)}
   .job.hi{border-left-color:var(--signal)}
   .job.ch-posted{border-left-color:var(--posted)}
   .job.ch-cold{border-left-color:var(--cold)}
   .job.ch-cold .jscore .big{color:var(--cold)}
-  .job.st-live{border-left-color:var(--live);background:linear-gradient(90deg,rgba(127,169,232,.06),transparent 40%)}
+  .job.st-live{border-left-color:var(--live);background:linear-gradient(90deg,var(--live-tint),transparent 40%)}
   .job.st-due{border-left-color:var(--warn)}
   .stage{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
     padding:2px 7px;border-radius:2px;border:1px solid var(--line);color:var(--muted)}
   .stage.s-new{color:var(--muted)}
-  .stage.s-sent{color:var(--neutral);border-color:#3a464f}
-  .stage.s-due{color:var(--warn);border-color:#4d3129}
-  .stage.s-live{color:var(--live);border-color:#33445f}
+  .stage.s-sent{color:var(--neutral);border-color:var(--neutral-line)}
+  .stage.s-due{color:var(--warn);border-color:var(--warn-line)}
+  .stage.s-live{color:var(--live);border-color:var(--live-line)}
   .stage.s-closed{color:var(--dim)}
   /* Age earns colour only at the ends of the scale. A fortnight-old posting is
      ordinary and should not shout; a stale one should visibly recede. */
   .stage.s-age{color:var(--muted)}
   .stage.s-age.hot{color:var(--posted);border-color:var(--posted-dim)}
-  .stage.s-age.stale{color:var(--dim);border-color:#2a3138}
+  .stage.s-age.stale{color:var(--dim);border-color:var(--stale-line)}
   .stage.s-age.guess{font-style:italic}
   .chn{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
     padding:2px 7px;border-radius:2px}
   .chn.posted{color:var(--posted);background:var(--posted-dim)}
   .chn.cold{color:var(--cold);background:var(--cold-dim)}
-  .btn-cold{background:var(--cold);color:#0d1f1d;border-color:var(--cold);font-weight:700}
-  .btn-cold:hover:not(:disabled){background:#63c7b8;color:#0d1f1d;border-color:#63c7b8}
 
   /* ── daily dashboard ── */
   .sect{margin-bottom:26px}
@@ -290,11 +356,11 @@
   .prog{height:2px;background:var(--panel2);border-radius:1px;overflow:hidden;margin-top:8px}
   .prog i{display:block;height:100%;background:var(--signal);transition:width .3s}
 
-  .modal{position:fixed;inset:0;background:rgba(8,12,16,.82);display:flex;
+  .modal{position:fixed;inset:0;background:var(--veil);display:flex;
     align-items:center;justify-content:center;padding:20px;z-index:50}
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:5px;
     max-width:620px;width:100%;max-height:84vh;overflow:auto;padding:22px;
-    box-shadow:0 20px 60px rgba(0,0,0,.5)}
+    box-shadow:var(--shadow-lg)}
 
   .tabs{display:flex;gap:2px;margin-bottom:16px;border-bottom:1px solid var(--line)}
   .tab{padding:8px 14px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;
@@ -303,7 +369,7 @@
   .tab:hover{color:var(--text)}
   .tabct{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:8px;
     background:var(--panel2);color:var(--muted);vertical-align:1px}
-  .tabct.due{background:#4d3129;color:var(--warn)}
+  .tabct.due{background:var(--warn-chip);color:var(--warn)}
   @media(max-width:480px){
     .tabs{flex-wrap:wrap;row-gap:10px}
     .tabs .spacer{flex-basis:100%;height:0}
@@ -321,13 +387,13 @@
   /* The one thing to do next. Everything else on screen is a list; this is a
      single instruction, derived from state rather than chosen by the reader. */
   .next{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-    background:linear-gradient(90deg,rgba(232,176,75,.10),rgba(232,176,75,.02) 60%,transparent);
+    background:linear-gradient(90deg,var(--signal-tint),var(--signal-tint2) 60%,transparent);
     border:1px solid var(--line);border-left:3px solid var(--signal);
     border-radius:6px;padding:14px 16px;margin-bottom:18px}
   .next.calm{border-left-color:var(--good);
-    background:linear-gradient(90deg,rgba(111,185,143,.10),transparent 60%)}
+    background:linear-gradient(90deg,var(--good-tint),transparent 60%)}
   .next.warn{border-left-color:var(--warn);
-    background:linear-gradient(90deg,rgba(196,99,74,.12),transparent 60%)}
+    background:linear-gradient(90deg,var(--warn-tint),transparent 60%)}
   .next .nh{font-size:15px;font-weight:500;margin-bottom:2px}
   .next .ns{font-size:12px;color:var(--muted)}
   /* Background-task toasts. Fixed to the corner and above the app but BELOW
@@ -337,7 +403,7 @@
     flex-direction:column;gap:9px;width:min(330px,calc(100vw - 32px))}
   .task{background:var(--panel);border:1px solid var(--line);
     border-left:3px solid var(--signal);border-radius:6px;padding:12px 13px;
-    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+    box-shadow:var(--shadow-md)}
   .task.done{border-left-color:var(--good)}
   .task.err{border-left-color:var(--warn)}
   .task .tl{font-size:13px;margin-bottom:3px}
@@ -512,6 +578,37 @@ let TOOLS = false;
    because render() rebuilds #root from scratch: a panel that shut itself every
    time you used something inside it would be worse than no panel at all. */
 let SIDE_OPEN = { add:false, score:false, data:false };
+
+/* ═══ theme ═══
+   'auto' follows the operating system, which is the right default because the
+   person already told their machine which they wanted. The two explicit modes
+   are for the case where this app is the exception. Kept per device rather than
+   in the account: which screen you are sitting at is not a fact about you, and
+   syncing it would mean a phone in bed inheriting a desktop's daylight. */
+let THEME = 'auto';
+const THEMES = ['auto','light','dark'];
+/* One place reads a token's computed value, so the plot can be drawn in the
+   same colours as everything else instead of repeating their hexes. */
+const CV = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const sysLight = () => !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
+function applyTheme(){
+  const light = THEME==='auto' ? sysLight() : THEME==='light';
+  document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  // The browser paints its own chrome from this on mobile; leaving it on the
+  // old dark value puts a black bar above a white page.
+  const m=document.querySelector('meta[name="theme-color"]');
+  if(m) m.setAttribute('content', CV('--ink') || '#0E1411');
+}
+/* Before the first paint, and synchronously -- everything else here is async,
+   and a single frame of the wrong theme is the one theming bug people notice. */
+try{ THEME = localStorage.getItem('triage:theme') || 'auto'; }catch(e){}
+applyTheme();
+if(window.matchMedia){
+  const mq = window.matchMedia('(prefers-color-scheme: light)');
+  const onSys = () => { if(THEME==='auto'){ applyTheme(); render(); } };
+  if(mq.addEventListener) mq.addEventListener('change', onSys);
+  else if(mq.addListener) mq.addListener(onSys);
+}
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
 /* Where to search. null means nobody has chosen, which reads as the profile's
    own location -- so the box arrives filled in. Held here rather than left in
@@ -633,6 +730,9 @@ async function load(){
   PROV  = (await get('triage:prov'))  || 'deepseek';
   APIFY = (await get('triage:apify')) || '';
   AUTO  = (await get('triage:auto')) !== '0';   // on unless turned off
+  // Local, not cloud -- see the theme block above.
+  const th = await getLocal('triage:theme');
+  if(THEMES.includes(th)){ THEME = th; applyTheme(); }
 }
 
 /* ═══ Apify ═══
@@ -2204,27 +2304,30 @@ const plotXY=(f,r)=>({ x:PL.x+(r/100)*PL.w, y:PL.y+(1-f/100)*PL.h });
 
 function plotSVG(){
   const p=P(), scored=p.jobs.filter(isScored);
+  // Read once per draw rather than per element: this runs for every dot.
+  const cGrid=CV('--line'), cDim=CV('--dim'), cAxis=CV('--muted'),
+        cOn=CV('--signal'), cOff=CV('--plot-fade'), cCold=CV('--cold');
   let g='';
   for(let v=0;v<=100;v+=25){
     const y=PL.y+(1-v/100)*PL.h, x=PL.x+(v/100)*PL.w, mid=v===50;
-    g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
-    g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="#2B3945" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
-    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="#56656F">${v}</text>`;
-    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="#56656F">${v}</text>`;
+    g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="${cGrid}" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
+    g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="${cGrid}" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
+    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${v}</text>`;
+    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${v}</text>`;
   }
   g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+14}" text-anchor="end">APPLY TODAY</text>`;
   g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
   g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
-  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="#7D8C99" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
-  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="#7D8C99">REACHABILITY</text>`;
+  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
+  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}">REACHABILITY</text>`;
   if(RANGE){
     const a=plotXY(RANGE.f1,RANGE.r1), b=plotXY(RANGE.f0,RANGE.r0);
-    g+=`<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" fill="#E8B04B" fill-opacity=".07" stroke="#E8B04B" stroke-width="1" stroke-dasharray="4 3"/>`;
+    g+=`<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" fill="${cOn}" fill-opacity=".07" stroke="${cOn}" stroke-width="1" stroke-dasharray="4 3"/>`;
   }
   scored.forEach(j=>{
     const f=fitOf(j), r=reachOf(j), pt=plotXY(f,r), open=isOpen(j);
     const inR=!RANGE||(f>=RANGE.f0&&f<=RANGE.f1&&r>=RANGE.r0&&r<=RANGE.r1);
-    const col=!open?'#56656F':(inR?'#E8B04B':'#3F5260'), rad=!open?3:(inR?5.5:3.5);
+    const col=!open?cDim:(inR?(chOf(j)==='cold'?cCold:cOn):cOff), rad=!open?3:(inR?5.5:3.5);
     // With a box drawn, everything outside it drops back hard so the selection
     // reads as the answer rather than as one more thing on a busy chart.
     const dim=RANGE&&!inR ? .28 : (inR&&open?.85:.5);
@@ -2236,7 +2339,7 @@ fit ${f} · reach ${r} · ${chOf(j)}</title>`;
       ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="${col}" fill-opacity=".08" stroke="${col}" stroke-width="1.6" stroke-opacity="${RANGE&&!inR?.3:(inR&&open?.95:.5)}">${tip}</rect>`
       : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${dim}" stroke="${col}" stroke-width="1" stroke-opacity="${RANGE&&!inR?.3:1}">${tip}</circle>`;
   });
-  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="#56656F">Nothing scored yet</text>`;
+  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">Nothing scored yet</text>`;
   return g;
 }
 
@@ -2309,7 +2412,7 @@ function jobCard(j,i,hi){
       <div class="spacer"></div>
       <button class="btn-sm" data-act="open" data-i="${i}">Details</button>
       ${st==='new'
-        ? `<button class="${ch==='cold'?'btn-cold btn-sm':'btn-go btn-sm'}" data-act="pitch" data-i="${i}">${ch==='cold'?'Write the DM':'Draft outreach'}</button>
+        ? `<button class="btn-go btn-sm" data-act="pitch" data-i="${i}">${ch==='cold'?'Write the DM':'Draft outreach'}</button>
            <button class="btn-sm" data-act="sent" data-i="${i}">${ch==='cold'?'Mark contacted':'Mark applied'}</button>`
         : ''}
       ${st==='sent'
@@ -2534,6 +2637,13 @@ function renderApp(){
     <div class="spacer"></div>
     <span class="pill ${p.jobs.length?'on':''}">${p.jobs.length} jobs</span>
     <span class="pill ${scored.length?'on':''}">${scored.length} scored</span>
+    <button class="btn-sm" id="btnTheme" title="Theme: ${THEME}. Click to change.">${
+      THEME==='auto'
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none"/></svg> Auto'
+        : THEME==='light'
+        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg> Light'
+        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
+    }</button>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -2619,7 +2729,7 @@ function renderApp(){
           <div class="btn-row" style="margin-top:8px">
             <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
           ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
-            <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
+            <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:var(--warn-line)">Delete everything in my account</button></div>
           <p class="hint">Erases every profile, job, CV and note stored against ${esc(userName()||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
           <p class="hint">${CLOUD&&USER?'Saved to your account and to this browser.':'Stored in this browser only \u2014 clearing site data wipes it. Take a backup.'}</p>
         </div>
@@ -2698,6 +2808,12 @@ function renderApp(){
   if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
     `<div class="eyebrow">Your assessment</div>${trackVerdict(trk)}
      <div class="btn-row" style="margin-top:16px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  $('#btnTheme').onclick=async()=>{
+    THEME = THEMES[(THEMES.indexOf(THEME)+1) % THEMES.length];
+    applyTheme();
+    await putLocal('triage:theme', THEME);
+    render();
+  };
   $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB=blankOnb(); render(); };
   $('#btnPaste').onclick=pasteJobDialog;
   $('#btnScore').onclick=()=>runScoring(false);
