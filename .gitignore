@@ -1,0 +1,14 @@
+# The published design canvas: ~2.5MB of editor runtime seeded around the
+# artboards. It is build output -- regenerate it from the tracked .dc.html
+# files and canvas.json with the design skill's seeder rather than storing it:
+#
+#   node <skill>/seed-canvas.mjs --template <skill>/payload.template.html \
+#     --out job-triage-ui.html --title "Job Triage UI" \
+#     --artboard Main.dc.html --artboard Current.dc.html \
+#     --artboard Phone.dc.html --artboard JobCard.dc.html --canvas canvas.json
+job-triage-ui.html
+
+# Throwaway copy of the app with the config script stripped, so CLOUD is false
+# and it runs local-only. Used to reach the screens that sit behind the sign-in
+# wall while testing. Built on demand, never edited by hand.
+__preview_local.html

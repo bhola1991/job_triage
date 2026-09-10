@@ -1,0 +1,46 @@
+{
+  "artboards": [
+    { "file": "Current.dc.html", "title": "Current — as it ships", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Main.dc.html", "title": "Reworked — desktop", "x": 1560, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Phone.dc.html", "title": "Reworked — 390×844", "x": 0, "y": 1060, "w": 390, "h": 844 },
+    { "file": "JobCard.dc.html", "title": "Job card — anatomy & states", "x": 510, "y": 1060, "w": 1180, "h": 1430 }
+  ],
+  "annotations": [
+    {
+      "id": "note-sidebar",
+      "x": 0,
+      "y": -190,
+      "w": 620,
+      "text": "The shipping sidebar carries 20 interactive controls and 7 explanatory hints at one visual weight — search, suggest, ATS pull, CSV, add by hand, cold target, score, rescore, auto-toggle, backup, keys, export CSV, trim, clear, delete-everything.\n\nAbout 8 of them sit below the fold at 900px tall."
+    },
+    {
+      "id": "note-rework",
+      "x": 1560,
+      "y": -190,
+      "w": 620,
+      "text": "Same shell, 7 controls and 2 hints.\n\nThree changes: scoring became a status line rather than a button (AUTO defaults on, so the button is only needed above the 60-job cap); everything rare moved behind one \"Data & keys\" door; the Posted/Cold filter moved onto the app's OWN segmented-control pattern (.segs/.seg, already used for the sort toggle) so it stops looking like a sixth view tab."
+    },
+    {
+      "id": "note-phone",
+      "x": 0,
+      "y": 1950,
+      "w": 470,
+      "text": "The real bug, not a style preference: @media(max-width:900px) sets .main{order:1} .side{order:2}, so on a phone every control — search, add, score, backup — sits BELOW the entire job list. You scroll past 60 cards to reach the search box.\n\nHere the actions live in a bottom bar at the thumb. All targets ≥44px. No fake status bar: the real one paints above the header."
+    },
+    {
+      "id": "note-card",
+      "x": 1740,
+      "y": 1060,
+      "w": 430,
+      "text": "The shipping card encodes the same two numbers three times: the rank, then \"fit 82 / reach 54\" as text, then two unlabelled 3px bars repeating both.\n\nHere each axis is stated once, labelled and legible. The rank keeps its prominence because it is the sort key.\n\nAction rows go from up to six buttons to one primary + Details + overflow — and the primary verb follows the state: Draft outreach, Write the DM, Write the chase, Log a note."
+    },
+    {
+      "id": "note-open",
+      "x": 1740,
+      "y": 1420,
+      "w": 430,
+      "text": "Open question I did NOT decide for you: the five view tabs (Map / Work Today / Follow-ups / Freshest / Everything) overlap a lot — Work Today and Freshest are both filtered views of Everything. Worth collapsing, but that changes behaviour rather than layout, so I left it alone."
+    }
+  ],
+  "launch": { "view": "canvas" }
+}
