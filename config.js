@@ -10,6 +10,6 @@
    different thing entirely: it bypasses row-level security, and it must never
    appear in this file, in this repository, or anywhere a browser can read it. */
 window.TRIAGE_CONFIG = {
-  SUPABASE_URL: "",       // e.g. https://abcdefgh.supabase.co
-  SUPABASE_ANON_KEY: ""   // the "anon / public" key from Settings → API
+  SUPABASE_URL: "https://kgacahuzaxqkzdcpyboc.supabase.co",
+  SUPABASE_ANON_KEY:"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnYWNhaHV6YXhxa3pkY3B5Ym9jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkwMTA2MjQsImV4cCI6MjEwNDU4NjYyNH0.Zv6nrj8WkNutoNZ2Im1_7ca0ZnLuxsUlv7V-_8njqgo"   // the "anon / public" key from Settings → API
 };
