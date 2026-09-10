@@ -161,3 +161,42 @@ $$;
 
 revoke all on function public.my_username() from public;
 grant execute on function public.my_username() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Lock the signed-in-only functions to signed-in callers.
+--
+-- "revoke all ... from public" above does not do it on Supabase. Supabase
+-- grants EXECUTE on functions in the public schema to `anon` and
+-- `authenticated` through default privileges, so the grant to `anon` is direct
+-- rather than inherited from PUBLIC, and revoking PUBLIC leaves it in place.
+--
+-- Checked against a live project with nothing but the anon key: an anonymous
+-- caller could execute delete_my_data() and my_username(). Neither leaked or
+-- destroyed anything, because both key off auth.uid() and that is null with no
+-- session -- but delete_my_data() is SECURITY DEFINER, so it runs as its owner
+-- and bypasses row-level security. It is one careless edit to its WHERE clause
+-- away from letting an anonymous caller empty the table. It should not be
+-- reachable at all.
+--
+-- login_email() and username_available() stay callable by anon on purpose:
+-- sign-in has to resolve a username before anybody has a session.
+-- ---------------------------------------------------------------------------
+
+revoke all on function public.my_username()          from anon;
+revoke all on function public.claim_username(text)   from anon;
+revoke all on function public.delete_my_data()       from anon;
+
+-- Belt as well as braces: check the caller rather than trusting the WHERE
+-- clause to be harmless when auth.uid() is null. claim_username() already does
+-- this, which is the only reason an anonymous call to it failed cleanly.
+create or replace function public.delete_my_data()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  delete from public.user_state where user_id = auth.uid();
+end $$;
+
+revoke all on function public.delete_my_data() from public, anon;
+grant execute on function public.delete_my_data() to authenticated;
