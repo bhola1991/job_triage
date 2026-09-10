@@ -3481,7 +3481,61 @@ function renderClaim(){
   };
 }
 
+/* #root is empty until the first render, and everything before it waits on the
+   network: getSession, then the cloud read, then possibly a migration. That was
+   a dark rectangle for as long as it all took, which reads as a broken page
+   rather than a loading one. */
+function splash(msg, sub){
+  const r=$('#root'); if(!r) return;
+  r.innerHTML=`<div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede" style="margin-top:14px"><span class="spin"></span> ${esc(msg)}</p>
+    ${sub?`<p class="say">${esc(sub)}</p>`:''}
+  </div>`;
+}
+
+/* Landing from a "reset your password" email. Supabase has already put a
+   recovery session in place by the time this runs, so the only thing left is
+   to take the new password. Without this the link signed people in and showed
+   them the app, with no way to actually change anything. */
+let RECOVER = false;
+function renderRecover(){
+  $('#root').innerHTML=`
+  <div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede">Set a new password</p>
+    <p class="say">You followed a reset link${USER&&USER.email?` for ${esc(USER.email)}`:''}. Pick something you will remember.</p>
+    <div class="card">
+      <label class="lab">New password</label>
+      <input id="rcA" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+      <label class="lab" style="margin-top:12px">Type it again</label>
+      <input id="rcB" type="password" autocomplete="new-password">
+      <p class="err" id="rcErr" style="display:none"></p>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go" id="rcGo">Save it</button>
+      </div>
+    </div>
+  </div>`;
+  const fail=m=>{ const e=$('#rcErr'); e.textContent=m; e.style.display='block'; $('#rcGo').disabled=false; };
+  const go=async()=>{
+    const a=$('#rcA').value, b=$('#rcB').value;
+    if(a.length<8) return fail('Passwords need to be at least 8 characters.');
+    if(a!==b)      return fail('Those two do not match.');
+    $('#rcGo').disabled=true;
+    try{
+      const {error}=await SB.auth.updateUser({password:a});
+      if(error) throw error;
+    }catch(e){ return fail((e&&e.message)||'That did not work.'); }
+    RECOVER=false;
+    splash('Password changed. Loading your account\u2026');
+    await afterAuth();
+  };
+  $('#rcGo').onclick=go;
+  $('#rcB').onkeydown=e=>{ if(e.key==='Enter') go(); };
+}
+
 function render(){
+  if(CLOUD && RECOVER && USER) return renderRecover();
   if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
   (VIEW==='app'&&P()) ? renderApp() : renderOnb();
@@ -3497,6 +3551,11 @@ async function migrateLocal(){
     if(!local) return;
     const d=JSON.parse(local);
     if(!d || !d.profiles || !Object.keys(d.profiles).length) return;
+    // This can be megabytes on a well-used tracker, and it is the slowest thing
+    // that happens between signing in and seeing the app. Say so.
+    const n=Object.values(d.profiles).reduce((a,p)=>a+((p.jobs||[]).length),0);
+    splash('Moving your work into your account\u2026',
+           `${n} job${n===1?'':'s'} from this browser. This only happens once.`);
     await put('triage:db', local);
     DB.profiles=d.profiles||{}; DB.current=d.current||null;
   }catch(e){}
@@ -3504,6 +3563,7 @@ async function migrateLocal(){
 
 async function afterAuth(){
   DB={profiles:{},current:null}; VIEW='onb';
+  if(cloudNow()) splash('Loading your account\u2026');
   // user_metadata on a session minted before the name was claimed still says
   // there is none. The table is the truth; ask it once per sign-in.
   if(cloudNow() && !myUsername()){
@@ -3519,14 +3579,19 @@ async function afterAuth(){
 }
 
 async function boot(){
+  if(CLOUD) splash('Starting\u2026');
   if(CLOUD){
     try{
       const {data}=await SB.auth.getSession();
       USER=(data&&data.session&&data.session.user)||null;
     }catch(e){ USER=null; }
     let last=USER?USER.id:null;
-    SB.auth.onAuthStateChange((_ev,sess)=>{
+    SB.auth.onAuthStateChange((ev,sess)=>{
       const now=(sess&&sess.user)||null;
+      if(ev==='PASSWORD_RECOVERY'){
+        // Arrived from a reset email. Take the new password before anything else.
+        USER=now; last=now?now.id:null; RECOVER=true; render(); return;
+      }
       if((now?now.id:null)===last) return;      // token refreshes are not events
       last=now?now.id:null; USER=now; afterAuth();
     });
