@@ -431,7 +431,13 @@ let SHOWN = LIST_CAP;
    nothing on the other end of it. */
 let TASKS = [], TASKSEQ = 0;
 
-const P = () => DB.profiles[DB.current] || null;
+/* A profile record is only usable if it actually carries a parsed profile.
+   A record without one -- a half-finished onboarding, a partial write -- took
+   the whole app down: renderApp reads prof.tracks on its first line, and the
+   onboarding fallback reads p.profile.name, so there was nowhere left to land.
+   Treating it as absent sends them to onboarding, which can fix it. */
+const usable = p => !!(p && p.profile);
+const P = () => { const p = DB.profiles[DB.current]; return usable(p) ? p : null; };
 
 /* ═══ storage ═══
    Two homes. Inside Claude's artifact viewer window.storage exists and is the
@@ -2005,9 +2011,9 @@ function renderOnb(){
         <input type="file" id="onbFile" accept=".json" style="display:none">
         <div id="onbMsg" class="hint"></div>
       </div>
-      ${Object.keys(DB.profiles).length?`<div style="margin-top:32px"><div class="eyebrow">Or continue as</div>
-        <div class="btn-row" style="margin-top:9px">${Object.entries(DB.profiles).map(([id,p])=>
-          `<button class="btn-sm" data-open="${esc(id)}">${esc(p.profile.name)} · ${p.jobs.length} jobs</button>`).join('')}</div></div>`:''}`;
+      ${Object.values(DB.profiles).some(usable)?`<div style="margin-top:32px"><div class="eyebrow">Or continue as</div>
+        <div class="btn-row" style="margin-top:9px">${Object.entries(DB.profiles).filter(([,p])=>usable(p)).map(([id,p])=>
+          `<button class="btn-sm" data-open="${esc(id)}">${esc(p.profile.name)} · ${(p.jobs||[]).length} jobs</button>`).join('')}</div></div>`:''}`;
   }
 
   if(ONB.step===1){
@@ -3597,7 +3603,15 @@ async function afterAuth(){
     }catch(e2){}
     syncNote('Could not reach your account \u2014 showing what is on this device. '+((e&&e.message)||''));
   }
-  if(DB.current&&DB.profiles[DB.current]) VIEW='app';
+  // A DB.current pointing at an unusable record leaves the app with nothing to
+  // draw. Log what was wrong -- it should not happen -- and move on rather than
+  // stranding them on a screen that cannot render.
+  if(DB.current && !usable(DB.profiles[DB.current])){
+    console.warn('profile', DB.current, 'has no profile object; keys =',
+                 Object.keys(DB.profiles[DB.current]||{}));
+    DB.current = Object.keys(DB.profiles).find(id=>usable(DB.profiles[id])) || null;
+  }
+  if(DB.current&&usable(DB.profiles[DB.current])) VIEW='app';
   render();
   // After the render, not before: render() rebuilds #root and would wipe it.
   if(CLOUD_DOWN) syncNote('Could not reach your account just now — working from this device. Anything you change is saved here and will sync when you reload with a connection.');
