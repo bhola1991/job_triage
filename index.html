@@ -576,19 +576,14 @@ const APIFY_BASE  = "https://api.apify.com/v2";
    every run carries a server-side timeout, which holds even if the browser is
    closed mid-run, and every place that stops waiting also aborts on its way
    out, which is immediate rather than waiting for that timeout to expire. */
-function runUrl(actor, secs, extra){
-  return APIFY_BASE+"/acts/"+actor+"/runs?timeout="+secs+(extra||'');
+function runUrl(actor, secs){
+  return APIFY_BASE+"/acts/"+actor+"/runs?timeout="+secs;
 }
 async function abortRun(runId, H){
   if(!runId) return;
   try{ await fetch(APIFY_BASE+"/actor-runs/"+runId+"/abort",{method:"POST",headers:H}); }catch(e){}
 }
 
-const pick = (item,keys) => {
-  const map={}; Object.keys(item).forEach(k=>map[k.toLowerCase()]=k);
-  for(const c of keys){ const k=map[c.toLowerCase()]; if(k&&item[k]) return item[k]; }
-  return "";
-};
 
 /* ═══ ATS feeds ═══
    The best data source in the app, and the only one that costs nothing.
@@ -705,7 +700,7 @@ async function apifyRun(actor, payload, o){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
   let r;
-  try{ r=await fetch(runUrl(actor,cap+60,o.extra),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+  try{ r=await fetch(runUrl(actor,cap+60),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
   catch(e){ throw new Error("Couldn't reach Apify."); }
   if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
   if(!r.ok) throw new Error("Apify returned "+r.status);
@@ -937,30 +932,27 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
    they are in their headline, and Google has all of it indexed.
 
    So this asks Google directly for the people, rather than paying an employee
-   scraper to hand back the whole company. That is not a small difference. The
-   employees actor bills per profile, defaults to fifty of them, and — without a
+   scraper to hand back the whole company. That is not a small difference. Such
+   an actor bills per profile and defaults to fifty of them, and — without a
    LinkedIn cookie — is running Google underneath anyway: fifty strangers at
    ~$0.005 each, to keep the handful whose title mentions hiring. A site: query
    against linkedin.com/in asks for that handful in the first place, and one
    page of Google results costs about the price of half a profile.
 
+   That is the whole reason there is no second path here. One did exist, as a
+   fallback for when search came back thin, and it was deleted: a threshold
+   nobody had measured decided when to start spending per profile, and a
+   company Google has not indexed is usually one whose staff are not findable
+   at any price. When search finds nobody, this says so and asks for a name.
+
    Three queries go out in one run — recruiting side, hiring side, and the
    company's own domain — because Apify charges per run as well as per page,
-   and results are told apart afterwards by the shape of their URL. The
-   employee scraper stays as a fallback for when search comes back thin, which
-   is mostly small companies whose staff Google hasn't indexed.
+   and results are told apart afterwards by the shape of their URL.
 
    LinkedIn never publishes email addresses, scraped or otherwise, so this does
    NOT claim to find one. It reads the company's own domain out of the same
    search and guesses the ordinary firstname.lastname pattern from it — clearly
    labelled as a guess, everywhere it's shown, never presented as confirmed. */
-const EMPLOYEES_ACTOR = "automation-lab~linkedin-company-employees-scraper";
-/* Fallback only, and it bills per profile, so it is capped. The model reads at
-   most 60 names either way, and the actor's own default of 50 is chosen to sell
-   profiles rather than to answer the question. */
-const MAX_EMPLOYEES  = 30;
-/* Below this many people from search, the fallback is worth its money. */
-const HR_MIN_ROSTER  = 4;
 /* A roster is a fact about a company, not about a job. Two roles at the same
    employer — which is the common case, companies post in batches — should cost
    one lookup, and a week is well inside how fast a recruiting desk changes. */
@@ -989,17 +981,6 @@ async function googleFirst(query, onStatus, statusLabel){
   return apifyRun(APIFY_GOOGLE,
     {queries:query,languageCode:"en",maxPagesPerQuery:1,resultsPerPage:8,mobileResults:false},
     {every:4000,cap:180,onStatus,label:statusLabel});
-}
-
-async function findLinkedInSlug(company, onStatus){
-  const items=await googleFirst(`site:linkedin.com/company "${company}"`, onStatus, `finding ${company} on LinkedIn`);
-  for(const item of items){
-    for(const res of (item.organicResults||[])){
-      const m=String(res.url||'').match(/linkedin\.com\/company\/([^\/?#]+)/i);
-      if(m) return m[1];
-    }
-  }
-  return null;
 }
 
 /* Google titles a LinkedIn profile "Name - Headline - Company | LinkedIn",
@@ -1078,29 +1059,6 @@ function guessEmail(name, domain){
   return `${parts[0]}.${parts[parts.length-1]}@${domain}`;
 }
 
-/* The fallback. Only runs when search came back thin, and is capped, because
-   this is the line item that used to be the whole bill. */
-async function scrapeEmployees(company, onStatus){
-  const slug=await findLinkedInSlug(company, onStatus);
-  if(!slug) throw new Error("Couldn't find "+company+"'s LinkedIn company page.");
-  // maxEmployees is the actor's own input, so a rename or a regression upstream
-  // silently restores its default of fifty. maxTotalChargeUsd is enforced by
-  // Apify instead, and sits just above what a capped run can legitimately cost.
-  const items=await apifyRun(EMPLOYEES_ACTOR,
-    {companyUrls:[slug], maxEmployees:MAX_EMPLOYEES},
-    {every:5000,cap:240,onStatus,extra:"&maxTotalChargeUsd=0.25",
-     label:`scanning ${company}'s employees`});
-
-  // Output field names for this actor aren't fixed anywhere public either, so
-  // this stays with the same tolerant pick()-based reading as the rest of the
-  // file's Apify parsers.
-  return items.map(it=>({
-    name: pick(it,["name","fullName"]),
-    role: String(pick(it,["headline","title","jobTitle"])||''),
-    linkedin: pick(it,["profileUrl","profileURL","url"])
-  })).filter(x=>x.name);
-}
-
 async function findHrContacts(company, ctx, onStatus){
   if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
 
@@ -1122,16 +1080,6 @@ async function findHrContacts(company, ctx, onStatus){
     roster=peopleFromSerp(flat, company);
     domain=domainFromSerp(flat)||'';
 
-    if(roster.length<HR_MIN_ROSTER){
-      if(onStatus) onStatus(`search found ${roster.length} — reading ${company}'s employee list…`);
-      try{
-        const deep=await scrapeEmployees(company, onStatus);
-        deep.forEach(x=>{ if(!roster.some(r=>r.linkedin && r.linkedin===x.linkedin)) roster.push(x); });
-      }catch(e){
-        // The cheap path already having found somebody makes this survivable.
-        if(!roster.length) throw e;
-      }
-    }
     if(!roster.length) throw new Error(`Couldn't find anyone public at ${company} to contact. Try adding someone by hand.`);
     await storeRoster(company, roster, domain);
   }
@@ -3115,7 +3063,7 @@ function hrDialog(i){
   const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
     <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Searches LinkedIn for two kinds of person at ${esc(j.company)}: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed.</p>
-    <p class="hint" style="margin-bottom:12px">About a cent of Apify credit, and free for the rest of the week once a company has been looked up. Companies too small for search to find get read from their employee list instead, which costs more and takes longer. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
+    <p class="hint" style="margin-bottom:12px">About a cent of Apify credit, and free for the rest of the week once a company has been looked up. If search finds nobody public at this company, it says so rather than spending more to keep looking — add a name by hand instead. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
     <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
   d.querySelector('#hrGo').onclick=()=>{ d.remove(); startHrSearch(i, ctx); };

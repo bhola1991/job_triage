@@ -60,7 +60,7 @@ Scoring needs an API key — DeepSeek by default (cheap; a few hundred jobs cost
 
 An Apify token is optional, and only needed for board search and finding contacts. ATS pulls work without it.
 
-Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query and fourteen queries a run, and contact lookup is a single search run (about a cent) whose results are reused for a week, falling back to the per-profile employee scraper only for companies too small for search to find. Typical use runs a few dollars a month.
+Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query and fourteen queries a run, and contact lookup is a single search run (about a cent) whose results are reused for a week. There is no deeper, per-profile fallback: if search finds nobody public, it says so instead of spending more. Typical use runs a few dollars a month.
 
 Nothing is uploaded and there's no account. Data lives in browser storage, so use **Backup & transfer** to keep a copy.
 
