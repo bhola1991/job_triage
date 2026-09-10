@@ -87,6 +87,17 @@
   select{font-family:var(--disp);font-size:13px}
   label.lab{display:block;font-size:12px;color:var(--muted);margin-bottom:5px}
 
+  /* A password you cannot read is a password you mistype, and every mistyped
+     one here costs a round trip to find out. */
+  .pw{position:relative}
+  .pw input{padding-right:62px}
+  .pw .rev{position:absolute;right:5px;top:50%;transform:translateY(-50%);
+    background:none;border:0;color:var(--muted);font-family:var(--mono);font-size:10.5px;
+    letter-spacing:.1em;padding:5px 7px;cursor:pointer}
+  .pw .rev:hover:not(:disabled){color:var(--signal);border-color:transparent;
+    background:none;transform:translateY(-50%)}
+  .pw .rev:active:not(:disabled){transform:translateY(-50%)}
+
   .drop{border:1px dashed var(--line);border-radius:4px;padding:20px 14px;text-align:center;
     color:var(--muted);font-size:12px;cursor:pointer;transition:.14s}
   .drop:hover,.drop.over{border-color:var(--signal);color:var(--signal)}
@@ -285,6 +296,19 @@
 const $ = s => document.querySelector(s);
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => new Date().toISOString().slice(0,10);
+/* Password fields, with a way to read back what was typed. */
+const pwField = (id, autocomplete, placeholder, value) =>
+  `<div class="pw"><input id="${id}" type="password" autocomplete="${autocomplete}"`
+  + ` placeholder="${esc(placeholder||'')}" value="${esc(value||'')}">`
+  + `<button type="button" class="rev" data-pw="${id}">SHOW</button></div>`;
+document.addEventListener('click', e => {
+  const b = e.target.closest('button[data-pw]'); if(!b) return;
+  const i = document.getElementById(b.dataset.pw); if(!i) return;
+  const reveal = i.type === 'password';
+  i.type = reveal ? 'text' : 'password';
+  b.textContent = reveal ? 'HIDE' : 'SHOW';
+  i.focus();
+});
 
 const COLS = ["title","company","location","url","description","status","date_applied",
   "follow_up_date","hr_contact","pitch_sent","notes","source","query",
@@ -3368,7 +3392,7 @@ function renderAuth(){
       <input id="auEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
       <p class="hint">Only ever used to reset your password. It is not shown to anyone else.</p>`:''}
       <label class="lab" style="margin-top:12px">Password</label>
-      <input id="auPass" type="password" autocomplete="${up?'new-password':'current-password'}" placeholder="${up?'At least 8 characters':''}" value="${esc(AUTH.pass)}">
+      ${pwField('auPass', up?'new-password':'current-password', up?'At least 8 characters':'', AUTH.pass)}
       ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
       ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
       <div class="btn-row" style="margin-top:14px">
@@ -3534,9 +3558,9 @@ function renderRecover(){
     <p class="say">You followed a reset link${USER&&USER.email?` for ${esc(USER.email)}`:''}. Pick something you will remember.</p>
     <div class="card">
       <label class="lab">New password</label>
-      <input id="rcA" type="password" autocomplete="new-password" placeholder="At least 8 characters">
+      ${pwField('rcA','new-password','At least 8 characters')}
       <label class="lab" style="margin-top:12px">Type it again</label>
-      <input id="rcB" type="password" autocomplete="new-password">
+      ${pwField('rcB','new-password')}
       <p class="err" id="rcErr" style="display:none"></p>
       <div class="btn-row" style="margin-top:14px">
         <button class="btn-go" id="rcGo">Save it</button>
