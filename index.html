@@ -455,10 +455,6 @@ const CFG   = window.TRIAGE_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
 const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
 let USER = null;                      // the signed-in auth user, or null
-/* The account is optional. AUTHVIEW is the sign-in screen being open by
-   request rather than as a wall; AUTHTHEN resolves the action that asked for
-   it; NOAUTH remembers a "no thanks" so nobody is nagged twice. */
-let AUTHVIEW = false, AUTHTHEN = null, NOAUTH = false;
 /* Never leaves the device it was typed on. */
 const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
 const cloudNow = () => !!(SB && USER);
@@ -503,7 +499,6 @@ async function load(){
   PROV  = (await get('triage:prov'))  || 'deepseek';
   APIFY = (await get('triage:apify')) || '';
   AUTO  = (await get('triage:auto')) !== '0';   // on unless turned off
-  NOAUTH = (await getLocal('triage:noauth')) === '1';
 }
 
 /* ═══ Apify: live LinkedIn search ═══
@@ -1407,8 +1402,7 @@ function companyRow(c,i){
     </div></label>`;
 }
 
-async function suggestDialog(){
-  if(!await requireAccount('You are about to have companies suggested for you.')) return;
+function suggestDialog(){
   const p=P(), prof=p.profile;
   const trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const d=modal(`<div class="eyebrow">Who to approach</div>
@@ -1772,7 +1766,6 @@ async function scoreBatch(batch, prof, track){
 
 async function runScoring(all, auto){
   const p=P(); if(!p || busy) return;
-  if(!auto && !await requireAccount('You are about to score these jobs with an AI model.')) return;
   const targets = p.jobs.map((j,i)=>({j,i})).filter(b=> all || !isScored(b.j));
   if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
   busy=true; render();
@@ -1843,7 +1836,6 @@ function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
 /* ═══ live search ═══ */
 async function runSearch(queries){
   const p=P(); if(!p||busy) return;
-  if(!await requireAccount('You are about to search LinkedIn.')) return;
   queries=(queries||[]).filter(q=>q&&q.trim());
   if(!queries.length){ setSearchInfo('Type a search first — title | location.'); return; }
   busy=true; render();
@@ -1868,7 +1860,6 @@ async function runSearch(queries){
 
 async function runBoards(trk, prof){
   const p=P(); if(!p||busy) return;
-  if(!await requireAccount("You are about to search this field's job boards.")) return;
   const boards=(trk.boards||[]), titles=(trk.titles||[]);
   if(!boards.length){ setSearchInfo("This track has no specialist boards — use LinkedIn search instead."); return; }
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
@@ -1914,7 +1905,6 @@ notion"></textarea>
 
 async function runAts(lines){
   const p=P(); if(!p||busy) return;
-  if(!await requireAccount('You are about to pull jobs from company careers feeds.')) return;
   busy=true; render();
   try{
     const {found,misses}=await atsSearch(lines,setSearchInfo);
@@ -2534,9 +2524,6 @@ function renderApp(){
         <p class="hint">Bins the scored roles you never acted on that rank below the top ${KEEP_TOP}. Anything you applied to, contacted or logged against is kept whatever it scored.</p>
         <div class="btn-row" style="margin-top:8px">
           <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
-        ${CLOUD&&!USER?`<div class="btn-row" style="margin-top:7px">
-          <button class="btn-go btn-sm" id="btnSignIn" style="width:100%">Sign in to sync</button></div>
-        <div class="hint">Your work is on this device only. An account carries it to every device you use.</div>`:''}
         ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
           <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
         <p class="hint">Erases every profile, job, CV and note stored against ${esc(userName()||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
@@ -2633,7 +2620,6 @@ function renderApp(){
     pr.jobs=pr.jobs.filter(j=>!kill.has(j));
     RANGE=null; await save(); render();
   };
-  if($('#btnSignIn')) $('#btnSignIn').onclick=()=>{ AUTHVIEW=true; AUTHTHEN=null; render(); };
   $('#btnClear').onclick=async()=>{ if(!confirm('Delete every job for this profile? Your profile stays.')) return;
     P().jobs=[]; RANGE=null; await save(); render(); };
   if($('#cbAuto')) $('#cbAuto').onchange=async e=>{
@@ -3091,8 +3077,7 @@ function hrDialog(i){
    the whole app for that long stops the person doing the thing they actually
    came here for. The run reports into the corner instead, and the picker only
    appears once there is something to pick. */
-async function startHrSearch(i, ctx){
-  if(!await requireAccount('You are about to search for who to contact.')) return;
+function startHrSearch(i, ctx){
   const p=P(), j=p.jobs[i];
   // Held by key, not index: this runs for minutes, and a delete or an import
   // in the meantime would otherwise land the contacts on somebody else's job.
@@ -3335,7 +3320,6 @@ function renderAuth(){
       <div class="btn-row" style="margin-top:14px">
         <button class="btn-go" id="auGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'\u2026':(up?'Create account':'Sign in')}</button>
         <button class="btn-sm" id="auSwap">${up?'I already have one':'Make an account'}</button>
-        <button class="btn-sm" id="auBack">Not now</button>
       </div>
       ${up?'':`<p class="say" style="margin:12px 0 0;font-size:12.5px"><a href="#" class="lnk" id="auReset">Forgot your password?</a></p>`}
     </div>
@@ -3401,12 +3385,6 @@ function renderAuth(){
 
   $('#auGo').onclick=go;
   $('#auPass').onkeydown=e=>{ if(e.key==='Enter') go(); };
-  $('#auBack').onclick=()=>{
-    AUTHVIEW=false;
-    // The action that opened this is still waiting; tell it not to run.
-    if(AUTHTHEN){ const f=AUTHTHEN; AUTHTHEN=null; f(false); }
-    render();
-  };
   $('#auSwap').onclick=()=>{ stash(); AUTH.mode=up?'in':'up'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
 
   if($('#auReset')) $('#auReset').onclick=async e=>{
@@ -3476,35 +3454,8 @@ function renderClaim(){
   };
 }
 
-/* Asked at the point of an action that produces work worth keeping, rather
-   than as a wall on the front door. Resolves true when the caller may proceed.
-
-   Anyone who says no is not asked again: a second prompt for something they
-   already declined is nagging, and the sign-in button in the Data block is
-   there for when they change their mind. */
-async function requireAccount(why){
-  if(!CLOUD || USER || NOAUTH) return true;
-  return new Promise(resolve=>{
-    const d=modal(`<div class="eyebrow">Keep your work</div>
-      <h2 style="margin:6px 0 8px">Sign in to save this?</h2>
-      <p style="color:var(--muted);font-size:13px;margin:0 0 6px">${esc(why)} An account keeps your jobs, scores and notes on every device you use.</p>
-      <p class="hint" style="margin:0 0 14px">Without one everything stays in this browser, and clearing site data erases it. Anything you have already done comes with you when you sign in.</p>
-      <div class="btn-row">
-        <button class="btn-go btn-sm" id="raGo">Sign in or make an account</button>
-        <button class="btn-sm" id="raNo">No thanks</button></div>`);
-    d.querySelector('#raGo').onclick=()=>{
-      d.remove(); AUTHVIEW=true; AUTHTHEN=resolve; render();
-    };
-    d.querySelector('#raNo').onclick=async()=>{
-      d.remove(); NOAUTH=true;
-      try{ await putLocal('triage:noauth','1'); }catch(e){}
-      resolve(true);                       // they said carry on, so carry on
-    };
-  });
-}
-
 function render(){
-  if(CLOUD && AUTHVIEW && !USER) return renderAuth();
+  if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
   (VIEW==='app'&&P()) ? renderApp() : renderOnb();
 }
@@ -3537,10 +3488,7 @@ async function afterAuth(){
   await load();
   if(cloudNow()) await migrateLocal();
   if(DB.current&&DB.profiles[DB.current]) VIEW='app';
-  AUTHVIEW=false;
   render();
-  // Signing in was something an action asked for. Let it happen now.
-  if(USER && AUTHTHEN){ const f=AUTHTHEN; AUTHTHEN=null; f(true); }
 }
 
 async function boot(){
