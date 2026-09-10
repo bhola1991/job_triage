@@ -3288,12 +3288,14 @@ let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'' }
    support ticket waiting to happen. Mirrors the CHECK constraint in schema.sql. */
 const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
 
-/* The username if the account has one, falling back to the email for accounts
-   made before usernames existed. */
-function userName(){
+/* Two different questions. myUsername() is "has this account claimed a name",
+   which gates the claim step below. userName() is "what do we call them on
+   screen", which falls back to the email so a legacy account is not blank. */
+function myUsername(){
   const m = USER && USER.user_metadata;
-  return (m && m.username) || (USER && USER.email) || '';
+  return (m && m.username) || '';
 }
+function userName(){ return myUsername() || (USER && USER.email) || ''; }
 
 function renderAuth(){
   const up = AUTH.mode==='up';
@@ -3305,9 +3307,9 @@ function renderAuth(){
       ? 'Your CV, your jobs and your notes are stored in the cloud so they follow you between devices. You can delete all of it, permanently, from inside the app.'
       : 'Welcome back.'}</p>
     <div class="card">
-      <label class="lab">Username</label>
+      <label class="lab">${up?'Username':'Username or email'}</label>
       <input id="auUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"
-             placeholder="${up?'3-20 characters: a-z, 0-9, underscore':'your username'}" value="${esc(AUTH.user)}">
+             placeholder="${up?'3-20 characters: a-z, 0-9, underscore':'your username, or the email you signed up with'}" value="${esc(AUTH.user)}">
       ${up?`<label class="lab" style="margin-top:12px">Email</label>
       <input id="auEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
       <p class="hint">Only ever used to reset your password. It is not shown to anyone else.</p>`:''}
@@ -3336,8 +3338,10 @@ function renderAuth(){
   const go=async ()=>{
     stash();
     const user=AUTH.user, pass=AUTH.pass, email=AUTH.email;
-    if(!user||!pass) return fail('Username and password, please.');
-    if(!USERNAME_RE.test(user)) return fail('Usernames are 3-20 characters: lowercase letters, numbers or underscore.');
+    if(!user||!pass) return fail(up?'Username and password, please.':'Fill both in, please.');
+    // Only sign-up dictates the shape. Sign-in also accepts an email, because
+    // accounts made before usernames existed have nothing else to type.
+    if(up && !USERNAME_RE.test(user)) return fail('Usernames are 3-20 characters: lowercase letters, numbers or underscore.');
     if(up && !email) return fail('An email, so you can reset your password later.');
     if(up && pass.length<8) return fail('Passwords need to be at least 8 characters.');
     AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderAuth();
@@ -3358,14 +3362,20 @@ function renderAuth(){
           AUTH.mode='in'; return renderAuth();
         }
       } else {
-        const {data:addr,error:e1}=await SB.rpc('login_email',{p_username:user});
-        if(e1) throw e1;
-        // Same message whether the username is unknown or the password is
-        // wrong, so this form does not become a way to test which usernames
-        // exist.
-        if(!addr) return fail('That username and password did not match.');
+        // An '@' means they typed an email, which Supabase takes directly; no
+        // lookup, and no way for this branch to confirm an address exists.
+        let addr = user;
+        if(!user.includes('@')){
+          const {data,error:e1}=await SB.rpc('login_email',{p_username:user});
+          if(e1) throw e1;
+          addr = data;
+        }
+        // Same message however it failed, so this form does not become a way
+        // to test which usernames or emails exist.
+        const nope = 'That did not match. Check the username or email, and the password.';
+        if(!addr) return fail(nope);
         const {error}=await SB.auth.signInWithPassword({email:addr,password:pass});
-        if(error) return fail('That username and password did not match.');
+        if(error) return fail(nope);
       }
     }catch(e){
       return fail((e&&e.message)||'That did not work.');
@@ -3393,8 +3403,60 @@ function renderAuth(){
   };
 }
 
+/* Shown once, to accounts that pre-date usernames. They signed in with their
+   email; they cannot sign in again without a name, so this is not skippable.
+   It is deliberately not part of onboarding: onboarding is about the CV, and
+   an account that already has jobs in it should not be sent back through it. */
+let CLAIM = {user:'', err:'', busy:false};
+function renderClaim(){
+  $('#root').innerHTML=`
+  <div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede">Pick a username</p>
+    <p class="say">Sign-in moved to usernames. Your account and everything in it is unchanged \u2014 this is the name you will type from now on instead of ${esc(USER&&USER.email||'your email')}.</p>
+    <div class="card">
+      <label class="lab">Username</label>
+      <input id="clUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"
+             placeholder="3-20 characters: a-z, 0-9, underscore" value="${esc(CLAIM.user)}">
+      <p class="hint">Lowercase letters, numbers and underscores. You cannot change it later, so pick one you will recognise.</p>
+      ${CLAIM.err?`<p class="err">${esc(CLAIM.err)}</p>`:''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go" id="clGo" ${CLAIM.busy?'disabled':''}>${CLAIM.busy?'\u2026':'Use this name'}</button>
+        <button class="btn-sm" id="clOut">Sign out</button>
+      </div>
+    </div>
+  </div>`;
+  const fail=m=>{ CLAIM.busy=false; CLAIM.err=m; renderClaim(); };
+  const go=async()=>{
+    CLAIM.user=($('#clUser').value||'').trim().toLowerCase();
+    const u=CLAIM.user;
+    if(!USERNAME_RE.test(u)) return fail('3-20 characters: lowercase letters, numbers or underscore.');
+    CLAIM.busy=true; CLAIM.err=''; renderClaim();
+    try{
+      const {data:free,error:e0}=await SB.rpc('username_available',{p_username:u});
+      if(e0) throw e0;
+      if(!free) return fail('That username is taken.');
+      const {error:e1}=await SB.rpc('claim_username',{p_username:u});
+      if(e1) throw e1;
+      // The row is what counts; this copies it onto the session so the rest of
+      // the app can read it without another round trip.
+      const {error:e2}=await SB.auth.updateUser({data:{username:u}});
+      if(e2) throw e2;
+      if(USER) USER.user_metadata=Object.assign({},USER.user_metadata,{username:u});
+      CLAIM.busy=false; CLAIM.err=''; render();
+    }catch(e){ return fail((e&&e.message)||'That did not work.'); }
+  };
+  $('#clGo').onclick=go;
+  $('#clUser').onkeydown=e=>{ if(e.key==='Enter') go(); };
+  $('#clOut').onclick=async()=>{
+    try{ await SB.auth.signOut(); }catch(e){}
+    USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
+  };
+}
+
 function render(){
   if(CLOUD && !USER) return renderAuth();
+  if(CLOUD && USER && !myUsername()) return renderClaim();
   (VIEW==='app'&&P()) ? renderApp() : renderOnb();
 }
 
@@ -3415,6 +3477,14 @@ async function migrateLocal(){
 
 async function afterAuth(){
   DB={profiles:{},current:null}; VIEW='onb';
+  // user_metadata on a session minted before the name was claimed still says
+  // there is none. The table is the truth; ask it once per sign-in.
+  if(cloudNow() && !myUsername()){
+    try{
+      const {data}=await SB.rpc('my_username');
+      if(data) USER.user_metadata=Object.assign({},USER.user_metadata,{username:data});
+    }catch(e){}
+  }
   await load();
   if(cloudNow()) await migrateLocal();
   if(DB.current&&DB.profiles[DB.current]) VIEW='app';

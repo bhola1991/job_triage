@@ -125,3 +125,39 @@ revoke all on function public.login_email(text)        from public;
 -- anon, because both run before anyone has signed in.
 grant execute on function public.username_available(text) to anon, authenticated;
 grant execute on function public.login_email(text)        to anon, authenticated;
+
+-- Accounts made before usernames existed have no row above, and so no name to
+-- sign in with. They sign in with their email instead, and the app then makes
+-- them pick a name once. This is what that picking calls.
+--
+-- The trigger cannot do this job: it fires on insert into auth.users, and
+-- these users were inserted long ago.
+create or replace function public.claim_username(p_username text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  -- One name per account, and no changing it here. Letting a name be swapped
+  -- would orphan whatever the old one is written down in.
+  if exists (select 1 from public.usernames where user_id = auth.uid()) then
+    raise exception 'this account already has a username';
+  end if;
+  -- Shape and uniqueness are the table's job; a violation here surfaces to the
+  -- caller as an error rather than being re-checked in two places.
+  insert into public.usernames (username, user_id)
+  values (lower(p_username), auth.uid());
+end $$;
+
+revoke all on function public.claim_username(text) from public;
+grant execute on function public.claim_username(text) to authenticated;
+
+-- Whether this account has finished the step above. Read at sign-in, because
+-- user_metadata can be stale on a session minted before the name was claimed.
+create or replace function public.my_username()
+returns text language sql security definer set search_path = public stable as $$
+  select username from public.usernames where user_id = auth.uid();
+$$;
+
+revoke all on function public.my_username() from public;
+grant execute on function public.my_username() to authenticated;
