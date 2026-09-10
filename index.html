@@ -2042,7 +2042,7 @@ function renderOnb(){
   $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
       <span class="sub" style="color:var(--muted);font-size:12px">fit &times; reachability</span>
       ${CLOUD&&USER?`<div class="spacer"></div>
-        <span class="sub" style="color:var(--dim);font-size:12px">${esc(USER.email||'')}</span>
+        <span class="sub" style="color:var(--dim);font-size:12px">${esc(userName())}</span>
         <button class="btn-sm" id="onbSignOut">Sign out</button>`:''}</div>
     <div class="onb">
       <div class="steps">${steps.map((s,i)=>
@@ -2457,7 +2457,7 @@ function renderApp(){
     <span class="pill ${p.jobs.length?'on':''}">${p.jobs.length} jobs</span>
     <span class="pill ${scored.length?'on':''}">${scored.length} scored</span>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
-    ${CLOUD&&USER?`<button class="btn-sm" id="btnSignOut" title="${esc(USER.email||'')}">Sign out</button>`:''}
+    ${CLOUD&&USER?`<button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
   <div class="wrap">
@@ -2526,7 +2526,7 @@ function renderApp(){
           <button class="btn-sm" id="btnClear" style="width:100%">Clear jobs</button></div>
         ${CLOUD&&USER?`<div class="btn-row" style="margin-top:8px">
           <button class="btn-sm" id="btnWipe" style="width:100%;color:var(--warn);border-color:#4d3129">Delete everything in my account</button></div>
-        <p class="hint">Erases every profile, job, CV and note stored against ${esc(USER.email||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
+        <p class="hint">Erases every profile, job, CV and note stored against ${esc(userName()||'this account')}, on every device. The account itself stays. There is no undo.</p>`:''}
         <div class="hint">Stored in this browser only \u2014 clearing site data wipes it. Take a backup.</div>
       </div>
     </div>
@@ -3281,7 +3281,19 @@ document.addEventListener('click',async e=>{
    what changes by having an account, because "your CV stays in your browser"
    stopped being true the moment this screen existed and pretending otherwise
    would be the dishonest kind of onboarding. */
-let AUTH = { mode:'in', msg:'', err:'', busy:false, email:'', pass:'' };
+let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'' };
+
+/* Usernames are lowercase and narrow on purpose: they are an identifier people
+   type, and a name that differs from another only by case or by a space is a
+   support ticket waiting to happen. Mirrors the CHECK constraint in schema.sql. */
+const USERNAME_RE = /^[a-z0-9_]{3,20}$/;
+
+/* The username if the account has one, falling back to the email for accounts
+   made before usernames existed. */
+function userName(){
+  const m = USER && USER.user_metadata;
+  return (m && m.username) || (USER && USER.email) || '';
+}
 
 function renderAuth(){
   const up = AUTH.mode==='up';
@@ -3293,8 +3305,12 @@ function renderAuth(){
       ? 'Your CV, your jobs and your notes are stored in the cloud so they follow you between devices. You can delete all of it, permanently, from inside the app.'
       : 'Welcome back.'}</p>
     <div class="card">
-      <label class="lab">Email</label>
+      <label class="lab">Username</label>
+      <input id="auUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"
+             placeholder="${up?'3-20 characters: a-z, 0-9, underscore':'your username'}" value="${esc(AUTH.user)}">
+      ${up?`<label class="lab" style="margin-top:12px">Email</label>
       <input id="auEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
+      <p class="hint">Only ever used to reset your password. It is not shown to anyone else.</p>`:''}
       <label class="lab" style="margin-top:12px">Password</label>
       <input id="auPass" type="password" autocomplete="${up?'new-password':'current-password'}" placeholder="${up?'At least 8 characters':''}" value="${esc(AUTH.pass)}">
       ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
@@ -3310,38 +3326,66 @@ function renderAuth(){
 
   // Swapping mode or hitting an error re-renders the form, which would throw
   // away what was typed. Read it back into state before anything re-renders.
-  const stash=()=>{ AUTH.email=($('#auEmail').value||'').trim(); AUTH.pass=$('#auPass').value||''; };
+  const stash=()=>{
+    AUTH.user=($('#auUser').value||'').trim().toLowerCase();
+    if($('#auEmail')) AUTH.email=($('#auEmail').value||'').trim();
+    AUTH.pass=$('#auPass').value||'';
+  };
+  const fail=m=>{ AUTH.busy=false; AUTH.err=m; renderAuth(); };
+
   const go=async ()=>{
     stash();
-    const email=AUTH.email, pass=AUTH.pass;
-    if(!email||!pass){ AUTH.err='Email and password, please.'; return renderAuth(); }
-    if(up && pass.length<8){ AUTH.err='Passwords need to be at least 8 characters.'; return renderAuth(); }
+    const user=AUTH.user, pass=AUTH.pass, email=AUTH.email;
+    if(!user||!pass) return fail('Username and password, please.');
+    if(!USERNAME_RE.test(user)) return fail('Usernames are 3-20 characters: lowercase letters, numbers or underscore.');
+    if(up && !email) return fail('An email, so you can reset your password later.');
+    if(up && pass.length<8) return fail('Passwords need to be at least 8 characters.');
     AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderAuth();
+
     try{
-      const {data,error} = up
-        ? await SB.auth.signUp({email,password:pass})
-        : await SB.auth.signInWithPassword({email,password:pass});
-      if(error) throw error;
-      // Sign-up with email confirmation on returns a user but no session; the
-      // onAuthStateChange handler covers the case where it returns one.
-      if(up && !(data && data.session)){
-        AUTH.busy=false; AUTH.msg='Check your email to confirm the account, then sign in.'; AUTH.mode='in';
-        return renderAuth();
+      if(up){
+        const {data:free,error:e0}=await SB.rpc('username_available',{p_username:user});
+        if(e0) throw e0;
+        if(!free) return fail('That username is taken.');
+        // The username rides along in user_metadata; a trigger on auth.users
+        // claims it, which is the only moment that works when email
+        // confirmation is on and sign-up returns no session.
+        const {data,error}=await SB.auth.signUp({email,password:pass,options:{data:{username:user}}});
+        if(error) throw error;
+        if(!(data && data.session)){
+          AUTH.busy=false; AUTH.pass='';
+          AUTH.msg='Check your email to confirm the account, then sign in with your username.';
+          AUTH.mode='in'; return renderAuth();
+        }
+      } else {
+        const {data:addr,error:e1}=await SB.rpc('login_email',{p_username:user});
+        if(e1) throw e1;
+        // Same message whether the username is unknown or the password is
+        // wrong, so this form does not become a way to test which usernames
+        // exist.
+        if(!addr) return fail('That username and password did not match.');
+        const {error}=await SB.auth.signInWithPassword({email:addr,password:pass});
+        if(error) return fail('That username and password did not match.');
       }
     }catch(e){
-      AUTH.busy=false; AUTH.err=(e&&e.message)||'That did not work.'; return renderAuth();
+      return fail((e&&e.message)||'That did not work.');
     }
     AUTH.busy=false; AUTH.pass='';
   };
+
   $('#auGo').onclick=go;
   $('#auPass').onkeydown=e=>{ if(e.key==='Enter') go(); };
   $('#auSwap').onclick=()=>{ stash(); AUTH.mode=up?'in':'up'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
+
   if($('#auReset')) $('#auReset').onclick=async e=>{
     e.preventDefault();
     stash();
-    const email=AUTH.email;
-    if(!email){ AUTH.err='Put your email in first, then press this.'; return renderAuth(); }
-    try{ await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); }catch(err){}
+    // Reset goes by email, not by username: the recovery link is sent to the
+    // address on the account, and asking for it directly keeps this form from
+    // answering "which email is behind this username".
+    const addr=prompt('Which email is on the account?');
+    if(!addr) return;
+    try{ await SB.auth.resetPasswordForEmail(addr.trim(),{redirectTo:location.href}); }catch(err){}
     // Said the same way whether or not the address exists: telling a stranger
     // which emails have accounts here is not information worth giving away.
     AUTH.err=''; AUTH.msg='If that address has an account, a reset link is on its way.';
