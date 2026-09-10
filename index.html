@@ -464,7 +464,19 @@ const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABAS
 let USER = null;                      // the signed-in auth user, or null
 /* Never leaves the device it was typed on. */
 const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
-const cloudNow = () => !!(SB && USER);
+/* Every cloud call here sits between the person and their own data, so none of
+   them may hang. A request that never settles is an app that loads forever,
+   which is worse than one that fails: a failure falls back to the copy on this
+   device and they carry on working. */
+const withTimeout = (p, ms, what) => Promise.race([p,
+  new Promise((_,rej)=>setTimeout(()=>rej(new Error(what+' timed out after '+Math.round(ms/1000)+'s')), ms))]);
+const READ_MS = 8000, WRITE_MS = 45000;
+/* Once one call has timed out, the rest of this page load will too. Latching
+   here turns four serial timeouts into one, and every later call falls through
+   to the copy on this device immediately. Cleared by a reload. */
+let CLOUD_DOWN = false;
+const cloudDown = e => { if(e && /timed out/.test(e.message||'')) CLOUD_DOWN = true; };
+const cloudNow = () => !!(SB && USER && !CLOUD_DOWN);
 
 async function putLocal(k,v){
   if(HAS_WS){ try{ await window.storage.set(k,v); return; }catch(e){} }
@@ -480,20 +492,29 @@ async function put(k,v){
   // lose the thing the user just did, and it doubles as the offline copy.
   await putLocal(k,v);
   try{
-    const {error}=await SB.from('user_state')
-      .upsert({user_id:USER.id,k,v,updated_at:new Date().toISOString()},{onConflict:'user_id,k'});
+    const {error}=await withTimeout(
+      SB.from('user_state')
+        .upsert({user_id:USER.id,k,v,updated_at:new Date().toISOString()},{onConflict:'user_id,k'}),
+      WRITE_MS, 'saving to your account');
     if(error) throw error;
     syncNote('');
-  }catch(e){ syncNote("Offline \u2014 saved on this device, will not sync until you reload with a connection."); }
+  }catch(e){
+    cloudDown(e);
+    console.warn('cloud save failed:', e && e.message);
+    syncNote("Saved on this device \u2014 " + ((e&&e.message)||'could not reach the server')
+             + ". Your work is not lost.");
+  }
 }
 async function get(k){
   if(!cloudNow() || LOCAL_ONLY.test(k)) return getLocal(k);
   try{
-    const {data,error}=await SB.from('user_state').select('v').eq('user_id',USER.id).eq('k',k).maybeSingle();
+    const {data,error}=await withTimeout(
+      SB.from('user_state').select('v').eq('user_id',USER.id).eq('k',k).maybeSingle(),
+      READ_MS, 'reading your account');
     if(error) throw error;
     if(data && typeof data.v==='string'){ await putLocal(k,data.v); return data.v; }
     return null;
-  }catch(e){ return getLocal(k); }   // offline: last known good
+  }catch(e){ cloudDown(e); console.warn('cloud read failed:', e && e.message); return getLocal(k); }   // offline: last known good
 }
 function syncNote(t){ const e=$('#syncInfo'); if(e){ e.textContent=t; e.style.display=t?'block':'none'; } }
 async function save(){ await put('triage:db', JSON.stringify(DB)); }
@@ -3564,18 +3585,35 @@ async function migrateLocal(){
 async function afterAuth(){
   DB={profiles:{},current:null}; VIEW='onb';
   if(cloudNow()) splash('Loading your account\u2026');
+  try{
+    await afterAuthInner();
+  }catch(e){
+    // Reaching here with nothing on screen is the one outcome worth guarding
+    // against. Whatever is on this device beats a page that never finishes.
+    console.error('afterAuth failed:', e);
+    try{
+      const v=await getLocal('triage:db');
+      if(v){ const d=JSON.parse(v); DB.profiles=d.profiles||{}; DB.current=d.current||null; }
+    }catch(e2){}
+    syncNote('Could not reach your account \u2014 showing what is on this device. '+((e&&e.message)||''));
+  }
+  if(DB.current&&DB.profiles[DB.current]) VIEW='app';
+  render();
+  // After the render, not before: render() rebuilds #root and would wipe it.
+  if(CLOUD_DOWN) syncNote('Could not reach your account just now — working from this device. Anything you change is saved here and will sync when you reload with a connection.');
+}
+
+async function afterAuthInner(){
   // user_metadata on a session minted before the name was claimed still says
   // there is none. The table is the truth; ask it once per sign-in.
   if(cloudNow() && !myUsername()){
     try{
-      const {data}=await SB.rpc('my_username');
+      const {data}=await withTimeout(SB.rpc('my_username'), READ_MS, 'checking your username');
       if(data) USER.user_metadata=Object.assign({},USER.user_metadata,{username:data});
-    }catch(e){}
+    }catch(e){ cloudDown(e); console.warn('my_username:', e && e.message); }
   }
   await load();
   if(cloudNow()) await migrateLocal();
-  if(DB.current&&DB.profiles[DB.current]) VIEW='app';
-  render();
 }
 
 async function boot(){
