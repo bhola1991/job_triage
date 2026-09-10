@@ -9,181 +9,180 @@
 <helmet>
   <style>
     *, *::before, *::after { box-sizing: border-box; }
-    html, body { background: #131A21; }
+    html, body { background: #0E1411; }
     body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
            font-size: 14px; line-height: 1.5; }
-    a { color: #5FA8C7; text-decoration: none; }
-    a:hover { color: #7FBFD8; }
+    a { color: #4FB58C; text-decoration: none; }
+    a:hover { color: #6FD79D; }
     .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
     .eyebrow { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
-               font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #56656F; }
+               font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: #798B81; }
     .stage { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px;
              letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px;
-             border-radius: 2px; border: 1px solid #2B3945; color: #7D8C99; }
+             border-radius: 2px; border: 1px solid #29372F; color: #8B9C92; }
     .chn { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px;
            letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; }
     .flag { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px;
-            padding: 2px 6px; border-radius: 2px; background: #1F2A34; color: #7D8C99; letter-spacing: .04em; }
+            padding: 2px 6px; border-radius: 2px; background: #1C2620; color: #8B9C92; letter-spacing: .04em; }
     .btn { font-family: inherit; font-size: 12px; padding: 5px 9px; border-radius: 5px;
-           border: 1px solid #2B3945; background: #1F2A34; color: #E2E8ED; }
-    .btn-go { background: #E8B04B; border-color: #E8B04B; color: #16202a; font-weight: 700; }
-    .btn-cold { background: #4FB3A5; border-color: #4FB3A5; color: #0d1f1d; font-weight: 700; }
-    .lnk { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #5FA8C7; }
-    .label { font-size: 11px; color: #56656F; margin-bottom: 7px; }
+           border: 1px solid #29372F; background: #1C2620; color: #E9F0EB; }
+    .btn-go { background: #56C88A; border-color: #56C88A; color: #08150E; font-weight: 700; }
+    .btn-cold { background: #A9BCB1; border-color: #A9BCB1; color: #0E1411; font-weight: 700; }
+    .lnk { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 12px; color: #4FB58C; }
+    .label { font-size: 11px; color: #798B81; margin-bottom: 7px; }
   </style>
 </helmet>
 
-<div style="width: 1180px; padding: 26px 28px 34px; color: #E2E8ED; background: #131A21;">
+<div style="width: 1180px; padding: 26px 28px 34px; color: #E9F0EB; background: #0E1411;">
 
   <div class="eyebrow" style="display: block; margin-bottom: 6px;">Job card &middot; anatomy and states</div>
-  <p style="margin: 0 0 4px; font-size: 15px; color: #E2E8ED;">One primary action per card. Fit and reachability encoded once each, not three times.</p>
-  <p style="margin: 0 0 22px; font-size: 12px; color: #7D8C99; max-width: 88ch; text-wrap: pretty;">The shipping card prints the same two numbers three ways &mdash; as a rank, as <span class="mono">fit&nbsp;82&nbsp;/&nbsp;reach&nbsp;54</span>, and again as two unlabelled 3px bars. Here the rank stays the sort key, and the two axes get one labelled readout that is actually legible.</p>
+  <p style="margin: 0 0 4px; font-size: 15px; color: #E9F0EB;">One primary action, the one move that advances the pipeline, then Details. Close is not on the card.</p>
+  <p style="margin: 0 0 22px; font-size: 12px; color: #8B9C92; max-width: 88ch; text-wrap: pretty;">Shipped. The card used to print the same two numbers three ways &mdash; as a rank, as text, and again as two unlabelled bars. Each axis is stated once now, labelled. Close moved into the stage row inside the detail panel, which opens in place rather than as a modal.</p>
 
   <!-- 1. new / posted -->
   <div class="label">New &middot; posted role &middot; above the bar</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #E8B04B; border-radius: 3px; background: #19222B; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #56C88A; border-radius: 3px; background: #151D18; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Forward Deployed Engineer</div>
-        <div style="font-size: 12px; color: #7D8C99;">Sarvam AI &middot; Bangalore, India</div>
+        <div style="font-size: 12px; color: #8B9C92;">Sarvam AI &middot; Bangalore, India</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #E8B04B; background: #4a3d22;">posted role</span>
+          <span class="chn" style="color: #56C88A; background: #1F3A2A;">posted role</span>
           <span class="stage">new</span>
-          <span class="stage" style="color: #E8B04B; border-color: #4a3d22;">4d ago</span>
+          <span class="stage" style="color: #56C88A; border-color: #1F3A2A;">4d ago</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-        <div class="mono" style="font-size: 19px; color: #E8B04B; line-height: 1;">72</div>
+        <div class="mono" style="font-size: 19px; color: #56C88A; line-height: 1;">72</div>
         <div style="display: flex; flex-direction: column; gap: 4px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">fit</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 82%; background: #E8B04B;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">82</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 82%; background: #56C88A;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">82</span>
           </div>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">reach</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 54%; background: #6B7A87;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">54</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 54%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">54</span>
           </div>
         </div>
       </div>
     </div>
-    <p style="font-size: 12px; color: #7D8C99; margin: 10px 0 0; font-style: italic;">Ops-heavy deployment role at a lab small enough to read the application.</p>
+    <p style="font-size: 12px; color: #8B9C92; margin: 10px 0 0; font-style: italic;">Ops-heavy deployment role at a lab small enough to read the application.</p>
     <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;">
-      <span class="flag" style="color: #6FB98F;">strong fit</span>
-      <span class="flag" style="color: #6FB98F;">rare combination fit</span>
+      <span class="flag" style="color: #6FD79D;">strong fit</span>
+      <span class="flag" style="color: #6FD79D;">rare combination fit</span>
     </div>
     <div style="display: flex; gap: 6px; margin-top: 11px; align-items: center;">
       <a class="lnk">open &#8599;</a>
       <div style="flex: 1;"></div>
       <button class="btn btn-go">Draft outreach</button>
+      <button class="btn">Mark applied</button>
       <button class="btn">Details</button>
-      <button class="btn" style="padding: 5px 10px;">&middot;&middot;&middot;</button>
     </div>
   </div>
 
   <!-- 2. new / cold -->
   <div class="label">New &middot; cold approach &mdash; different channel, different primary verb, teal accent</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #4FB3A5; border-radius: 3px; background: #19222B; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #A9BCB1; border-radius: 3px; background: #151D18; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Cold approach</div>
-        <div style="font-size: 12px; color: #7D8C99;">Cropin &middot; Bangalore, India</div>
+        <div style="font-size: 12px; color: #8B9C92;">Cropin &middot; Bangalore, India</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #4FB3A5; background: #1f3f3b;">cold approach</span>
+          <span class="chn" style="color: #A9BCB1; background: #23302A;">cold approach</span>
           <span class="stage">new</span>
-          <span class="stage" style="color: #7D8C99;">2 contacts</span>
+          <span class="stage" style="color: #8B9C92;">2 contacts</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-        <div class="mono" style="font-size: 19px; color: #4FB3A5; line-height: 1;">68</div>
+        <div class="mono" style="font-size: 19px; color: #A9BCB1; line-height: 1;">68</div>
         <div style="display: flex; flex-direction: column; gap: 4px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">fit</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 71%; background: #4FB3A5;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">71</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 71%; background: #A9BCB1;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">71</span>
           </div>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">reach</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 63%; background: #6B7A87;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">63</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 63%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">63</span>
           </div>
         </div>
       </div>
     </div>
-    <p style="font-size: 12px; color: #7D8C99; margin: 10px 0 0; font-style: italic;">Agritech ops is the exact overlap; small enough that a direct message lands.</p>
+    <p style="font-size: 12px; color: #8B9C92; margin: 10px 0 0; font-style: italic;">Agritech ops is the exact overlap; small enough that a direct message lands.</p>
     <div style="display: flex; gap: 6px; margin-top: 11px; align-items: center;">
       <div style="flex: 1;"></div>
-      <button class="btn btn-cold">Write the DM</button>
+      <button class="btn btn-go">Write the DM</button>
+      <button class="btn">Mark contacted</button>
       <button class="btn">Details</button>
-      <button class="btn" style="padding: 5px 10px;">&middot;&middot;&middot;</button>
     </div>
   </div>
 
   <!-- 3. sent, waiting -->
   <div class="label">Sent &middot; waiting &mdash; nothing to do, so no primary button at all</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #6B7A87; border-radius: 3px; background: #19222B; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #86988D; border-radius: 3px; background: #151D18; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Solutions Engineer, India</div>
-        <div style="font-size: 12px; color: #7D8C99;">Hasura &middot; Remote</div>
+        <div style="font-size: 12px; color: #8B9C92;">Hasura &middot; Remote</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #E8B04B; background: #4a3d22;">posted role</span>
-          <span class="stage" style="color: #6B7A87; border-color: #3a464f;">sent</span>
-          <span class="stage" style="color: #6B7A87; border-color: #3a464f;">3d silent</span>
+          <span class="chn" style="color: #56C88A; background: #1F3A2A;">posted role</span>
+          <span class="stage" style="color: #86988D; border-color: #364339;">sent</span>
+          <span class="stage" style="color: #86988D; border-color: #364339;">3d silent</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-        <div class="mono" style="font-size: 19px; color: #E8B04B; line-height: 1;">66</div>
+        <div class="mono" style="font-size: 19px; color: #56C88A; line-height: 1;">66</div>
         <div style="display: flex; flex-direction: column; gap: 4px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">fit</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 74%; background: #E8B04B;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">74</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 74%; background: #56C88A;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">74</span>
           </div>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">reach</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 52%; background: #6B7A87;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">52</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 52%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">52</span>
           </div>
         </div>
       </div>
     </div>
-    <div style="font-size: 12px; color: #7D8C99; border-left: 2px solid #2B3945; padding: 2px 0 2px 10px; margin: 10px 0 0;"><span class="mono" style="font-size: 10px; color: #56656F;">2026-09-07</span> &middot; <b style="color: #E2E8ED; font-weight: 500;">sent</b> applied</div>
+    <div style="font-size: 12px; color: #8B9C92; border-left: 2px solid #29372F; padding: 2px 0 2px 10px; margin: 10px 0 0;"><span class="mono" style="font-size: 10px; color: #798B81;">2026-09-07</span> &middot; <b style="color: #E9F0EB; font-weight: 500;">sent</b> applied</div>
     <div style="display: flex; gap: 6px; margin-top: 11px; align-items: center;">
       <a class="lnk">open &#8599;</a>
       <div style="flex: 1;"></div>
-      <button class="btn">They replied</button>
+      <button class="btn btn-go">They replied</button>
       <button class="btn">Details</button>
-      <button class="btn" style="padding: 5px 10px;">&middot;&middot;&middot;</button>
     </div>
   </div>
 
   <!-- 4. due -->
   <div class="label">Overdue a chase &mdash; the only card whose primary action is time-driven</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #C4634A; border-radius: 3px; background: #19222B; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #E2685C; border-radius: 3px; background: #151D18; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">AI Operations Lead</div>
-        <div style="font-size: 12px; color: #7D8C99;">Observe.AI &middot; Bangalore, India</div>
+        <div style="font-size: 12px; color: #8B9C92;">Observe.AI &middot; Bangalore, India</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #E8B04B; background: #4a3d22;">posted role</span>
-          <span class="stage" style="color: #C4634A; border-color: #4d3129;">due</span>
-          <span class="stage" style="color: #C4634A; border-color: #4d3129;">11d silent</span>
+          <span class="chn" style="color: #56C88A; background: #1F3A2A;">posted role</span>
+          <span class="stage" style="color: #E2685C; border-color: #5A2E2A;">due</span>
+          <span class="stage" style="color: #E2685C; border-color: #5A2E2A;">11d silent</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-        <div class="mono" style="font-size: 19px; color: #E8B04B; line-height: 1;">70</div>
+        <div class="mono" style="font-size: 19px; color: #56C88A; line-height: 1;">70</div>
         <div style="display: flex; flex-direction: column; gap: 4px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">fit</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 79%; background: #E8B04B;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">79</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 79%; background: #56C88A;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">79</span>
           </div>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">reach</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 55%; background: #6B7A87;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">55</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 55%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">55</span>
           </div>
         </div>
       </div>
@@ -193,62 +192,61 @@
       <div style="flex: 1;"></div>
       <button class="btn btn-go">Write the chase</button>
       <button class="btn">They replied</button>
-      <button class="btn" style="padding: 5px 10px;">&middot;&middot;&middot;</button>
+      <button class="btn">Details</button>
     </div>
   </div>
 
   <!-- 5. live -->
   <div class="label">In conversation &mdash; the most valuable state, and the only one with a tinted field</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #7FA9E8; border-radius: 3px; background: linear-gradient(90deg, rgba(127,169,232,.06), transparent 40%), #19222B; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #FFFFFF; border-radius: 3px; background: linear-gradient(90deg, rgba(255,255,255,.07), transparent 40%), #151D18; padding: 13px 15px; margin-bottom: 20px; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Deployment Strategist</div>
-        <div style="font-size: 12px; color: #7D8C99;">Neysa &middot; Remote</div>
+        <div style="font-size: 12px; color: #8B9C92;">Neysa &middot; Remote</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #4FB3A5; background: #1f3f3b;">cold approach</span>
-          <span class="stage" style="color: #7FA9E8; border-color: #33445f;">live</span>
-          <span class="stage" style="color: #7D8C99;">1 contact</span>
+          <span class="chn" style="color: #A9BCB1; background: #23302A;">cold approach</span>
+          <span class="stage" style="color: #FFFFFF; border-color: #4A5A50;">live</span>
+          <span class="stage" style="color: #8B9C92;">1 contact</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0; display: flex; flex-direction: column; align-items: flex-end; gap: 6px;">
-        <div class="mono" style="font-size: 19px; color: #4FB3A5; line-height: 1;">64</div>
+        <div class="mono" style="font-size: 19px; color: #A9BCB1; line-height: 1;">64</div>
         <div style="display: flex; flex-direction: column; gap: 4px; width: 148px;">
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">fit</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 69%; background: #4FB3A5;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">69</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 69%; background: #A9BCB1;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">69</span>
           </div>
           <div style="display: flex; align-items: center; gap: 7px;">
-            <span style="font-size: 10px; color: #56656F; width: 30px; text-align: left;">reach</span>
-            <span style="flex: 1; height: 3px; background: #1F2A34; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 58%; background: #6B7A87;"></i></span>
-            <span class="mono" style="font-size: 10px; color: #7D8C99; width: 16px; text-align: right;">58</span>
+            <span style="font-size: 10px; color: #798B81; width: 30px; text-align: left;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 58%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">58</span>
           </div>
         </div>
       </div>
     </div>
-    <div style="font-size: 12px; color: #7D8C99; border-left: 2px solid #2B3945; padding: 2px 0 2px 10px; margin: 10px 0 0;"><span class="mono" style="font-size: 10px; color: #56656F;">2026-09-09</span> &middot; <b style="color: #E2E8ED; font-weight: 500;">reply</b> asked for a call next week</div>
+    <div style="font-size: 12px; color: #8B9C92; border-left: 2px solid #29372F; padding: 2px 0 2px 10px; margin: 10px 0 0;"><span class="mono" style="font-size: 10px; color: #798B81;">2026-09-09</span> &middot; <b style="color: #E9F0EB; font-weight: 500;">reply</b> asked for a call next week</div>
     <div style="display: flex; gap: 6px; margin-top: 11px; align-items: center;">
       <div style="flex: 1;"></div>
       <button class="btn btn-go">Log a note</button>
       <button class="btn">Details</button>
-      <button class="btn" style="padding: 5px 10px;">&middot;&middot;&middot;</button>
     </div>
   </div>
 
   <!-- 6. closed -->
   <div class="label">Closed &mdash; kept, and visibly receded</div>
-  <div style="border: 1px solid #2B3945; border-left: 2px solid #56656F; border-radius: 3px; background: #19222B; padding: 13px 15px; opacity: .42; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
+  <div style="border: 1px solid #29372F; border-left: 2px solid #798B81; border-radius: 3px; background: #151D18; padding: 13px 15px; opacity: .42; box-shadow: 0 1px 2px rgba(0,0,0,.2);">
     <div style="display: flex; gap: 12px; align-items: flex-start;">
       <div style="flex: 1; min-width: 0;">
         <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Technical Program Manager</div>
-        <div style="font-size: 12px; color: #7D8C99;">Razorpay &middot; Bangalore, India</div>
+        <div style="font-size: 12px; color: #8B9C92;">Razorpay &middot; Bangalore, India</div>
         <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 7px;">
-          <span class="chn" style="color: #E8B04B; background: #4a3d22;">posted role</span>
-          <span class="stage" style="color: #56656F;">closed</span>
+          <span class="chn" style="color: #56C88A; background: #1F3A2A;">posted role</span>
+          <span class="stage" style="color: #798B81;">closed</span>
         </div>
       </div>
       <div style="text-align: right; flex-shrink: 0;">
-        <div class="mono" style="font-size: 19px; color: #E8B04B; line-height: 1;">51</div>
+        <div class="mono" style="font-size: 19px; color: #56C88A; line-height: 1;">51</div>
       </div>
     </div>
     <div style="display: flex; gap: 6px; margin-top: 11px; align-items: center;">
