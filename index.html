@@ -244,6 +244,13 @@
      unnecessary rather than merely wrong. */
   /* Below the sheet, above everything else. Toasts sit at 40 and the modal
      layer at 50, so an open sheet never covers a dialog it opened. */
+  /* Below this a 150px score block beside the title leaves the title wrapping
+     every couple of words. Same information, stacked under it instead. */
+  @media(max-width:560px){
+    .jrow{flex-wrap:wrap}
+    .jscore{width:100%;flex-direction:row;align-items:center;gap:12px;margin-top:6px}
+    .jaxes{flex:1;width:auto}
+  }
   #toolbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:44;
     gap:10px;align-items:center;
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
@@ -269,6 +276,8 @@
     .main{padding-bottom:96px}
     /* Everything in the sheet is a touch target now, not a pointer target. */
     .side button,.side select,.side .drop,.side summary{min-height:44px}
+    /* Everything in an open panel is a touch target too, not just the sidebar. */
+    .jdet button{min-height:44px}
     #toolbar{display:flex}
     #scrim{display:block}
   }
@@ -334,10 +343,41 @@
   .log b{color:var(--text);font-weight:500}
   .log .when{font-family:var(--mono);font-size:10px;color:var(--dim)}
   .job.done{opacity:.42}
+  /* The detail view, opened in place. It used to be a modal, which put the job
+     you were working through on top of the list you were working through. Bled
+     to the card's edges so it reads as this card opening rather than a second
+     thing appearing over it. */
+  /* An open card is being read rather than scanned, so it steps up a size:
+     the list is tuned for skimming forty rows, and that is the wrong density
+     for the one row you have stopped on. */
+  .job.open{border-left-width:3px;padding:18px 20px}
+  .job.open .jt{font-size:19px;margin-bottom:4px}
+  .job.open .jc{font-size:14px}
+  .job.open .jreason{font-size:14px;margin-top:11px}
+  .job.open .jscore .big{font-size:24px}
+  .jdet{border-top:1px solid var(--line);background:var(--panel2);
+    margin:16px -20px -18px;padding:20px;border-radius:0 0 3px 3px;font-size:15px}
+  .jdet > .eyebrow{display:block;margin:22px 0 10px;font-size:11px;letter-spacing:.16em}
+  .jdet > .eyebrow:first-child{margin-top:0}
+  .jdet .ct-row{padding:12px 0}
+  .jdet .ct-nm{font-size:15px}
+  .jdet .ct-meta{font-size:12.5px}
+  .jdet .ct-none{font-size:13.5px;padding:10px 0}
+  .jdet .log{font-size:13.5px;padding:4px 0 4px 12px;margin:9px 0}
+  .jdet .log .when{font-size:11.5px}
+  .jdet .hint{font-size:12.5px;margin-top:14px}
+  .jdet button{font-size:13px;padding:7px 12px}
+  .jdet .desc{color:var(--muted);font-size:13.5px;line-height:1.6;
+    white-space:pre-wrap;max-height:280px;overflow:auto;margin:0}
   .jrow{display:flex;gap:12px;align-items:flex-start}
   .jt{font-size:15px;font-weight:500;margin-bottom:2px}
   .jc{color:var(--muted);font-size:12px}
-  .jscore{text-align:right;flex-shrink:0;font-family:var(--mono)}
+  .jscore{text-align:right;flex-shrink:0;font-family:var(--mono);
+    display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+  .jaxes{display:flex;flex-direction:column;gap:4px;width:150px}
+  .jaxis{display:flex;align-items:center;gap:7px}
+  .jaxis .k{font-size:10px;color:var(--dim);width:30px;text-align:left}
+  .jaxis .v{font-size:10px;color:var(--muted);width:16px;text-align:right}
   .jscore .big{font-size:19px;color:var(--signal);line-height:1}
   .jscore .sm{font-size:10px;color:var(--dim);margin-top:2px}
   .jreason{font-size:12px;color:var(--muted);margin:8px 0 0;font-style:italic}
@@ -574,6 +614,11 @@ let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
+/* Which job is expanded in the list, held by keyOf rather than by index: a
+   retention pass or an import can renumber the array underneath it, and the
+   panel must not reopen on somebody else's job. One at a time, because the
+   point of it is to read one carefully. */
+let OPEN_JOB = null;
 /* Which disclosures are open, sidebar and lists alike. Held here rather than
    left as DOM state because render() rebuilds #root from scratch: a panel that
    shut itself every time you used something inside it would be worse than no
@@ -1919,11 +1964,18 @@ function logEvent(j,kind,text){
   setList(j,'events',ev.slice(0,40));
   j.last_touch=today();
 }
+/* What a stage change says in the log. Shared, because the card and the detail
+   panel both make them, and 'moved to sent' is a worse record than 'applied'. */
+const stageNote = (j,st) => st==='sent' ? (chOf(j)==='cold'?'reached out':'applied')
+  : st==='live' ? 'they replied' : st==='closed' ? 'closed out' : 'reopened';
 function setStage(j,st){
   j.stage=st;
   j.status = st==='sent' ? (chOf(j)==='cold'?'Contacted':'Applied')
            : st==='live' ? 'In conversation'
            : st==='closed' ? 'Closed' : 'New';
+  // A stale follow-up on a reopened row would fall due against a clock that
+  // started the first time round.
+  if(st==='new') j.follow_up_date='';
   if(st==='sent'){
     if(!j.date_applied) j.date_applied=today();
     const d=new Date(); d.setDate(d.getDate()+FOLLOWUP_DAYS);
@@ -2422,13 +2474,77 @@ function flagHtml(s){
   return String(s||'').split(',').filter(Boolean).map(f=>
     `<span class="flag ${good.includes(f)?'g':bad.includes(f)?'r':''}">${esc(f.replace(/_/g,' '))}</span>`).join('');
 }
+/* Everything the card does not have room for, opened underneath it. Deliberately
+   does not repeat what the card already shows -- title, company, chips, score,
+   reason, flags are all up there. */
+function jobDetail(j,i){
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events'), st=stOf(j);
+  return `<div class="jdet">
+    <div class="eyebrow">People</div>
+    ${cts.length
+      ? cts.map((c,ci)=>`<div class="ct-row">
+          <div style="flex:1;min-width:0">
+            <div class="ct-nm">${esc(c.name||'(no name)')}
+              ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
+              ${c.role?`<span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
+            ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
+            ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
+          </div>
+          <div class="btn-row" style="flex-shrink:0">
+            ${c.linkedin?`<button class="btn-sm" data-act="inmail" data-i="${i}" data-ci="${ci}">Draft InMail</button>`:''}
+            <button class="btn-sm" data-act="ctdel" data-i="${i}" data-ci="${ci}">Remove</button></div></div>`).join('')
+      : `<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>`}
+    <div class="btn-row" style="margin-top:9px">
+      <button class="btn-sm" data-act="ctadd" data-i="${i}">Add a person</button>
+      <button class="btn-sm" data-act="hrfind" data-i="${i}">Find contacts</button></div>
+
+    <div class="eyebrow">History</div>
+    ${ev.length
+      ? ev.map(e=>`<div class="log"><span class="when">${esc(e.on)}</span> \u00b7 <b>${esc(e.kind)}</b> ${esc(e.text)}</div>`).join('')
+      : `<div class="ct-none">Nothing logged yet.</div>`}
+    <div class="btn-row" style="margin-top:9px">
+      <button class="btn-sm" data-act="logadd" data-i="${i}">Log something</button></div>
+
+    ${j.description?`<div class="eyebrow">Description</div>
+      <p class="desc">${esc(j.description)}</p>`:''}
+
+    <div class="eyebrow">Stage</div>
+    <div class="btn-row">
+      ${STAGES.map(x=>`<button class="btn-sm ${st===x?'btn-go':''}" data-act="stage" data-to="${x}" data-i="${i}">${x}</button>`).join('')}
+    </div>
+    <p class="hint">Confidence in this score: <b>${esc(j.ai_confidence||'unknown')}</b>.${
+      j.source?` Found via ${esc(j.source)}.`:''}${
+      j.added?` Added ${esc(j.added)}.`:''}</p>
+  </div>`;
+}
+
+/* One primary action, whose verb follows the state, plus whichever single move
+   advances the pipeline from here, plus the detail toggle. Close is not on the
+   card: it is the one destructive move, it is rare, and it lives in the stage
+   row inside the panel where a deliberate press is required. */
 function jobCard(j,i,hi){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j);
   const cls = st==='live' ? 'st-live' : due ? 'st-due' : 'ch-'+ch;
   const stLabel = st==='sent' && due ? 'due' : st;
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   const silent = daysSilent(j);
-  return `<div class="job ${cls} ${st==='closed'?'done':''}">
+  const open = OPEN_JOB===keyOf(j);
+  const btn=(act,label,go)=>`<button class="${go?'btn-go btn-sm':'btn-sm'}" data-act="${act}" data-i="${i}">${label}</button>`;
+  // Primary first, then the one move that advances things, and nothing else.
+  const acts =
+      st==='new'    ? btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', true)
+                      + btn('sent', ch==='cold'?'Mark contacted':'Mark applied')
+    : st==='sent'   ? (due ? btn('chase','Write the chase',true) + btn('live','They replied')
+                           : btn('live','They replied',true))
+    : st==='live'   ? btn('note','Log a note',true)
+    : /* closed */    btn('reopen','Reopen');
+  // Fit and reachability, once each and labelled. The card used to print both
+  // as text AND as two unlabelled bars, on top of the rank they combine into.
+  const axis=(label,v,col)=>`<div class="jaxis">
+      <span class="k">${label}</span>
+      <span class="bar" style="flex:1;margin:0"><i style="width:${v}%;background:${col}"></i></span>
+      <span class="num v">${v}</span></div>`;
+  return `<div class="job ${cls} ${st==='closed'?'done':''} ${open?'open':''}" data-jobidx="${i}">
     <div class="jrow"><div style="flex:1;min-width:0">
       <div class="jt">${esc(j.title||'(untitled)')}</div>
       <div class="jc">${esc(j.company||'\u2014')}${j.location?' \u00b7 '+esc(j.location):''}</div>
@@ -2439,33 +2555,22 @@ function jobCard(j,i,hi){
         ${st==='sent'&&silent?`<span class="stage s-sent">${silent}d silent</span>`:''}
         ${cts.length?`<span class="stage">${cts.length} contact${cts.length>1?'s':''}</span>`:''}
       </div></div>
-      <div class="jscore"><div class="big">${Math.round(rankOf(j))}</div>
-        <div class="sm">fit ${f}</div>
-        <div class="sm" style="color:var(--neutral)">reach ${r}</div></div></div>
-    <div class="bar"><i style="width:${f}%;background:var(--${ch})"></i></div>
-    <div class="bar"><i style="width:${r}%;background:var(--neutral)"></i></div>
+      <div class="jscore">
+        <div class="big">${Math.round(rankOf(j))}</div>
+        <div class="jaxes">
+          ${axis('fit',f,`var(--${ch})`)}
+          ${axis('reach',r,'var(--neutral)')}
+        </div></div></div>
     ${j.ai_reason?`<p class="jreason">${esc(j.ai_reason)}</p>`:''}
     ${j.ai_flags?`<div class="flags">${flagHtml(j.ai_flags)}</div>`:''}
-    ${ev.length?`<div class="log"><span class="when">${esc(ev[0].on)}</span> \u00b7 <b>${esc(ev[0].kind)}</b> ${esc(ev[0].text).slice(0,120)}</div>`:''}
+    ${!open&&ev.length?`<div class="log"><span class="when">${esc(ev[0].on)}</span> \u00b7 <b>${esc(ev[0].kind)}</b> ${esc(ev[0].text).slice(0,120)}</div>`:''}
     <div class="jacts">
       ${j.url?`<a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open \u2197</a>`:''}
       <div class="spacer"></div>
-      <button class="btn-sm" data-act="open" data-i="${i}">Details</button>
-      ${st==='new'
-        ? `<button class="btn-go btn-sm" data-act="pitch" data-i="${i}">${ch==='cold'?'Write the DM':'Draft outreach'}</button>
-           <button class="btn-sm" data-act="sent" data-i="${i}">${ch==='cold'?'Mark contacted':'Mark applied'}</button>`
-        : ''}
-      ${st==='sent'
-        ? `${due?`<button class="btn-go btn-sm" data-act="chase" data-i="${i}">Write the chase</button>`:''}
-           <button class="btn-sm" data-act="live" data-i="${i}">They replied</button>`
-        : ''}
-      ${st==='live'
-        ? `<button class="btn-sm" data-act="note" data-i="${i}">Log a note</button>`
-        : ''}
-      ${st!=='closed'
-        ? `<button class="btn-sm" data-act="close" data-i="${i}">Close</button>`
-        : `<button class="btn-sm" data-act="reopen" data-i="${i}">Reopen</button>`}
-    </div></div>`;
+      ${acts}
+      ${btn('open', open?'Hide':'Details')}
+    </div>
+    ${open?jobDetail(j,i):''}</div>`;
 }
 
 /* ═══ the daily view ═══
@@ -2696,7 +2801,7 @@ function renderDash(){
             <div style="font-size:13px">${esc(e.j.company||'\u2014')}<span style="color:var(--muted)"> \u00b7 ${esc(e.j.title||'')}</span></div>
             ${e.text?`<div style="font-size:12px;color:var(--muted)">${esc(e.text)}</div>`:''}
           </div>
-          <button class="btn-sm" data-act="open" data-i="${e.i}" style="flex-shrink:0">Open</button>
+          <button class="btn-sm" data-act="goto" data-i="${e.i}" style="flex-shrink:0">Open</button>
         </div>`).join('')}</div>`
       :`<div class="empty">Nothing logged yet. Marking a job applied, or logging a note on one, writes its first line here.</div>`}
     </div>`;
@@ -3239,68 +3344,20 @@ function pasteJobDialog(){
     addJobs([j]); await save(); render(); d.remove(); await autoScore(); };
 }
 
+/* Reveal a job wherever it lives. Called from the map, from the Dashboard's
+   activity feed, and from the nextStep banner -- all of which used to raise a
+   modal over whatever you were looking at. Now they take you to the row and
+   open it, so there is one place a job is ever read. */
+const tabFor = j => (isOpen(j) && stOf(j)==='new') ? 'unapplied' : 'applied';
 function showJob(i){
-  const j=P().jobs[i]; if(!j) return;
-  const ch=chOf(j), st=stOf(j);
-  const cts=listOf(j,'contacts'), ev=listOf(j,'events');
-  const d=modal(`
-    <div class="flags" style="margin-bottom:9px">
-      <span class="chn ${ch}">${ch==='cold'?'cold approach':'posted role'}</span>
-      <span class="stage s-${isDue(j)?'due':st}">${isDue(j)?'due':esc(st)}</span></div>
-    <h2 style="margin:0 0 3px">${esc(j.title)}</h2>
-    <p style="color:var(--muted);margin:0 0 14px">${esc(j.company)}${j.location?' \u00b7 '+esc(j.location):''}</p>
-    <div style="display:flex;gap:22px;margin-bottom:16px">
-      <div><div class="num" style="font-size:22px;color:var(--${ch})">${fitOf(j)}</div><div style="font-size:11px;color:var(--muted)">fit</div></div>
-      <div><div class="num" style="font-size:22px;color:var(--neutral)">${reachOf(j)}</div><div style="font-size:11px;color:var(--muted)">reachability</div></div>
-      <div><div class="num" style="font-size:22px">${esc(j.ai_confidence||'\u2014')}</div><div style="font-size:11px;color:var(--muted)">confidence</div></div></div>
-    ${j.ai_reason?`<p style="color:var(--muted);font-style:italic;margin:0 0 12px">${esc(j.ai_reason)}</p>`:''}
-
-    <div class="eyebrow" style="margin-top:18px">People</div>
-    <div id="ctList" style="margin-top:8px">${cts.length
-      ? cts.map((c,ci)=>`<div class="ct-row">
-          <div style="flex:1;min-width:0">
-            <div class="ct-nm">${esc(c.name||'(no name)')}
-              ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
-              ${c.role?`<span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
-            ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
-            ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
-          </div>
-          <div class="btn-row" style="flex-shrink:0">
-            ${c.linkedin?`<button class="btn-sm" data-inmail="${ci}">Draft InMail</button>`:''}
-            <button class="btn-sm" data-ct-del="${ci}">Remove</button></div></div>`).join('')
-      : '<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>'}</div>
-    <div class="btn-row" style="margin-top:9px">
-      <button class="btn-sm" id="ctAdd">Add a person</button>
-      <button class="btn-sm" id="hrFind">Find contacts</button></div>
-
-    <div class="eyebrow" style="margin-top:20px">History</div>
-    <div style="margin-top:8px">${ev.length
-      ? ev.map(e=>`<div class="log"><span class="when">${esc(e.on)}</span> \u00b7 <b>${esc(e.kind)}</b> ${esc(e.text)}</div>`).join('')
-      : '<div class="ct-none">Nothing logged yet.</div>'}</div>
-    <button class="btn-sm" id="evAdd" style="margin-top:9px">Log something</button>
-
-    ${j.description?`<div class="eyebrow" style="margin-top:20px">Description</div>
-      <p style="color:var(--muted);font-size:12px;white-space:pre-wrap;max-height:200px;overflow:auto;margin-top:8px">${esc(j.description)}</p>`:''}
-    ${j.url?`<p style="margin-top:12px"><a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open posting \u2197</a></p>`:''}
-
-    <div class="eyebrow" style="margin-top:20px">Stage</div>
-    <div class="btn-row" style="margin-top:8px">
-      ${STAGES.map(x=>`<button class="btn-sm ${st===x?'btn-go':''}" data-stage="${x}">${x}</button>`).join('')}
-    </div>
-    <div class="btn-row" style="margin-top:16px">
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
-
-  d.querySelector('#ctAdd').onclick=()=>{ d.remove(); contactDialog(i); };
-  d.querySelector('#hrFind').onclick=()=>{ d.remove(); hrDialog(i); };
-  d.querySelector('#evAdd').onclick=()=>{ d.remove(); noteDialog(i); };
-  d.querySelectorAll('[data-ct-del]').forEach(b=>b.onclick=async()=>{
-    const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ctDel,10),1);
-    setList(j,'contacts',arr); await save(); d.remove(); showJob(i); render(); });
-  d.querySelectorAll('[data-inmail]').forEach(b=>b.onclick=()=>{
-    d.remove(); draftInmail(i,parseInt(b.dataset.inmail,10)); });
-  d.querySelectorAll('[data-stage]').forEach(b=>b.onclick=async()=>{
-    setStage(j,b.dataset.stage); logEvent(j,'stage','moved to '+b.dataset.stage);
-    await save(); d.remove(); render(); });
+  const p=P(), j=p&&p.jobs[i]; if(!j) return;
+  OPEN_JOB = keyOf(j);
+  TAB = tabFor(j);
+  // Pointing at a row the current filter hides would land on an empty list.
+  if(CHFILT!=='all' && chOf(j)!==CHFILT) CHFILT='all';
+  render();
+  const el=document.querySelector(`[data-jobidx="${i}"]`);
+  if(el) el.scrollIntoView({block:'center', behavior:'smooth'});
 }
 
 /* Contacts live on the job, not in a separate address book. The same person at
@@ -3568,14 +3625,32 @@ document.addEventListener('click',async e=>{
   const b=e.target.closest('button[data-act]'); if(!b) return;
   const i=parseInt(b.dataset.i,10), p=P(), j=p&&p.jobs[i]; if(!j) return;
   const a=b.dataset.act;
-  if(a==='open')  return showJob(i);
-  if(a==='pitch') return draftPitch(i,false);
-  if(a==='chase') return draftPitch(i,true);
-  if(a==='note')  return noteDialog(i);
-  if(a==='sent'){ setStage(j,'sent'); logEvent(j,'sent',chOf(j)==='cold'?'reached out':'applied'); }
-  if(a==='live'){ setStage(j,'live'); logEvent(j,'reply','they replied'); }
-  if(a==='close'){ setStage(j,'closed'); logEvent(j,'closed','closed out'); }
-  if(a==='reopen'){ setStage(j,'new'); j.follow_up_date=''; logEvent(j,'note','reopened'); }
+  // Two different intents that used to share one verb. 'open' toggles a card
+  // that is already on screen; 'goto' is pressed from somewhere the card is
+  // NOT -- the dashboard's feed -- and has to travel to it first.
+  if(a==='open'){ OPEN_JOB = OPEN_JOB===keyOf(j) ? null : keyOf(j); return render(); }
+  if(a==='goto') return showJob(i);
+  if(a==='pitch')  return draftPitch(i,false);
+  if(a==='chase')  return draftPitch(i,true);
+  if(a==='note')   return noteDialog(i);
+  if(a==='logadd') return noteDialog(i);
+  if(a==='ctadd')  return contactDialog(i);
+  if(a==='hrfind') return hrDialog(i);
+  if(a==='inmail') return draftInmail(i, parseInt(b.dataset.ci,10));
+  if(a==='ctdel'){
+    const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ci,10),1);
+    setList(j,'contacts',arr);
+    logEvent(j,'contact','removed a contact');
+  }
+  // One route for every stage change, from the card's shortcut or the panel's
+  // full row, so they log the same thing and set the same fields.
+  const to = a==='stage' ? b.dataset.to
+           : a==='sent' ? 'sent' : a==='live' ? 'live'
+           : a==='close' ? 'closed' : a==='reopen' ? 'new' : '';
+  if(to && STAGES.includes(to)){
+    setStage(j,to);
+    logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
+  }
   await save(); render();
 });
 
