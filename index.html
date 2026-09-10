@@ -327,7 +327,7 @@ const COLS = ["title","company","location","url","description","status","date_ap
    whole problem. posted_lo/posted_hi bound the window, posted is the single
    date to sort on (the midpoint of a window), and posted_src says where the
    claim came from:
-     feed  the source stated it — ATS feeds and LinkedIn carry real dates
+     feed  the source stated it — an ATS feed carries a real one
      page  parsed out of a search snippet, usually "5 days ago"
      est   the model's reading of the description, and the widest of the three
    Cheapest and most reliable first: nothing is asked of the model that a feed
@@ -433,7 +433,7 @@ const FOLLOWUP_DAYS = 7;
 let DB = { profiles:{}, current:null };
 let KEY  = '';           // LLM key (DeepSeek or Anthropic)
 let PROV = 'deepseek';   // 'deepseek' | 'anthropic'
-let APIFY= '';           // Apify token for live LinkedIn search
+let APIFY= '';           // Apify token for board search and contact lookup
 let CHFILT = 'all';      // 'all' | 'posted' | 'cold'
 let AUTO  = true;        // score whatever a pull brings in, without being asked
 let VIEW = 'onb';        // 'onb' | 'app'
@@ -442,6 +442,11 @@ const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
 let ONB = blankOnb();
 let RANGE = null, TAB = 'map', busy = false;
 let SORT = 'rank';       // 'rank' = best first | 'new' = most recently added first
+/* Where to search. null means nobody has chosen, which reads as the profile's
+   own location -- so the box arrives filled in. Held here rather than left in
+   the input because starting a search re-renders the sidebar, and a control
+   that reverts to its default the moment you use it is worse than none. */
+let WHERE = null;
 /* Every job card is roughly 1.5KB of HTML. At 800 jobs the two long lists were
    drawing 1,600 cards between them on every single render -- 2.7MB of innerHTML
    and 46,000 nodes -- which on a mid-range machine is seconds of blank screen
@@ -559,12 +564,10 @@ async function load(){
   AUTO  = (await get('triage:auto')) !== '0';   // on unless turned off
 }
 
-/* ═══ Apify: live LinkedIn search ═══
-   Ported from the Python scanner, same actor and same confirmed input schema.
+/* ═══ Apify ═══
    Apify's REST API does send CORS headers, so this runs from the browser.
    The token is stored locally and sent only to Apify — but it is a real
    credential, so this file should not be shared with the token saved in it. */
-const APIFY_ACTOR = "curious_coder~linkedin-jobs-scraper";
 const APIFY_BASE  = "https://api.apify.com/v2";
 
 /* Giving up on a run does not stop it. The tab walks away, the actor keeps
@@ -581,20 +584,6 @@ async function abortRun(runId, H){
   try{ await fetch(APIFY_BASE+"/actor-runs/"+runId+"/abort",{method:"POST",headers:H}); }catch(e){}
 }
 
-function buildLiUrl(query){
-  const parts = String(query).split("|");
-  const kw = encodeURIComponent(parts[0].trim());
-  const loc = (parts[1]||"").trim();
-  if(loc.toLowerCase()==="remote"){
-    // geoId 92000000 + Worldwide is LinkedIn's real "remote, any country" scope.
-    // f_WT=2 on its own has no location context and silently resolves to
-    // wherever the request appears to come from, which is why remote searches
-    // used to come back US-only.
-    return "https://www.linkedin.com/jobs/search?keywords="+kw+"&f_WT=2&geoId=92000000&location=Worldwide";
-  }
-  return "https://www.linkedin.com/jobs/search?keywords="+kw+"&location="+
-         encodeURIComponent(loc+", India");
-}
 const pick = (item,keys) => {
   const map={}; Object.keys(item).forEach(k=>map[k.toLowerCase()]=k);
   for(const c of keys){ const k=map[c.toLowerCase()]; if(k&&item[k]) return item[k]; }
@@ -849,12 +838,17 @@ function velocityNote(slug){
 }
 
 /* ═══ Apify: board search via Google ═══
-   LinkedIn is one pipe, and for most careers it is the wrong one. Academic
-   posts live on registries like linguistlist.org and academicjobsonline.org and
-   are essentially never on LinkedIn; startup roles cluster on YC and Ashby;
-   every field has its own. None of those have a dedicated scraper worth paying
-   for, but the profile already knows which domains matter, so site: queries
-   through the Google actor reach all of them with one component.
+   The only way jobs are searched here. Every portal and every registry is
+   reached identically — one Google site: query each, through one actor — which
+   is the reason there is no per-portal scraper to maintain or to pay for.
+
+   That uniformity is what makes covering everything affordable, and covering
+   everything is the point: no single portal is enough. LinkedIn is one pipe and
+   for most careers the wrong one — academic posts live on registries like
+   linguistlist.org and academicjobsonline.org and are essentially never on
+   LinkedIn; startup roles cluster on YC and Ashby; every field has its own. So
+   the big portals go in as a fixed baseline, the profile supplies the
+   registries its own field uses, and both are searched in the same run.
 
    Same actor, same polling shape as the Python backfill. The only difference is
    what we do with the results: each organic hit becomes a new row instead of
@@ -869,11 +863,36 @@ const APIFY_GOOGLE = "apify~google-search-scraper";
    large board starts to feel under-read, maxPagesPerQuery in apifyBoardSearch
    is the dial, and a second page is cheaper than splitting the query back up
    because it does not pay for another run. */
+/* The general portals, always searched. This is where most advertised work
+   actually sits, and one site: query reaches each of them — which is the whole
+   reason a dedicated scraper per portal was never worth paying for.
+   linkedin.com/jobs rather than the bare domain: linkedin.com drags in profiles
+   and posts, and a job search should come back with jobs. */
+const PORTALS = ["linkedin.com/jobs","upwork.com","indeed.com","glassdoor.com",
+                 "wellfound.com","ziprecruiter.com"];
+/* Fourteen: the six portals above plus eight of the track's own registries. The
+   specialist boards are what make a niche search work at all, so they are added
+   to the portals rather than made to compete with them for slots. */
 function buildBoardQueries(titles, boards, where){
   const ts=(titles||[]).slice(0,4).map(t=>`"${t}"`);
   if(!ts.length) return [];
   const any=ts.length>1 ? `(${ts.join(' OR ')})` : ts[0];
-  return (boards||[]).slice(0,8).map(b=>`site:${b} ${any}` + (where?` ${where}`:''));
+  /* Location narrows the portals, and only the portals. A portal carries every
+     job on earth and is useless until cut down; a field registry carries forty
+     and needs all of them, so a city term there removes more than it filters.
+     "OR remote" because a remote posting names the employer's city or no city
+     at all -- never the reader's, so requiring the city bare would drop the
+     lot of them. */
+  const place=String(where||'').trim();
+  /* A multi-word place has to be quoted, or Google binds the OR to the last
+     word alone: `Bangalore, India OR remote` asks for Bangalore AND (India OR
+     remote), which requires the city and so excludes exactly the remote roles
+     the OR is there to keep. Left alone if they have written an expression of
+     their own -- quoting `Berlin OR Munich` would turn it into a phrase that
+     matches nothing, and silent-empty is the worst failure this can have. */
+  const term = /[\s,]/.test(place) && !/"|\bOR\b|\(/.test(place) ? `"${place}"` : place;
+  const near = !place ? '' : /^remote$/i.test(place) ? ' remote' : ` (${term} OR remote)`;
+  return (boards||[]).slice(0,14).map(b=>`site:${b} ${any}` + (PORTALS.includes(b)?near:''));
 }
 
 async function apifyBoardSearch(queries, countryCode, onStatus){
@@ -910,30 +929,6 @@ async function apifyBoardSearch(queries, countryCode, onStatus){
     });
   });
   return out;
-}
-
-async function apifySearch(query, count, onStatus){
-  const items=await apifyRun(APIFY_ACTOR,
-    {urls:[buildLiUrl(query)],count:Math.max(count||10,10),scrapeCompany:true},
-    {every:6000,cap:600,onStatus,label:query});
-  if(items && items[0] && items[0].error) throw new Error("Apify rejected the input: "+items[0].error);
-
-  return (items||[]).map(it=>{
-    const j=blank();
-    j.title   = pick(it,["title","jobTitle","position"]) || "[No Title]";
-    j.company = pick(it,["companyName","company","company_name"]) || "[Unknown]";
-    j.location= pick(it,["location","jobLocation"]) || "";
-    j.url     = pick(it,["link","jobUrl","url","postUrl","jobLink"]) || "";
-    j.description = String(pick(it,["descriptionText","description","jobDescription","details"])||"").slice(0,1200);
-    // This actor has never documented its date field either, and has shipped
-    // ISO strings, epoch millis and "3 days ago" under different names.
-    // parseWhen takes all three, so read broadly and let it normalise.
-    setPosted(j, pick(it,["postedAt","listedAt","postedDate","publishedAt","postedTime","postDate"]), 'feed');
-    const cli = pick(it,["companyLinkedinUrl","companyUrl"]);
-    j.notes   = cli ? "Company LinkedIn: "+cli : "";
-    j.source  = "LinkedIn (live)"; j.query = query; j.status="New"; j.channel="posted";
-    return j;
-  });
 }
 
 /* ═══ Apify: HR / recruiter contact finder (LinkedIn) ═══
@@ -1292,7 +1287,7 @@ function keyDialog(retry){
     <input type="text" id="kv" placeholder="${esc(cfg.keyPrefix)}..." value="${esc(KEY||'')}" autocomplete="off">
     <p class="hint" id="kwhere">Get one at <span style="color:var(--cool)">${esc(cfg.where)}</span>. Stored only in this browser, only sent to that provider.</p>
 
-    <label class="lab" style="margin-top:18px">Apify token <span style="color:var(--dim)">— optional, for live LinkedIn search and finding HR contacts</span></label>
+    <label class="lab" style="margin-top:18px">Apify token <span style="color:var(--dim)">— optional, for job board search and finding HR contacts</span></label>
     <input type="text" id="av" placeholder="apify_api_..." value="${esc(APIFY||'')}" autocomplete="off">
     <p class="hint">Get one at <span style="color:var(--cool)">console.apify.com → Settings → API &amp; Integrations</span>. Skip this if you only want scoring — it'll ask again the moment a search feature needs it.</p>
 
@@ -1335,6 +1330,7 @@ Return ONLY a JSON object, no preamble, no markdown fences:
  "name":"",
  "location":"",
  "country":"",
+ "country_code":"two-letter lower-case ISO code for that country, e.g. in, us, gb, de",
  "headline":"one line, max 12 words, what they are",
  "years_experience":0,
  "seniority":"junior|mid|senior|lead",
@@ -1365,7 +1361,7 @@ Rules for boards: this is the most important field to get right. For each track,
 - Startup and tech roles cluster on ycombinator.com, wellfound.com, lever.co, greenhouse.io, ashbyhq.com, jobs.ashbyhq.com.
 - Public sector, NGO and development roles have their own registries entirely.
 - Medicine, law, teaching, trades, design, and creative fields each have their own.
-Only include linkedin.com or indeed.com for a track where those genuinely are where the jobs are. If you are unsure for a field, prefer the specialist registry over the general one.
+Do NOT list general portals - linkedin.com, indeed.com, upwork.com, glassdoor.com and the like are always searched anyway. This field is only for the SPECIALIST registries a general portal would miss. If you are unsure for a field, give the specialist registry.
 
 Rules generally: use ONLY what is in the profile below. Do not invent experience, employers, metrics or skills. If something isn't stated, leave it out.
 
@@ -1376,6 +1372,8 @@ async function extractProfile(raw){
   const txt = await claude(EXTRACT_PROMPT(raw), 2000);
   const p = grabJSON(txt);
   p.name = p.name || 'Unnamed';
+  // Google's countryCode wants "in" -- not "India", and not "IN".
+  p.country_code = String(p.country_code||'').toLowerCase().replace(/[^a-z]/g,'').slice(0,2);
   p.tracks = Array.isArray(p.tracks) && p.tracks.length ? p.tracks : [{
     id:'general', label:'General search', difficulty:'moderate',
     why:'Broad search across everything in the profile.', titles:[]
@@ -1891,51 +1889,31 @@ async function autoScore(){
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
 function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
 
-/* ═══ live search ═══ */
-async function runSearch(queries){
+async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
-  queries=(queries||[]).filter(q=>q&&q.trim());
-  if(!queries.length){ setSearchInfo('Type a search first — title | location.'); return; }
-  busy=true; render();
-  let total=0, failed=0;
-  for(const q of queries){
-    try{
-      const jobs=await apifySearch(q,15,setSearchInfo);
-      const n=addJobs(jobs);
-      total+=n; setSearchInfo(`${total} new so far…`);
-      await save();
-    }catch(e){
-      if(e.message==='NEEDAPIFY'){ busy=false; render(); keyDialog(()=>runSearch(queries)); return; }
-      failed++; console.error(e); setSearchInfo(e.message);
-    }
-  }
-  busy=false; await save(); render();
-  setSearchInfo(failed
-    ? `Added ${total}. ${failed} search${failed>1?'es':''} failed.`
-    : `Added ${total} new.`);
-  await autoScore();
-}
-
-async function runBoards(trk, prof){
-  const p=P(); if(!p||busy) return;
-  const boards=(trk.boards||[]), titles=(trk.titles||[]);
-  if(!boards.length){ setSearchInfo("This track has no specialist boards — use LinkedIn search instead."); return; }
+  // Portals first, then any specialist registry the track named that is not
+  // already one of them. A track with no registries of its own still searches.
+  const boards=PORTALS.concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
+  const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
-  const qs=buildBoardQueries(titles,boards,'');
+  const qs=buildBoardQueries(titles,boards,where);
   busy=true; render();
   try{
-    // No country code: academic and remote roles are frequently international,
-    // and pinning Google to one country quietly hides them.
-    const jobs=await apifyBoardSearch(qs,"",setSearchInfo);
+    // Pinned to the person's country so Google ranks for where they can
+    // actually work. The location term in the query does the real narrowing;
+    // this stops an Indian search coming back ordered for an American reader.
+    // Empty on a profile extracted before country_code existed, which is the
+    // old worldwide behaviour rather than a broken one.
+    const jobs=await apifyBoardSearch(qs,p.profile.country_code||"",setSearchInfo);
     const n=addJobs(jobs);
     await save(); busy=false; render();
     setSearchInfo(n
-      ? `Added ${n} from ${boards.length} boards.`
-      : `Searched ${boards.length} boards, nothing new came back.`);
+      ? `Added ${n} from ${qs.length} searches.`
+      : `Searched ${qs.length} boards, nothing new came back.`);
     await autoScore();
   }catch(e){
     busy=false; render();
-    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,prof)); return; }
+    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
     setSearchInfo(e.message);
   }
 }
@@ -2398,7 +2376,7 @@ function renderFresh(){
   const undated=all.filter(x=>ageOf(x.j)===null);
   if(!all.length) return `<div class="empty"><b>Nothing to show</b>Add some jobs first.</div>`;
   if(!dated.length) return `<div class="empty"><b>No posting dates yet</b>
-    None of these ${all.length} rows carry a date. ATS pulls and LinkedIn searches bring one with them; for everything else, scoring estimates a window from the description.</div>`;
+    None of these ${all.length} rows carry a date. ATS pulls bring one with them and board searches usually do; for everything else, scoring estimates a window from the description.</div>`;
   // Dated first: an undated row is the least useful thing this tab can show.
   const dShown=dated.slice(0,SHOWN);
   const uShown=undated.slice(0,Math.max(0,SHOWN-dShown.length));
@@ -2548,16 +2526,13 @@ function renderApp(){
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
       </div>
       <div class="block"><span class="eyebrow">Find new jobs</span>
-        <label class="lab">Search LinkedIn</label>
-        <input type="text" id="sq" placeholder="Forward Deployed Engineer | remote"
-          value="${esc((trk.titles&&trk.titles[0])||'')}${trk.titles&&trk.titles.length?' | remote':''}">
-        <p class="hint">Format: <b>title | location</b>. Use <b>remote</b> for worldwide.</p>
-        <div class="btn-row" style="margin-top:7px">
-          <button class="btn-go btn-sm" id="btnSearch" style="flex:1" ${busy?'disabled':''}>
-            ${busy?'<span class="spin"></span> Searching…':'Search LinkedIn'}</button>
-          <button class="btn-sm" id="btnSearchAll" ${busy?'disabled':''}>All titles</button></div>
-        <button class="btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
-          Search this field's job boards</button>
+        <label class="lab">Location</label>
+        <input type="text" id="sqLoc" placeholder="anywhere"
+          value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
+        <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
+        <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
+          ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
+        <p class="hint">${PORTALS.length} general portals — LinkedIn, Upwork, Indeed and the rest — plus this field's own registries, all through Google in one run.</p>
         <button class="btn-go btn-sm" id="btnSuggest" style="width:100%;margin-top:10px" ${busy?'disabled':''}>
           Suggest companies for me</button>
         <p class="hint">Names the places worth approaching, then checks which are hiring. Start here if you don't know who to target.</p>
@@ -2566,8 +2541,8 @@ function renderApp(){
         <p class="hint">Free and live \u2014 no token needed. Full job descriptions from the company's own feed.</p>
         ${(trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
-             <p class="hint">Where ${esc(trk.label||'these')} roles are actually posted. LinkedIn misses most of them.</p>`
-          : `<p class="hint">No specialist boards found for this track — LinkedIn search is the fallback.</p>`}
+             <p class="hint">This field's own registries, searched alongside the portals. These are the ones a general portal misses.</p>`
+          : `<p class="hint">No specialist registries for this track — the general portals are the whole search here.</p>`}
         <div id="searchInfo" class="hint"></div>
       </div>
       <div class="block"><span class="eyebrow">Add jobs</span>
@@ -2726,16 +2701,11 @@ function renderApp(){
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
-  $('#btnSearch').onclick=()=>runSearch([$('#sq').value.trim()]);
-  $('#btnBoards').onclick=()=>runBoards(trk, prof);
+  const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
+  $('#btnBoards').onclick=goBoards;
+  $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
-  $('#btnSearchAll').onclick=()=>{
-    const t=(trk.titles||[]).slice(0,6);
-    if(!t.length){ $('#searchInfo').textContent='This track has no titles to search.'; return; }
-    const qs=[]; t.forEach(x=>{ qs.push(x+' | remote'); qs.push(x+' | '+(prof.location||'Bangalore').split(',')[0]); });
-    runSearch(qs);
-  };
   bindPlot();
 }
 

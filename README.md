@@ -42,9 +42,13 @@ Scrapers parse career-page HTML and break whenever someone redesigns a site. The
 
 Company names are enough. It tries the slug forms companies actually use, then falls back to a search if none hit.
 
-### Search sources come from the profile, not a fixed list
+### One search path, reaching the portals and the field's own registries
 
-Hardcoding job boards means hardcoding an assumption about who's using the tool. Instead, profile extraction returns **which boards this person's field actually posts on**, and search builds `site:` queries against those. A linguist gets `linguistlist.org` and `academicjobsonline.org`. An engineer gets `ycombinator.com` and `ashbyhq.com`. Same code, no special-casing.
+Every source is reached the same way: one Google `site:` query each, through one Apify actor. There is no per-portal scraper — no LinkedIn scraper, no Upwork scraper — because a scraper per portal is a maintenance and a billing cost per portal, and what it buys is coverage a `site:` query already gives.
+
+That uniformity is what makes the list long enough to be useful. A fixed baseline of general portals always goes in (LinkedIn, Upwork, Indeed, Glassdoor, Wellfound, ZipRecruiter), because that's where most advertised work sits whoever you are. On top of it, profile extraction returns **which registries this person's field actually posts on** — a linguist gets `linguistlist.org` and `academicjobsonline.org`, an engineer gets `ycombinator.com` and `ashbyhq.com`. The specialist registries are what make a niche search work at all, so they're *added* to the portals rather than made to compete with them for slots.
+
+Location binds to the portals and only the portals, as `(<place> OR remote)`. A portal lists every job on earth and is useless until narrowed; a field registry lists forty and needs all of them, so a city term there removes more than it filters. The `OR remote` is load-bearing — a remote posting names the employer's city or no city at all, never the reader's, so requiring the city bare would drop every remote role. Google is additionally pinned to the profile's country, so its ranking matches where the person can actually work.
 
 ---
 
@@ -54,9 +58,9 @@ Open `index.html`. That's the whole install.
 
 Scoring needs an API key — DeepSeek by default (cheap; a few hundred jobs costs pennies), or Anthropic. Paste it once and it's stored in your browser.
 
-An Apify token is optional, and only needed for LinkedIn search, board search and finding contacts. ATS pulls work without it.
+An Apify token is optional, and only needed for board search and finding contacts. ATS pulls work without it.
 
-Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query, and contact lookup is a single search run (about a cent) whose results are reused for a week, falling back to the per-profile employee scraper only for companies too small for search to find. Typical use runs a few dollars a month.
+Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query and fourteen queries a run, and contact lookup is a single search run (about a cent) whose results are reused for a week, falling back to the per-profile employee scraper only for companies too small for search to find. Typical use runs a few dollars a month.
 
 Nothing is uploaded and there's no account. Data lives in browser storage, so use **Backup & transfer** to keep a copy.
 
@@ -91,12 +95,12 @@ Running it with accounts on makes you a data controller for other people's CVs. 
 - New jobs are **scored automatically** as they arrive, from every source. It never opens the key dialog on its own — a modal appearing unprompted after a search is startling — and it refuses above 60 unscored at once, because a large CSV import silently starting a long paid run is a decision, not a convenience. Switchable off in the Score panel.
 - **Work Today** is the daily home: everything scored at fit 65+ and reachability 45+ that you haven't actioned, split into "do these first" and "worth a shot". It deliberately ignores the map's drag-selection — a box drawn yesterday silently shortening the list tomorrow is the kind of invisible state that makes a tool untrustworthy.
 - **Trim to top 50** bins scored roles you never acted on that rank below the top 50. Anything applied to, contacted, or logged against is kept whatever it scored — that history is the only record it exists, and no score justifies deleting it. Unscored rows are kept too, since "not top 50" is not a judgement you can make about something never judged.
-- Posting age is stored as a window (`posted_lo` / `posted_hi`) with its provenance, not a single date. ATS feeds and LinkedIn state a real one; a search snippet often carries "5 days ago"; only what none of those answered is estimated by the model, which returns a range or nothing rather than a date it can't defend. The **Freshest** tab sorts on it, and rows with no date are listed apart rather than treated as old.
+- Posting age is stored as a window (`posted_lo` / `posted_hi`) with its provenance, not a single date. ATS feeds state a real one; a search snippet often carries "5 days ago"; only what none of those answered is estimated by the model, which returns a range or nothing rather than a date it can't defend. The **Freshest** tab sorts on it, and rows with no date are listed apart rather than treated as old.
 
 ## Known limits
 
 - Only Greenhouse, Lever and Ashby have usable public feeds. Companies on Workday or a hand-built careers page have to be added manually.
-- Browsers can't scrape LinkedIn directly, hence Apify.
+- Browsers can't query Google or the job portals directly, hence Apify.
 - Roles filled purely by referral are invisible to any tool. The app can point at those companies; it can't find a job that doesn't exist yet.
 
 ## Licence
