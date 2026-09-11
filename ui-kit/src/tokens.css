@@ -1,0 +1,63 @@
+/* Copied verbatim from index.html's :root / :root[data-theme="light"] blocks —
+   the shipped Job Triage colour system. Dark is the default; add
+   data-theme="light" to an ancestor (or html) to switch. */
+:root {
+  color-scheme: dark;
+  --ink: #0E1411; --panel: #151D18; --panel2: #1C2620; --line: #29372F;
+  --text: #E9F0EB; --muted: #8B9C92; --dim: #798B81;
+
+  --signal: #56C88A; --signal-hi: #6FD79D; --on-signal: #08150E;
+  --cool: #4FB58C;
+  --warn: #E2685C;   --warn-line: #5A2E2A;
+  --good: #6FD79D;   --good-line: #2C5540;
+
+  --posted: #56C88A; --posted-dim: #1F3A2A;
+  --cold: #A9BCB1;   --cold-dim: #23302A;
+  --neutral: #86988D; --neutral-line: #364339;
+  --live: #FFFFFF;   --live-line: #4A5A50;
+  --stale-line: #232E28;
+
+  --glow1: rgba(86,200,138,.07); --glow2: rgba(233,240,235,.04);
+  --signal-tint: rgba(86,200,138,.12); --signal-tint2: rgba(86,200,138,.03);
+  --signal-glow: rgba(86,200,138,.28);
+  --good-tint: rgba(111,215,157,.10);
+  --warn-tint: rgba(226,104,92,.13); --warn-chip: #4A2622;
+  --live-tint: rgba(255,255,255,.07);
+  --plot-fade: #3A4A41;
+  --veil: rgba(6,11,8,.82); --veil-lite: rgba(6,11,8,.6);
+  --shadow: 0 1px 2px rgba(0,0,0,.25);
+  --shadow-md: 0 10px 30px rgba(0,0,0,.5);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,.5);
+
+  --disp: system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono: ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ink: #F6F9F7; --panel: #FFFFFF; --panel2: #EDF3EF; --line: #D3DFD8;
+  --text: #131C17; --muted: #56675D; --dim: #63736A;
+
+  --signal: #157F42; --signal-hi: #0F6635; --on-signal: #FFFFFF;
+  --cool: #177A47;
+  --warn: #C33B2E;   --warn-line: #EEBAB4;
+  --good: #157F42;   --good-line: #A8D8BC;
+
+  --posted: #157F42; --posted-dim: #DCF0E4;
+  --cold: #55665C;   --cold-dim: #E6EDE8;
+  --neutral: #65756B; --neutral-line: #C6D3CB;
+  --live: #0B3D22;   --live-line: #A8D8BC;
+  --stale-line: #E2E9E4;
+
+  --glow1: rgba(21,127,66,.07); --glow2: rgba(19,28,23,.03);
+  --signal-tint: rgba(21,127,66,.11); --signal-tint2: rgba(21,127,66,.03);
+  --signal-glow: rgba(21,127,66,.24);
+  --good-tint: rgba(21,127,66,.10);
+  --warn-tint: rgba(195,59,46,.10); --warn-chip: #FBE4E1;
+  --live-tint: rgba(11,61,34,.07);
+  --plot-fade: #B4C4BA;
+  --veil: rgba(19,28,23,.42); --veil-lite: rgba(19,28,23,.3);
+  --shadow: 0 1px 2px rgba(19,28,23,.06);
+  --shadow-md: 0 8px 24px rgba(19,28,23,.12);
+  --shadow-lg: 0 18px 50px rgba(19,28,23,.18);
+}

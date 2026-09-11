@@ -1,0 +1,37 @@
+/* Transcribed verbatim from design/jobtriage.tokens.json — the adopted
+   go/due/closing/awaiting palette (turn 3 of Job Triage Mockups.dc.html).
+   Namespaced under [data-palette="v2"] so it never collides with the v1
+   tokens in ../tokens.css when both ship in the same styles.css. */
+
+[data-palette="v2"] {
+  color-scheme: dark;
+  --ink: #18211C; --panel: #1F2A23; --panel2: #26332A; --line: #324237; --hair: #232E27;
+  --text: #EDF3EF; --muted: #93A597; --dim: #8A9C8E;
+
+  --go: #56C88A; --on-go: #0A1B0F; --go-line: #2C5540; --go-tint: rgba(86,200,138,.12);
+  --due: #E2685C; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: rgba(226,104,92,.14);
+  --closing: #D9A441; --closing-line: #5A4620; --closing-tint: rgba(217,164,65,.13);
+  --awaiting: #57AEC9; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
+  --closed: #3E4F44;
+
+  --shadow: 0 1px 2px rgba(0,0,0,.3);
+  --shadow-lg: 0 20px 60px rgba(0,0,0,.55);
+
+  --disp: system-ui,-apple-system,'Segoe UI',sans-serif;
+  --mono: ui-monospace,'Cascadia Mono',Consolas,monospace;
+}
+
+[data-palette="v2"][data-theme="light"] {
+  color-scheme: light;
+  --ink: #F1F5F2; --panel: #FFFFFF; --panel2: #E9EFEB; --line: #D5DFD8; --hair: #E6ECE8;
+  --text: #18211C; --muted: #4F5E56; --dim: #5C6B63;
+
+  --go: #157F42; --on-go: #FFFFFF; --go-line: #A8D8BC; --go-chip: #DCF0E4; --go-row: #E9F4ED;
+  --due: #C33B2E; --on-due: #FFFFFF; --due-line: #EEBAB4; --due-chip: #FBE4E1; --due-row: #FBECEA;
+  --closing: #8A6314; --closing-line: #E0C98F; --closing-chip: #F7EBD2; --closing-row: #FAF1DF;
+  --awaiting: #1E6C86; --awaiting-line: #A9D3E0; --awaiting-chip: #DCEFF5; --awaiting-row: #E6F2F7;
+  --closed: #B6C4BC;
+
+  --shadow: 0 1px 2px rgba(24,33,28,.07);
+  --shadow-lg: 0 18px 50px rgba(24,33,28,.24);
+}

@@ -3,7 +3,7 @@
 <title>Job Triage</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#131A21">
+<meta name="theme-color" content="#18211C">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
@@ -11,62 +11,78 @@
 
 <style>
   /* ═══ colour ═══
-     Green, red and white. Every hue in the file resolves through a name below,
-     so the two themes are the same design at two lightnesses rather than two
-     designs -- and nothing outside this block hardcodes a colour.
+     A green near-black ground and four accents, each meaning one thing:
+       go        do this now, your move, nothing blocking
+       due       overdue: past the follow-up date
+       closing   the posting is old enough to be filled soon
+       awaiting  sent, and the next move is theirs
+     Grey is only ever the absence of an instruction. Three rules keep it honest:
+     a row carries at most one accent (the nearer deadline wins); a score is never
+     an accent (colour says what to do, the number says how good it is); dark
+     states the accent on the row's edge, light tints the whole cell.
+     Reachability stays grey -- a second axis, not a verdict.
 
-     The semantics the old amber/teal palette carried are all still here, moved
-     onto what green-red-white can actually distinguish:
-       green   the primary action, and a posted role: the ordinary good thing
-       red     overdue, destructive, wrong: the only colour that interrupts
-       white   temperature. A cold approach is DESATURATED because nobody has
-               answered yet; a live conversation is the brightest thing on the
-               screen because somebody has. That reading inverts in the light
-               theme, where live becomes the deepest ink rather than the palest.
-     Reachability stays deliberately grey. It is a second axis, not a verdict,
-     and it must never compete with the channel colours for attention. */
+     The older names below (signal, warn, posted, live...) are kept so nothing
+     that reads them breaks, but they now resolve onto the same law. Every hue in
+     the file still goes through this block. */
   :root{
     color-scheme:dark;
-    --ink:#0E1411; --panel:#151D18; --panel2:#1C2620; --line:#29372F;
-    --text:#E9F0EB; --muted:#8B9C92; --dim:#798B81;
+    --ink:#18211C; --panel:#1F2A23; --panel2:#26332A; --line:#324237; --hair:#232E27;
+    --text:#EDF3EF; --muted:#93A597; --dim:#8A9C8E;
 
-    --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#08150E;
+    --go:#56C88A;       --on-go:#0A1B0F;  --go-line:#2C5540;       --go-tint:rgba(86,200,138,.12);
+    --due:#E2685C;      --on-due:#1A0A08; --due-line:#5A2E2A;      --due-tint:rgba(226,104,92,.14);
+    --closing:#D9A441;  --closing-line:#5A4620;  --closing-tint:rgba(217,164,65,.13);
+    --awaiting:#57AEC9; --awaiting-line:#2C4F5C; --awaiting-tint:rgba(87,174,201,.13);
+    --closed:#3E4F44;
+    /* Whole-cell tints are the light theme's statement; dark keeps the edge. */
+    --go-row:transparent; --due-row:transparent; --closing-row:transparent; --awaiting-row:transparent;
+    --row-pad:0px;
+
+    --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#0A1B0F;
     --cool:#4FB58C;
     --warn:#E2685C;   --warn-line:#5A2E2A;
     --good:#6FD79D;   --good-line:#2C5540;
 
-    --posted:#56C88A; --posted-dim:#1F3A2A;
-    --cold:#A9BCB1;   --cold-dim:#23302A;
-    --neutral:#86988D; --neutral-line:#364339;
-    --live:#FFFFFF;   --live-line:#4A5A50;
-    --stale-line:#232E28;
+    --posted:#56C88A; --posted-dim:#23392B;
+    --cold:#A9BCB1;   --cold-dim:#2A372F;
+    --neutral:#86988D; --neutral-line:#3A4A40;
+    --live:#56C88A;   --live-line:#2C5540;
+    --stale-line:#232E27;
 
     /* tints and washes -- the same names in both themes, different weights */
-    --glow1:rgba(86,200,138,.07); --glow2:rgba(233,240,235,.04);
+    --glow1:rgba(86,200,138,.05); --glow2:rgba(237,243,239,.03);
     --signal-tint:rgba(86,200,138,.12); --signal-tint2:rgba(86,200,138,.03);
     --signal-glow:rgba(86,200,138,.28);
     --good-tint:rgba(111,215,157,.10);
-    --warn-tint:rgba(226,104,92,.13); --warn-chip:#4A2622;
-    --live-tint:rgba(255,255,255,.07);
-    --plot-fade:#3A4A41;
-    --veil:rgba(6,11,8,.82); --veil-lite:rgba(6,11,8,.6);
-    --shadow:0 1px 2px rgba(0,0,0,.25);
+    --warn-tint:rgba(226,104,92,.14); --warn-chip:#4A2A25;
+    --live-tint:rgba(86,200,138,.07);
+    --plot-fade:#44574B;
+    --veil:rgba(10,15,12,.82); --veil-lite:rgba(10,15,12,.6);
+    --shadow:0 1px 2px rgba(0,0,0,.3);
     --shadow-md:0 10px 30px rgba(0,0,0,.5);
-    --shadow-lg:0 20px 60px rgba(0,0,0,.5);
+    --shadow-lg:0 20px 60px rgba(0,0,0,.55);
 
     --disp:system-ui,-apple-system,'Segoe UI',sans-serif;
     --mono:ui-monospace,'Cascadia Mono',Consolas,monospace;
   }
 
-  /* The light theme is the same palette read from the other end. Green and red
-     darken so they hold contrast on white; the temperature reading flips, so a
-     live conversation is now the deepest green on the page rather than the
-     palest thing. Shadows lose most of their weight -- a heavy shadow on white
-     reads as dirt rather than as depth. */
+  /* The light theme is the same hue turned inside out: the dark ground becomes
+     the ink. Accents darken to hold contrast on white, and state the instruction
+     across the whole row rather than only its edge. Shadows lose most of their
+     weight -- a heavy shadow on white reads as dirt rather than as depth. */
   :root[data-theme="light"]{
     color-scheme:light;
-    --ink:#F6F9F7; --panel:#FFFFFF; --panel2:#EDF3EF; --line:#D3DFD8;
-    --text:#131C17; --muted:#56675D; --dim:#63736A;
+    --ink:#F1F5F2; --panel:#FFFFFF; --panel2:#E9EFEB; --line:#D5DFD8; --hair:#E6ECE8;
+    --text:#18211C; --muted:#4F5E56; --dim:#5C6B63;
+
+    --go:#157F42;       --on-go:#FFFFFF;  --go-line:#A8D8BC;       --go-tint:#DCF0E4;
+    --due:#C33B2E;      --on-due:#FFFFFF; --due-line:#EEBAB4;      --due-tint:#FBE4E1;
+    --closing:#8A6314;  --closing-line:#E0C98F;  --closing-tint:#F7EBD2;
+    --awaiting:#1E6C86; --awaiting-line:#A9D3E0; --awaiting-tint:#DCEFF5;
+    --closed:#B6C4BC;
+    --go-row:#E9F4ED; --due-row:#FBECEA; --closing-row:#FAF1DF; --awaiting-row:#E6F2F7;
+    --row-pad:10px;
 
     --signal:#157F42; --signal-hi:#0F6635; --on-signal:#FFFFFF;
     --cool:#177A47;
@@ -76,8 +92,8 @@
     --posted:#157F42; --posted-dim:#DCF0E4;
     --cold:#55665C;   --cold-dim:#E6EDE8;
     --neutral:#65756B; --neutral-line:#C6D3CB;
-    --live:#0B3D22;   --live-line:#A8D8BC;
-    --stale-line:#E2E9E4;
+    --live:#157F42;   --live-line:#A8D8BC;
+    --stale-line:#E6ECE8;
 
     --glow1:rgba(21,127,66,.07); --glow2:rgba(19,28,23,.03);
     --signal-tint:rgba(21,127,66,.11); --signal-tint2:rgba(21,127,66,.03);
@@ -100,12 +116,11 @@
     font-size:14px;line-height:1.5;min-height:100vh;margin:0}
   #app h1,#app h2,#app h3{margin:0;font-weight:500;letter-spacing:-0.01em}
   @media(prefers-reduced-motion:no-preference){
-    .card,.trk,.job,.stat,.chip{animation:rise .45s cubic-bezier(.16,1,.3,1) backwards}
-    .job:nth-child(2),.trk:nth-child(2){animation-delay:.04s}
-    .job:nth-child(3),.trk:nth-child(3){animation-delay:.08s}
-    .job:nth-child(4){animation-delay:.12s}
-    .job:nth-child(5){animation-delay:.16s}
-    .job:nth-child(n+6){animation-delay:.2s}
+    .card,.trk,.qitem,.stat,.chip{animation:rise .45s cubic-bezier(.16,1,.3,1) backwards}
+    .qitem:nth-child(3),.trk:nth-child(2){animation-delay:.04s}
+    .qitem:nth-child(4),.trk:nth-child(3){animation-delay:.08s}
+    .qitem:nth-child(5){animation-delay:.12s}
+    .qitem:nth-child(n+6){animation-delay:.16s}
   }
   @keyframes rise{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
   .eyebrow{font-family:var(--mono);font-size:10px;letter-spacing:.14em;
@@ -115,10 +130,9 @@
 
   .topbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
     padding:14px 22px;border-bottom:1px solid var(--line);
-    background:linear-gradient(180deg,var(--panel2),var(--panel));
-    position:sticky;top:0;z-index:10;backdrop-filter:blur(8px)}
-  .topbar h1{font-size:19px;background:linear-gradient(90deg,var(--text),var(--signal) 160%);
-    -webkit-background-clip:text;background-clip:text;color:transparent}
+    background:var(--panel);
+    position:sticky;top:0;z-index:10}
+  .topbar h1{font-size:16px}
   .who{display:flex;align-items:center;gap:9px}
   .av{width:30px;height:30px;border-radius:50%;background:var(--panel2);
     border:1px solid var(--line);display:flex;align-items:center;justify-content:center;
@@ -128,6 +142,9 @@
   .pill{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;
     border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   .pill.on{color:var(--good);border-color:var(--good-line)}
+  .pill.due{color:var(--due);background:var(--due-tint);border-color:var(--due-line)}
+  .pill.closing{color:var(--closing);background:var(--closing-tint);border-color:var(--closing-line)}
+  .pill.awaiting{color:var(--awaiting);background:var(--awaiting-tint);border-color:var(--awaiting-line)}
 
   /* Tappable UI shouldn't behave like text on a touch screen — without this a
      tap that lingers a few ms selects the label or throws up a callout menu
@@ -244,13 +261,6 @@
      unnecessary rather than merely wrong. */
   /* Below the sheet, above everything else. Toasts sit at 40 and the modal
      layer at 50, so an open sheet never covers a dialog it opened. */
-  /* Below this a 150px score block beside the title leaves the title wrapping
-     every couple of words. Same information, stacked under it instead. */
-  @media(max-width:560px){
-    .jrow{flex-wrap:wrap}
-    .jscore{width:100%;flex-direction:row;align-items:center;gap:12px;margin-top:6px}
-    .jaxes{flex:1;width:auto}
-  }
   #toolbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:44;
     gap:10px;align-items:center;
     padding:10px 14px calc(10px + env(safe-area-inset-bottom));
@@ -277,9 +287,9 @@
     /* Everything in the sheet is a touch target now, not a pointer target. */
     .side button,.side select,.side .drop,.side summary{min-height:44px}
     /* Everything in an open panel is a touch target too, not just the sidebar. */
-    .jdet button{min-height:44px}
+    .qd button{min-height:44px}
     #toolbar{display:flex}
-    #scrim{display:block}
+    #scrim.on{display:block}
   }
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
@@ -295,97 +305,152 @@
   .quadlabel{font-family:var(--mono);font-size:8px;fill:var(--dim);letter-spacing:.1em}
 
   .stats{display:flex;gap:20px;flex-wrap:wrap;margin:14px 0 22px}
-  .stat .k{font-family:var(--mono);font-size:24px;color:var(--signal);line-height:1}
+  /* A count is a figure, not an instruction: plain ink unless a caller says why. */
+  .stat .k{font-family:var(--mono);font-size:24px;color:var(--text);line-height:1}
   .stat .l{font-size:11px;color:var(--muted);margin-top:3px}
 
-  .job{border:1px solid var(--line);border-left:2px solid var(--dim);border-radius:3px;
-    background:var(--panel);padding:13px 15px;margin-bottom:9px;box-shadow:var(--shadow)}
-  .job.hi{border-left-color:var(--signal)}
-  .job.ch-posted{border-left-color:var(--posted)}
-  .job.ch-cold{border-left-color:var(--cold)}
-  .job.ch-cold .jscore .big{color:var(--cold)}
-  .job.st-live{border-left-color:var(--live);background:linear-gradient(90deg,var(--live-tint),transparent 40%)}
-  .job.st-due{border-left-color:var(--warn)}
   .stage{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
     padding:2px 7px;border-radius:2px;border:1px solid var(--line);color:var(--muted)}
-  .stage.s-new{color:var(--muted)}
-  .stage.s-sent{color:var(--neutral);border-color:var(--neutral-line)}
-  .stage.s-due{color:var(--warn);border-color:var(--warn-line)}
-  .stage.s-live{color:var(--live);border-color:var(--live-line)}
-  .stage.s-closed{color:var(--dim)}
-  /* Age earns colour only at the ends of the scale. A fortnight-old posting is
-     ordinary and should not shout; a stale one should visibly recede. */
-  .stage.s-age{color:var(--muted)}
-  .stage.s-age.hot{color:var(--posted);border-color:var(--posted-dim)}
-  .stage.s-age.stale{color:var(--dim);border-color:var(--stale-line)}
-  .stage.s-age.guess{font-style:italic}
-  .chn{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
-    padding:2px 7px;border-radius:2px}
-  .chn.posted{color:var(--posted);background:var(--posted-dim)}
-  .chn.cold{color:var(--cold);background:var(--cold-dim)}
 
-  /* ── daily dashboard ── */
+  /* ── dashboard sections ── */
   .sect{margin-bottom:26px}
   .sect-h{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
   .sect-h h3{font-size:15px}
   .sect-h .ct{font-family:var(--mono);font-size:12px;color:var(--dim)}
   .sect-sub{color:var(--muted);font-size:12px;margin:0 0 12px}
-  .sect.live .sect-h h3{color:var(--live)}
-  .sect.due .sect-h h3{color:var(--warn)}
-
-  /* ── contacts ── */
   .ct-row{display:flex;gap:9px;align-items:flex-start;padding:9px 0;border-top:1px solid var(--line)}
   .ct-row:first-of-type{border-top:none}
   .ct-nm{font-size:13px}
   .ct-meta{font-size:11px;color:var(--muted);font-family:var(--mono);word-break:break-all}
-  .ct-none{color:var(--dim);font-size:12px;padding:8px 0}
-  .log{font-size:12px;color:var(--muted);border-left:2px solid var(--line);padding:2px 0 2px 10px;margin:7px 0}
-  .log b{color:var(--text);font-weight:500}
-  .log .when{font-family:var(--mono);font-size:10px;color:var(--dim)}
-  .job.done{opacity:.42}
-  /* The detail view, opened in place. It used to be a modal, which put the job
-     you were working through on top of the list you were working through. Bled
-     to the card's edges so it reads as this card opening rather than a second
-     thing appearing over it. */
-  /* An open card is being read rather than scanned, so it steps up a size:
-     the list is tuned for skimming forty rows, and that is the wrong density
-     for the one row you have stopped on. */
-  .job.open{border-left-width:3px;padding:18px 20px}
-  .job.open .jt{font-size:19px;margin-bottom:4px}
-  .job.open .jc{font-size:14px}
-  .job.open .jreason{font-size:14px;margin-top:11px}
-  .job.open .jscore .big{font-size:24px}
-  .jdet{border-top:1px solid var(--line);background:var(--panel2);
-    margin:16px -20px -18px;padding:20px;border-radius:0 0 3px 3px;font-size:15px}
-  .jdet > .eyebrow{display:block;margin:22px 0 10px;font-size:11px;letter-spacing:.16em}
-  .jdet > .eyebrow:first-child{margin-top:0}
-  .jdet .ct-row{padding:12px 0}
-  .jdet .ct-nm{font-size:15px}
-  .jdet .ct-meta{font-size:12.5px}
-  .jdet .ct-none{font-size:13.5px;padding:10px 0}
-  .jdet .log{font-size:13.5px;padding:4px 0 4px 12px;margin:9px 0}
-  .jdet .log .when{font-size:11.5px}
-  .jdet .hint{font-size:12.5px;margin-top:14px}
-  .jdet button{font-size:13px;padding:7px 12px}
-  .jdet .desc{color:var(--muted);font-size:13.5px;line-height:1.6;
-    white-space:pre-wrap;max-height:280px;overflow:auto;margin:0}
-  .jrow{display:flex;gap:12px;align-items:flex-start}
-  .jt{font-size:15px;font-weight:500;margin-bottom:2px}
-  .jc{color:var(--muted);font-size:12px}
-  .jscore{text-align:right;flex-shrink:0;font-family:var(--mono);
-    display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-  .jaxes{display:flex;flex-direction:column;gap:4px;width:150px}
-  .jaxis{display:flex;align-items:center;gap:7px}
-  .jaxis .k{font-size:10px;color:var(--dim);width:30px;text-align:left}
-  .jaxis .v{font-size:10px;color:var(--muted);width:16px;text-align:right}
-  .jscore .big{font-size:19px;color:var(--signal);line-height:1}
-  .jscore .sm{font-size:10px;color:var(--dim);margin-top:2px}
-  .jreason{font-size:12px;color:var(--muted);margin:8px 0 0;font-style:italic}
-  .flags{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
-  .flag{font-family:var(--mono);font-size:9.5px;padding:2px 6px;border-radius:2px;
-    background:var(--panel2);color:var(--muted);letter-spacing:.04em}
-  .flag.g{color:var(--good)} .flag.r{color:var(--warn)}
-  .jacts{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap;align-items:center}
+
+  /* ═══ the queue ═══
+     Ruled rows, not boxes. A bordered card around every job made forty jobs a
+     wall of containers; a rule between rows reads as one list. Each row states
+     its one instruction on its edge, and every fact on it is a label over a
+     value, in columns that line up down the page. */
+  .qsec{margin-bottom:28px}
+  .qsec-h{display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .qsec-h h3{font-size:14px}
+  .qsec-h .ct{font-family:var(--mono);font-size:12px;color:var(--dim)}
+  .qsec-sub{color:var(--muted);font-size:12px;margin:9px 0 0}
+  .qsec.go .qsec-h{border-bottom-color:var(--go)}             .qsec.go h3{color:var(--go)}
+  .qsec.due .qsec-h{border-bottom-color:var(--due)}           .qsec.due h3{color:var(--due)}
+  .qsec.closing .qsec-h{border-bottom-color:var(--closing)}   .qsec.closing h3{color:var(--closing)}
+  .qsec.awaiting .qsec-h{border-bottom-color:var(--awaiting)} .qsec.awaiting h3{color:var(--awaiting)}
+
+  .qitem{border-bottom:1px solid var(--hair)}
+  .qitem.closed{opacity:.55}
+  /* Fixed widths on the fact and action columns, so the columns line up across
+     rows even though every row is its own grid. */
+  .qrow{display:grid;grid-template-columns:3px 38px minmax(0,1fr) 128px 104px 290px;
+    gap:0 16px;align-items:center;padding:13px 0 13px var(--row-pad)}
+  .qfacts{display:contents}
+  .qbar{grid-row:1;align-self:stretch;min-height:38px;border-radius:1px;background:transparent}
+  .qitem.go .qbar{background:var(--go)}         .qitem.go .qrow{background:var(--go-row)}
+  .qitem.due .qbar{background:var(--due)}       .qitem.due .qrow{background:var(--due-row)}
+  .qitem.closing .qbar{background:var(--closing)} .qitem.closing .qrow{background:var(--closing-row)}
+  .qitem.awaiting .qbar{background:var(--awaiting)} .qitem.awaiting .qrow{background:var(--awaiting-row)}
+  .qitem.closed .qbar{background:var(--closed)}
+  .qrank{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;line-height:1;color:var(--text)}
+  .qrank.good{color:var(--go)} .qrank.quiet{color:var(--muted)}
+  .qt{font-size:14px;line-height:1.35}
+  .qs{font-size:12px;color:var(--muted);margin-top:2px}
+  .qfact .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;margin-top:3px;white-space:nowrap}
+  .qfact .v.quiet{color:var(--muted)} .qfact .v.est{font-style:italic}
+  .qfact .v.go{color:var(--go)} .qfact .v.due{color:var(--due)}
+  .qfact .v.closing{color:var(--closing)} .qfact .v.awaiting{color:var(--awaiting)}
+  .qacts{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
+  .btn-due{background:var(--due);border-color:var(--due);color:var(--on-due);font-weight:700}
+  .btn-due:hover:not(:disabled){background:var(--due);border-color:var(--due);color:var(--on-due);filter:brightness(1.08)}
+  .btn-await{background:var(--awaiting-tint);border-color:var(--awaiting-line);color:var(--awaiting)}
+  .btn-await:hover:not(:disabled){border-color:var(--awaiting);color:var(--awaiting)}
+  /* Too narrow for five columns: the facts drop under the title, then the
+     actions under both. Same row, same order, stacked rather than squeezed. */
+  @media(max-width:1240px){
+    .qrow{grid-template-columns:3px 38px minmax(0,1fr) auto}
+    .qbar{grid-row:1 / span 2}
+    .qfacts{display:flex;gap:26px;grid-column:3;grid-row:2;margin-top:8px}
+    .qacts{grid-column:4;grid-row:1 / span 2}
+  }
+  @media(max-width:640px){
+    .qrow{grid-template-columns:3px 32px minmax(0,1fr);gap:0 12px}
+    .qbar{grid-row:1 / span 3}
+    .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
+  }
+
+  /* ═══ one job, opened ═══
+     In place, under its own row: the list you are working through stays where
+     it is. Read rather than scanned, so it is laid out as a record on the left
+     and the situation on the right. */
+  .qd{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:0 26px;
+    padding:18px 0 22px var(--row-pad);border-top:1px solid var(--hair)}
+  .qd-main{min-width:0}
+  .qd-rail{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:16px;
+    align-self:start;display:flex;flex-direction:column;gap:18px;min-width:0}
+  .qd-eb{display:flex;align-items:center;gap:9px;margin-bottom:12px}
+  .qd-eb i{width:3px;height:13px;background:var(--dim)}
+  .qd.go .qd-eb i{background:var(--go)}             .qd.go .qd-eb .eyebrow{color:var(--go)}
+  .qd.due .qd-eb i{background:var(--due)}           .qd.due .qd-eb .eyebrow{color:var(--due)}
+  .qd.closing .qd-eb i{background:var(--closing)}   .qd.closing .qd-eb .eyebrow{color:var(--closing)}
+  .qd.awaiting .qd-eb i{background:var(--awaiting)} .qd.awaiting .qd-eb .eyebrow{color:var(--awaiting)}
+  .qd-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:0 18px;
+    border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .qd-stat{padding:13px 0}
+  .qd-stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:24px;line-height:1;margin-top:7px}
+  .qd-stat .c{font-size:11px;color:var(--dim);margin-top:6px}
+  .qd-stat.good .v{color:var(--go)}
+  .qd-stat.closing .v,.qd-stat.closing .c{color:var(--closing)}
+  .qd-h{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--dim);padding-bottom:8px;border-bottom:1px solid var(--line);margin-top:24px}
+  .qd-rail .qd-h{margin-top:0}
+  .qd-two{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 24px}
+  .qd-p{font-size:13px;color:var(--muted);line-height:1.6;margin:11px 0 0}
+  .qd-quote{font-size:13px;line-height:1.6;border-left:2px solid var(--line);padding-left:14px;
+    margin-top:13px;white-space:pre-wrap;max-height:260px;overflow:auto}
+  .pills{display:flex;flex-wrap:wrap;gap:5px;margin-top:11px}
+  .pl{font-family:var(--mono);font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;
+    padding:2px 7px;border-radius:2px;border:1px solid var(--line);background:var(--panel2);
+    color:var(--muted);white-space:nowrap}
+  .pl.go{color:var(--go);background:var(--go-tint);border-color:var(--go-line)}
+  .qh{display:grid;grid-template-columns:8px 86px minmax(0,1fr);gap:0 12px;align-items:baseline;
+    padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
+  .qh i{width:5px;height:5px;border-radius:50%;background:var(--closed)}
+  .qh.go i{background:var(--go)} .qh.due i{background:var(--due)} .qh.awaiting i{background:var(--awaiting)}
+  .qh .when{font-family:var(--mono);font-size:11px;color:var(--dim)}
+  .qh .what{color:var(--muted);min-width:0} .qh .what b{color:var(--text);font-weight:500}
+  .qd-none{color:var(--dim);font-size:12.5px;padding:10px 0}
+  .qd-callout{padding:10px 12px;border-left:3px solid var(--line);font-size:12.5px;line-height:1.5}
+  .qd-callout.go{border-left-color:var(--go);background:var(--go-tint)}
+  .qd-callout.due{border-left-color:var(--due);background:var(--due-tint)}
+  .qd-callout.closing{border-left-color:var(--closing);background:var(--closing-tint)}
+  .qd-callout.awaiting{border-left-color:var(--awaiting);background:var(--awaiting-tint)}
+  .rec{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding:8px 0;border-bottom:1px solid var(--hair)}
+  .rec:last-child{border-bottom:none}
+  .rec .k{font-size:12px;color:var(--muted);flex-shrink:0}
+  .rec .v{font-size:12.5px;text-align:right;min-width:0;overflow-wrap:anywhere}
+  .rec .v.go{color:var(--go)} .rec .v.due{color:var(--due)}
+  .rec .v.closing{color:var(--closing)} .rec .v.awaiting{color:var(--awaiting)} .rec .v.closed{color:var(--dim)}
+  .qp{padding:10px 0;border-bottom:1px solid var(--hair)}
+  .qp:last-of-type{border-bottom:none}
+  .qp-n{font-size:13px} .qp-r{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .qp-m{font-size:11px;color:var(--muted);font-family:var(--mono);overflow-wrap:anywhere;margin-top:2px}
+  @media(max-width:1080px){ .qd{grid-template-columns:minmax(0,1fr);row-gap:20px} }
+  @media(max-width:640px){
+    .qd-two{grid-template-columns:minmax(0,1fr)}
+    .qd-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  }
+
+  /* The colour key in the sidebar: the law, with how many rows each rule holds. */
+  .lg{display:grid;grid-template-columns:3px minmax(0,1fr) auto;gap:0 11px;align-items:baseline;
+    padding:8px 0;border-bottom:1px solid var(--hair)}
+  .lg:last-child{border-bottom:none}
+  .lg i{align-self:stretch;background:var(--closed)}
+  .lg.go i{background:var(--go)} .lg.due i{background:var(--due)}
+  .lg.closing i{background:var(--closing)} .lg.awaiting i{background:var(--awaiting)}
+  .lg-h{font-size:12.5px} .lg-s{font-size:11px;color:var(--dim);margin-top:1px}
+  .lg .num{font-size:13px;color:var(--muted)}
+  .lg.go .num{color:var(--go)} .lg.due .num{color:var(--due)}
+  .lg.closing .num{color:var(--closing)} .lg.awaiting .num{color:var(--awaiting)}
   a.lnk{color:var(--cool);text-decoration:none;font-size:12px;font-family:var(--mono)}
   a.lnk:hover{text-decoration:underline}
   .bar{height:3px;background:var(--panel2);border-radius:2px;overflow:hidden;margin-top:5px}
@@ -643,7 +708,7 @@ function applyTheme(){
   // The browser paints its own chrome from this on mobile; leaving it on the
   // old dark value puts a black bar above a white page.
   const m=document.querySelector('meta[name="theme-color"]');
-  if(m) m.setAttribute('content', CV('--ink') || '#0E1411');
+  if(m) m.setAttribute('content', CV('--ink') || '#18211C');
 }
 /* Before the first paint, and synchronously -- everything else here is async,
    and a single frame of the wrong theme is the one theming bug people notice. */
@@ -711,7 +776,26 @@ const HAS_WS = typeof window.storage !== 'undefined' && window.storage
    stolen set of API keys. */
 const CFG   = window.TRIAGE_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
-const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+/* "Remember me": which native Storage the session token lives in. localStorage
+   survives closing the browser; sessionStorage dies with the tab. The choice
+   is stashed in sessionStorage itself so a refresh in the same tab still finds
+   an unremembered session, and only actually closing the tab loses it. */
+let REMEMBER = true;
+try{ REMEMBER = sessionStorage.getItem('triage:remember') !== '0'; }catch(e){}
+const authStorage = {
+  getItem:  k => (REMEMBER?localStorage:sessionStorage).getItem(k),
+  setItem:  (k,v) => (REMEMBER?localStorage:sessionStorage).setItem(k,v),
+  removeItem: k => (REMEMBER?localStorage:sessionStorage).removeItem(k),
+};
+const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,
+                {auth:{storage:authStorage}}) : null;
+/* Read synchronously, right here, because createClient above has already
+   started eating the URL hash: it fires PASSWORD_RECOVERY while boot() is
+   still thousands of lines away from attaching a listener, so that event is
+   never heard and a reset link just signs you in and shows you the app. The
+   hash is still intact on this line, so the intent is taken from it directly
+   rather than from an event that has already gone. */
+const RECOVERY_LINK = CLOUD && /(^|[#&])type=recovery(&|$)/.test(location.hash);
 let USER = null;                      // the signed-in auth user, or null
 /* Never leaves the device it was typed on. */
 const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
@@ -2468,109 +2552,202 @@ function byPosted(list){
 }
 const sortList = rows => SORT==='new' ? byNewest(rows) : SORT==='posted' ? byPosted(rows) : rows;
 
-function flagHtml(s){
-  const good=['strong_fit','non_traditional_friendly','rare_combination_fit'];
-  const bad=['wrong_role_shape','location_ineligible','credential_gated','seniority_too_high','seniority_too_low','high_competition'];
-  return String(s||'').split(',').filter(Boolean).map(f=>
-    `<span class="flag ${good.includes(f)?'g':bad.includes(f)?'r':''}">${esc(f.replace(/_/g,' '))}</span>`).join('');
+/* ═══ the colour law, in code ═══
+   Which of the four instructions a row carries. One at most, and the order
+   below is the rule: a deadline beats an opportunity, the nearer deadline beats
+   the further one, and a score on its own is never an instruction. */
+const WORK_FIT=65, WORK_REACH=45, STRONG_FIT=75, STRONG_REACH=55;
+const CLOSING_DAYS=21, STALE_DAYS=60;
+const FLAGS_GOOD=['strong_fit','non_traditional_friendly','rare_combination_fit'];
+const isStrong = j => fitOf(j)>=STRONG_FIT && reachOf(j)>=STRONG_REACH;
+const overBar  = j => fitOf(j)>=WORK_FIT && reachOf(j)>=WORK_REACH;
+/* Old enough to be filled soon, not so old it probably already has been. Only
+   for something worth doing -- a below-the-bar posting going stale asks nothing
+   of anyone. */
+function isClosing(j){
+  const n=ageOf(j);
+  return stOf(j)==='new' && isScored(j) && overBar(j) && n!==null && n>=CLOSING_DAYS && n<=STALE_DAYS;
 }
-/* Everything the card does not have room for, opened underneath it. Deliberately
-   does not repeat what the card already shows -- title, company, chips, score,
-   reason, flags are all up there. */
-function jobDetail(j,i){
-  const cts=listOf(j,'contacts'), ev=listOf(j,'events'), st=stOf(j);
-  return `<div class="jdet">
-    <div class="eyebrow">People</div>
-    ${cts.length
-      ? cts.map((c,ci)=>`<div class="ct-row">
-          <div style="flex:1;min-width:0">
-            <div class="ct-nm">${esc(c.name||'(no name)')}
-              ${c.tier?`<span class="tag ${c.tier==='recruiting'?'mid':'easy'}" style="margin-left:5px">${c.tier==='recruiting'?'recruiting':'hiring side'}</span>`:''}
-              ${c.role?`<span style="color:var(--muted);font-size:11px">\u00b7 ${esc(c.role)}</span>`:''}</div>
-            ${c.email?`<div class="ct-meta">${esc(c.email)}</div>`:''}
-            ${c.linkedin?`<div class="ct-meta"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,52))}</a></div>`:''}
-          </div>
-          <div class="btn-row" style="flex-shrink:0">
-            ${c.linkedin?`<button class="btn-sm" data-act="inmail" data-i="${i}" data-ci="${ci}">Draft InMail</button>`:''}
-            <button class="btn-sm" data-act="ctdel" data-i="${i}" data-ci="${ci}">Remove</button></div></div>`).join('')
-      : `<div class="ct-none">Nobody added yet. For a cold approach this is the whole job \u2014 find the person before writing the message.</div>`}
-    <div class="btn-row" style="margin-top:9px">
-      <button class="btn-sm" data-act="ctadd" data-i="${i}">Add a person</button>
-      <button class="btn-sm" data-act="hrfind" data-i="${i}">Find contacts</button></div>
+function accentOf(j){
+  const st=stOf(j);
+  if(st==='closed') return 'closed';
+  if(isDue(j)) return 'due';
+  if(st==='live') return 'go';
+  if(st==='sent') return 'awaiting';
+  if(isClosing(j)) return 'closing';
+  if(isScored(j) && isStrong(j)) return 'go';
+  return '';
+}
+/* When a sent row falls due, for the rows that are not due yet. */
+function followUpOn(j){
+  if(j.follow_up_date) return j.follow_up_date;
+  const t=j.last_touch||j.date_applied; if(!t) return '';
+  const d=new Date(t+'T00:00:00Z'); if(isNaN(d)) return '';
+  d.setUTCDate(d.getUTCDate()+FOLLOWUP_DAYS);
+  return isoOf(d);
+}
+const mmdd = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')) ? String(s).slice(5) : String(s||'');
+const ordinal = n => { const t=n%100; return n+((t>10&&t<14)?'th':({1:'st',2:'nd',3:'rd'}[n%10]||'th')); };
 
-    <div class="eyebrow">History</div>
-    ${ev.length
-      ? ev.map(e=>`<div class="log"><span class="when">${esc(e.on)}</span> \u00b7 <b>${esc(e.kind)}</b> ${esc(e.text)}</div>`).join('')
-      : `<div class="ct-none">Nothing logged yet.</div>`}
-    <div class="btn-row" style="margin-top:9px">
-      <button class="btn-sm" data-act="logadd" data-i="${i}">Log something</button></div>
+/* One job, opened in place under its own row. Deliberately does not repeat the
+   row's actions -- they are right above it. What it adds is everything the row
+   has no room for: the four numbers, the reasoning, the history, the people. */
+function jobDetail(j,i,acc){
+  const cts=listOf(j,'contacts'), ev=listOf(j,'events'), st=stOf(j), ch=chOf(j);
+  const age=ageOf(j), silent=daysSilent(j), scored=isScored(j), due=isDue(j);
+  const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
 
-    ${j.description?`<div class="eyebrow">Description</div>
-      <p class="desc">${esc(j.description)}</p>`:''}
+  const eyebrow =
+      st==='closed'     ? 'closed'
+    : due               ? `overdue — ${silent} days without a reply`
+    : st==='live'       ? 'in conversation — they replied'
+    : st==='sent'       ? `awaiting — sent ${silent?silent+'d ago':'today'}`
+    : acc==='closing'   ? `closing — posted ${age} days ago`
+    : acc==='go'        ? 'do this first'
+    : !scored           ? 'not scored yet'
+    : overBar(j)        ? 'worth a shot' : 'below the bar';
 
-    <div class="eyebrow">Stage</div>
-    <div class="btn-row">
-      ${STAGES.map(x=>`<button class="btn-sm ${st===x?'btn-go':''}" data-act="stage" data-to="${x}" data-i="${i}">${x}</button>`).join('')}
+  const all=P().jobs.filter(isScored).sort((a,b)=>rankOf(b)-rankOf(a));
+  const pos=all.indexOf(j)+1;
+  const window_ = age===null ? 'posting date unknown'
+    : acc==='closing' ? 'apply soon or drop it'
+    : age<=14 ? 'fresh' : age>STALE_DAYS ? 'probably filled' : '';
+  const stat=(k,v,c,cls)=>`<div class="qd-stat ${cls||''}"><div class="eyebrow">${k}</div>
+      <div class="v">${v}</div><div class="c">${c||'&nbsp;'}</div></div>`;
+
+  const flags=String(j.ai_flags||'').split(',').map(s=>s.trim()).filter(Boolean);
+  const pill=(f,cls)=>`<span class="pl ${cls}">${esc(f.replace(/_/g,' '))}</span>`;
+  const forIt=flags.filter(f=>FLAGS_GOOD.includes(f)), against=flags.filter(f=>!FLAGS_GOOD.includes(f));
+
+  // Who did what, coloured by the same law: a reply is your move, a send is theirs.
+  const kindAcc = k => k==='reply' ? 'go' : k==='sent' ? 'awaiting' : k==='chase' ? 'due' : '';
+
+  const advice =
+      due              ? ['due', `Sent ${silent} days ago with no reply. One short nudge is worth sending; a second rarely is.`]
+    : st==='live'      ? ['go', 'Someone is on the other end of this one. Keep it moving before anything else.']
+    : st==='sent'      ? ['awaiting', `Nothing to do yet. If they stay silent, chase on ${followUpOn(j)||'the follow-up date'}.`]
+    : acc==='closing'  ? ['closing', 'Postings this old are usually filled within a fortnight. Send it today, or close it honestly.']
+    : acc==='go'       ? ['go', 'Strong on both axes. Worth a proper application, not a quick one.']
+    : null;
+
+  const src={feed:'stated by the source',page:'read from the listing',est:'estimated'}[String(j.posted_src||'')]||'';
+  const rec=(k,v,cls)=>`<div class="rec"><span class="k">${k}</span><span class="v ${cls||''}">${v}</span></div>`;
+
+  return `<div class="qd ${acc}">
+    <div class="qd-main">
+      <div class="qd-eb"><i></i><span class="eyebrow">${esc(eyebrow)}</span></div>
+      <div class="qd-stats">
+        ${stat('Rank', scored?Math.round(rankOf(j)):'—', pos?`${ordinal(pos)} of ${all.length}`:'', scored&&isStrong(j)&&st==='new'?'good':'')}
+        ${stat('Fit', scored?fitOf(j):'—', 'what you can do')}
+        ${stat('Reach', scored?reachOf(j):'—', 'whether they will look')}
+        ${stat('Window', age===null?'—':spanTxt(age), window_, acc==='closing'?'closing':'')}
+      </div>
+
+      <div class="qd-two">
+        <div><div class="qd-h">Why it scores this way</div>
+          <p class="qd-p">${j.ai_reason ? esc(j.ai_reason)
+            : scored ? 'No reasoning was saved with this score.'
+            : 'Not scored yet — scoring reads it against your background.'}</p>
+          ${forIt.length?`<div class="pills">${forIt.map(f=>pill(f,'go')).join('')}</div>`:''}</div>
+        <div><div class="qd-h">Against it</div>
+          ${against.length?`<div class="pills">${against.map(f=>pill(f,'')).join('')}</div>`
+            :`<p class="qd-p">Nothing flagged against it.</p>`}</div>
+      </div>
+
+      ${j.description?`<div class="qd-h">From the posting</div>
+        <div class="qd-quote">${esc(j.description)}</div>`:''}
+
+      <div class="qd-h">History</div>
+      ${ev.length
+        ? ev.map(e=>`<div class="qh ${kindAcc(e.kind)}"><i></i><span class="when">${esc(e.on)}</span>
+            <span class="what"><b>${esc(e.kind)}</b>${e.text?' · '+esc(e.text):''}</span></div>`).join('')
+        : `<div class="qd-none">Nothing logged yet.</div>`}
+      <div class="btn-row" style="margin-top:10px">${btn('logadd','Log something')}</div>
     </div>
-    <p class="hint">Confidence in this score: <b>${esc(j.ai_confidence||'unknown')}</b>.${
-      j.source?` Found via ${esc(j.source)}.`:''}${
-      j.added?` Added ${esc(j.added)}.`:''}</p>
+
+    <div class="qd-rail">
+      ${advice?`<div class="qd-callout ${advice[0]}">${esc(advice[1])}</div>`:''}
+      ${j.url?`<a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open the original posting ↗</a>`:''}
+
+      <div><div class="qd-h">The record</div>
+        ${rec('channel', ch==='cold'?'cold approach':'posted role')}
+        ${j.source?rec('source', esc(j.source)):''}
+        ${rec('confidence', esc(j.ai_confidence||'unknown'))}
+        ${rec('posted', age===null?'unknown':esc(ageLabel(j))+(src?` · ${src}`:''), acc==='closing'?'closing':'')}
+        ${j.added?rec('added', esc(j.added)):''}
+        ${rec('stage', due?'overdue':esc(st), acc)}
+      </div>
+
+      <div><div class="qd-h">People</div>
+        ${cts.length
+          ? cts.map((c,ci)=>`<div class="qp">
+              <div class="qp-n">${esc(c.name||'(no name)')}</div>
+              <div class="qp-r">${[c.role, c.tier==='recruiting'?'recruiting':c.tier?'hiring side':''].filter(Boolean).map(esc).join(' · ')||'&nbsp;'}</div>
+              ${c.email?`<div class="qp-m">${esc(c.email)}</div>`:''}
+              ${c.linkedin?`<div class="qp-m"><a class="lnk" href="${esc(c.linkedin)}" target="_blank" rel="noopener">${esc(c.linkedin.replace(/^https?:\/\//,'').slice(0,40))}</a></div>`:''}
+              <div class="btn-row" style="margin-top:7px">
+                ${c.linkedin?`<button class="btn-sm" data-act="inmail" data-i="${i}" data-ci="${ci}">Draft InMail</button>`:''}
+                <button class="btn-sm" data-act="ctdel" data-i="${i}" data-ci="${ci}">Remove</button></div>
+            </div>`).join('')
+          : `<div class="qd-none">Nobody added yet.${ch==='cold'?' For a cold approach this is the whole job — find the person before writing the message.':''}</div>`}
+        <div class="btn-row" style="margin-top:9px">
+          ${btn('ctadd','Add a person')}${btn('hrfind','Find contacts')}</div>
+      </div>
+
+      <div><div class="qd-h">Stage</div>
+        <div class="btn-row" style="margin-top:10px">
+          ${STAGES.map(x=>`<button class="btn-sm ${st===x?'btn-go':''}" data-act="stage" data-to="${x}" data-i="${i}">${x}</button>`).join('')}
+        </div></div>
+    </div>
   </div>`;
 }
 
-/* One primary action, whose verb follows the state, plus whichever single move
-   advances the pipeline from here, plus the detail toggle. Close is not on the
-   card: it is the one destructive move, it is rare, and it lives in the stage
-   row inside the panel where a deliberate press is required. */
-function jobCard(j,i,hi){
-  const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j);
-  const cls = st==='live' ? 'st-live' : due ? 'st-due' : 'ch-'+ch;
-  const stLabel = st==='sent' && due ? 'due' : st;
+/* One row. The edge says what to do, the rank says how good it is, and two
+   facts say why now -- chosen by stage, because "posted 24 days ago" is the
+   question for a new row and "silent for 11 days" is the question for a sent
+   one. Actions: whatever advances the pipeline, then Details, then the one
+   primary move furthest right. Close is not here: it is the one destructive
+   move, and it lives in the stage row inside the panel. */
+function jobCard(j,i){
+  const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j), acc=accentOf(j);
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
-  const silent = daysSilent(j);
+  const age=ageOf(j), scored=isScored(j);
   const open = OPEN_JOB===keyOf(j);
-  const btn=(act,label,go)=>`<button class="${go?'btn-go btn-sm':'btn-sm'}" data-act="${act}" data-i="${i}">${label}</button>`;
-  // Primary first, then the one move that advances things, and nothing else.
+  const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
+  const details=btn('open', open?'Hide':'Details');
   const acts =
-      st==='new'    ? btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', true)
-                      + btn('sent', ch==='cold'?'Mark contacted':'Mark applied')
-    : st==='sent'   ? (due ? btn('chase','Write the chase',true) + btn('live','They replied')
-                           : btn('live','They replied',true))
-    : st==='live'   ? btn('note','Log a note',true)
-    : /* closed */    btn('reopen','Reopen');
-  // Fit and reachability, once each and labelled. The card used to print both
-  // as text AND as two unlabelled bars, on top of the rank they combine into.
-  const axis=(label,v,col)=>`<div class="jaxis">
-      <span class="k">${label}</span>
-      <span class="bar" style="flex:1;margin:0"><i style="width:${v}%;background:${col}"></i></span>
-      <span class="num v">${v}</span></div>`;
-  return `<div class="job ${cls} ${st==='closed'?'done':''} ${open?'open':''}" data-jobidx="${i}">
-    <div class="jrow"><div style="flex:1;min-width:0">
-      <div class="jt">${esc(j.title||'(untitled)')}</div>
-      <div class="jc">${esc(j.company||'\u2014')}${j.location?' \u00b7 '+esc(j.location):''}</div>
-      <div class="flags" style="margin-top:7px">
-        <span class="chn ${ch}">${ch==='cold'?'cold approach':'posted role'}</span>
-        <span class="stage s-${stLabel}">${esc(stLabel)}</span>
-        ${ageChip(j)}
-        ${st==='sent'&&silent?`<span class="stage s-sent">${silent}d silent</span>`:''}
-        ${cts.length?`<span class="stage">${cts.length} contact${cts.length>1?'s':''}</span>`:''}
-      </div></div>
-      <div class="jscore">
-        <div class="big">${Math.round(rankOf(j))}</div>
-        <div class="jaxes">
-          ${axis('fit',f,`var(--${ch})`)}
-          ${axis('reach',r,'var(--neutral)')}
-        </div></div></div>
-    ${j.ai_reason?`<p class="jreason">${esc(j.ai_reason)}</p>`:''}
-    ${j.ai_flags?`<div class="flags">${flagHtml(j.ai_flags)}</div>`:''}
-    ${!open&&ev.length?`<div class="log"><span class="when">${esc(ev[0].on)}</span> \u00b7 <b>${esc(ev[0].kind)}</b> ${esc(ev[0].text).slice(0,120)}</div>`:''}
-    <div class="jacts">
-      ${j.url?`<a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open \u2197</a>`:''}
-      <div class="spacer"></div>
-      ${acts}
-      ${btn('open', open?'Hide':'Details')}
+      st==='new'  ? btn('sent', ch==='cold'?'Mark contacted':'Mark applied') + details
+                    + btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', 'btn-go')
+    : st==='sent' ? btn('live','They replied') + details
+                    + (due ? btn('chase','Write the chase','btn-due')
+                           : btn('chase', followUpOn(j)?`Chase on ${mmdd(followUpOn(j))}`:'Chase', 'btn-await'))
+    : st==='live' ? details + btn('note','Log a note','btn-go')
+    : details + btn('reopen','Reopen');
+
+  const fact=(k,v,cls)=>`<div class="qfact"><div class="eyebrow">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
+  const fitReach = scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
+  const facts =
+      st==='new'  ? fitReach + (ch==='cold'
+                      ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
+                      : fact('posted', age===null?'unknown':esc(ageLabel(j)),
+                          [acc==='closing'?'closing':'', age===null||age>STALE_DAYS?'quiet':'', String(j.posted_src)==='est'?'est':''].join(' ')))
+    : st==='sent' ? (due ? fact('silent for', `${daysSilent(j)} days`, 'due') : fact('state', 'waiting', 'awaiting'))
+                    + fact('sent', j.date_applied?esc(mmdd(j.date_applied)):'—', 'quiet')
+    : st==='live' ? fact('state', 'in conversation', 'go') + fact('last', ev[0]?esc(mmdd(ev[0].on)):'—', 'quiet')
+    : fact('state', 'closed', 'quiet') + (scored ? fact('fit / reach', `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
+
+  const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
+  const rankCls = st!=='new' ? 'quiet' : (scored&&isStrong(j)) ? 'good' : '';
+
+  return `<div class="qitem ${acc} ${open?'open':''}" data-jobidx="${i}">
+    <div class="qrow">
+      <i class="qbar"></i>
+      <span class="qrank ${rankCls}">${scored?Math.round(rankOf(j)):'—'}</span>
+      <div style="min-width:0"><div class="qt">${esc(j.title||'(untitled)')}</div><div class="qs">${sub}</div></div>
+      <div class="qfacts">${facts}</div>
+      <div class="qacts">${acts}</div>
     </div>
-    ${open?jobDetail(j,i):''}</div>`;
+    ${open?jobDetail(j,i,acc):''}</div>`;
 }
 
 /* ═══ the daily view ═══
@@ -2614,30 +2791,16 @@ function nextStep(){
     b:'Find more jobs', act:'suggest'};
 }
 
-/* Fresh is under a fortnight, stale is over two months; in between is just
-   how old most live postings are. The title says where the date came from,
-   because an estimate and a feed date look identical otherwise. */
-function ageChip(j){
-  const n=ageOf(j); if(n===null) return '';
-  const src=String(j.posted_src||'');
-  const cls=n<=14?'hot':n>60?'stale':'';
-  const how=src==='feed'?'stated by the source'
-          :src==='page'?'read from the search result'
-          :src==='est' ?'estimated from the description \u2014 treat as approximate'
-          :'';
-  return `<span class="stage s-age ${cls} ${src==='est'?'guess':''}" title="Posted ${esc(j.posted_lo===j.posted_hi?j.posted:j.posted_lo+' to '+j.posted_hi)}${how?' \u2014 '+how:''}">${esc(ageLabel(j))}</span>`;
-}
-
 /* Freshest first, which is the one ordering the rest of the app cannot give.
    Rank answers "is this worth doing", recency answers "is it still there" —
    an eight-week-old posting is usually filled or abandoned however well it
    scores. Undated rows are listed at the end rather than dropped: not knowing
    when something was posted is not the same as it being old. */
-/* One section of job cards. Every list view renders these and had a private
-   copy each. */
-const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
-    <div class="sect-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
-    <p class="sect-sub">${sub}</p>
+/* One section of the queue, headed and ruled in its accent. Every list view
+   renders these. An empty accent is a plain section: nothing wanted of you. */
+const sect=(acc,title,sub,rows)=>rows.length?`<div class="qsec ${acc}">
+    <div class="qsec-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
+    <p class="qsec-sub">${sub}</p>
     ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
 
 /* The same section, folded away: rows that are real but not what you came for
@@ -2646,7 +2809,7 @@ const sect=(cls,title,sub,rows)=>rows.length?`<div class="sect ${cls}">
 const foldSect=(key,title,sub,rows)=>rows.length?`<details class="fold" data-fold="${key}" ${FOLDS[key]?'open':''} style="margin-bottom:26px">
     <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
     <div class="foldbody">
-      <p class="sect-sub">${sub}</p>
+      <p class="qsec-sub" style="margin:0 0 4px">${sub}</p>
       ${rows.slice(0,LIST_CAP).map(x=>jobCard(x.j,x.i)).join('')}
       ${rows.length>LIST_CAP?`<p class="hint">${rows.length-LIST_CAP} more not shown. Narrow with the channel filter, or sort to bring what you want to the top.</p>`:''}
     </div></details>`:'';
@@ -2662,7 +2825,6 @@ const foldSect=(key,title,sub,rows)=>rows.length?`<details class="fold" data-fol
    map's drag-selection on purpose -- a box drawn yesterday quietly shortening
    this list tomorrow morning is the kind of invisible state that makes a tool
    untrustworthy. */
-const WORK_FIT=65, WORK_REACH=45, STRONG_FIT=75, STRONG_REACH=55;
 
 function renderUnapplied(){
   const p=P();
@@ -2673,11 +2835,11 @@ function renderUnapplied(){
 
   const scored=mine.filter(x=>isScored(x.j));
   const unscored=mine.filter(x=>!isScored(x.j));
-  const isStrong=x=>fitOf(x.j)>=STRONG_FIT&&reachOf(x.j)>=STRONG_REACH;
-  const overBar=x=>fitOf(x.j)>=WORK_FIT&&reachOf(x.j)>=WORK_REACH;
-  const strong=sortList(scored.filter(isStrong));
-  const worth =sortList(scored.filter(x=>!isStrong(x)&&overBar(x)));
-  const below =sortList(scored.filter(x=>!overBar(x)));
+  // Closing wins over strong: the nearer deadline beats the better opportunity.
+  const closing=sortList(scored.filter(x=>isClosing(x.j)));
+  const strong =sortList(scored.filter(x=>!isClosing(x.j)&&isStrong(x.j)));
+  const worth  =sortList(scored.filter(x=>!isClosing(x.j)&&!isStrong(x.j)&&overBar(x.j)));
+  const below  =sortList(scored.filter(x=>!overBar(x.j)));
 
   return `<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
@@ -2689,9 +2851,10 @@ function renderUnapplied(){
         <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Recently added</button>
       </div>
     </div>
-    ${sect('live','Do these first',`Fit ${STRONG_FIT}+ and reachability ${STRONG_REACH}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
+    ${sect('go','Do these first',`Fit ${STRONG_FIT}+ and reachability ${STRONG_REACH}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
+    ${sect('closing','Closing soon',`Worth doing, but posted ${CLOSING_DAYS}+ days ago. Old postings get filled, not withdrawn \u2014 apply today or let it go.`,closing)}
     ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
-    ${(!strong.length&&!worth.length)?`<div class="empty"><b>Nothing clears the bar</b>
+    ${(!strong.length&&!worth.length&&!closing.length)?`<div class="empty"><b>Nothing clears the bar</b>
       ${scored.length?`${scored.length} scored here, none at fit ${WORK_FIT}+ and reachability ${WORK_REACH}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
     ${foldSect('below','Below the bar',`Scored under fit ${WORK_FIT} or reachability ${WORK_REACH}. Kept, because a score is a judgement rather than a fact.`,below)}
     ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}`;
@@ -2722,14 +2885,14 @@ function renderApplied(){
   }
   const oldest=[...due,...waiting,...live].reduce((m,x)=>Math.max(m,daysSilent(x.j)),0);
   return `<div class="stats">
-      <div class="stat"><div class="k num" style="color:var(--warn)">${due.length}</div><div class="l">overdue</div></div>
-      <div class="stat"><div class="k num" style="color:var(--live)">${live.length}</div><div class="l">in conversation</div></div>
-      <div class="stat"><div class="k num" style="color:var(--neutral)">${waiting.length}</div><div class="l">waiting</div></div>
+      <div class="stat"><div class="k num" style="color:var(--due)">${due.length}</div><div class="l">overdue</div></div>
+      <div class="stat"><div class="k num" style="color:var(--go)">${live.length}</div><div class="l">in conversation</div></div>
+      <div class="stat"><div class="k num" style="color:var(--awaiting)">${waiting.length}</div><div class="l">awaiting them</div></div>
       <div class="stat"><div class="k num">${oldest}</div><div class="l">days, longest silence</div></div>
     </div>
     ${sect('due','Overdue a chase',`Past the ${FOLLOWUP_DAYS}-day mark with no reply. One nudge is worth sending; a second rarely is.`,due)}
-    ${sect('live','In conversation','Someone replied. Keep these moving before anything else.',live)}
-    ${sect('','Still waiting','Sent recently and not yet due. Nothing to do but leave them alone.',waiting)}
+    ${sect('go','In conversation','Someone replied. Keep these moving before anything else.',live)}
+    ${sect('awaiting','Awaiting them','Sent recently and not yet due. Nothing to do here yet.',waiting)}
     ${foldSect('closed','Closed','Ended, withdrawn or turned down. Kept for the record \u2014 reopening puts one back in Unapplied.',closed)}`;
 }
 
@@ -2769,10 +2932,10 @@ function renderDash(){
       <div class="sect-h"><h3>Pipeline</h3><span class="ct">${jobs.length}</span></div>
       <p class="sect-sub">Where everything stands. A live conversation is worth more than any number of new rows.</p>
       <div class="card">
-        ${row('Unapplied',nNew,'var(--signal)')}
-        ${row('Sent',nSent,'var(--neutral)')}
-        ${row('In conversation',nLive,'var(--live)')}
-        ${row('Closed',nClosed,'var(--dim)')}
+        ${row('Unapplied',nNew,'var(--go)')}
+        ${row('Sent',nSent,'var(--awaiting)')}
+        ${row('In conversation',nLive,'var(--go)')}
+        ${row('Closed',nClosed,'var(--closed)')}
       </div>
     </div>
 
@@ -2824,6 +2987,9 @@ function renderApp(){
   const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
+  // One pass through the law for the header pills and the sidebar key.
+  const law={go:0,due:0,closing:0,awaiting:0,closed:0};
+  p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
 
   $('#root').innerHTML=`
@@ -2832,8 +2998,10 @@ function renderApp(){
     <div class="who"><div class="av">${esc(initials)}</div>
       <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}${trk.label?' · '+esc(trk.label):''}</div></div></div>
     <div class="spacer"></div>
-    <span class="pill ${p.jobs.length?'on':''}">${p.jobs.length} jobs</span>
-    <span class="pill ${scored.length?'on':''}">${scored.length} scored</span>
+    ${law.due?`<span class="pill due">${law.due} overdue</span>`:''}
+    ${law.closing?`<span class="pill closing">${law.closing} closing</span>`:''}
+    ${law.awaiting?`<span class="pill awaiting">${law.awaiting} awaiting</span>`:''}
+    <span class="pill">${p.jobs.length} jobs</span>
     <button class="btn-sm" id="btnTheme" title="Theme: ${THEME}. Click to change.">${
       THEME==='auto'
         ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none"/></svg> Auto'
@@ -2860,6 +3028,13 @@ function renderApp(){
           <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
+      </div>
+      <div class="block"><span class="eyebrow">What the colours mean</span>
+        <div class="lg go"><i></i><div><div class="lg-h">Do this now</div><div class="lg-s">your move, nothing blocking</div></div><span class="num">${law.go}</span></div>
+        <div class="lg due"><i></i><div><div class="lg-h">Overdue</div><div class="lg-s">past the follow-up date</div></div><span class="num">${law.due}</span></div>
+        <div class="lg closing"><i></i><div><div class="lg-h">Closing</div><div class="lg-s">old posting, going off the board</div></div><span class="num">${law.closing}</span></div>
+        <div class="lg awaiting"><i></i><div><div class="lg-h">Awaiting</div><div class="lg-s">sent, and not your move yet</div></div><span class="num">${law.awaiting}</span></div>
+        <div class="lg"><i></i><div><div class="lg-h" style="color:var(--muted)">Closed</div><div class="lg-s">answered no, or ran out</div></div><span class="num">${law.closed}</span></div>
       </div>
       <div class="block"><span class="eyebrow">Find work</span>
         <label class="lab">Location</label>
@@ -2974,7 +3149,7 @@ function renderApp(){
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
   </div>
-  <div id="scrim"></div>
+  <div id="scrim" class="${TOOLS?'on':''}"></div>
   <div id="toolbar">
     <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
   </div>`;
@@ -3659,7 +3834,7 @@ document.addEventListener('click',async e=>{
    what changes by having an account, because "your CV stays in your browser"
    stopped being true the moment this screen existed and pretending otherwise
    would be the dishonest kind of onboarding. */
-let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'' };
+let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'', remember:true };
 
 /* Usernames are lowercase and narrow on purpose: they are an identifier people
    type, and a name that differs from another only by case or by a space is a
@@ -3676,6 +3851,7 @@ function myUsername(){
 function userName(){ return myUsername() || (USER && USER.email) || ''; }
 
 function renderAuth(){
+  if(AUTH.mode==='reset') return renderReset();
   const up = AUTH.mode==='up';
   $('#root').innerHTML=`
   <div class="onb">
@@ -3693,6 +3869,9 @@ function renderAuth(){
       <p class="hint">Only ever used to reset your password. It is not shown to anyone else.</p>`:''}
       <label class="lab" style="margin-top:12px">Password</label>
       ${pwField('auPass', up?'new-password':'current-password', up?'At least 8 characters':'', AUTH.pass)}
+      ${up?'':`<label class="hint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="auRemember" ${AUTH.remember?'checked':''} style="accent-color:var(--signal);cursor:pointer">
+        Remember me on this device</label>`}
       ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
       ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
       <div class="btn-row" style="margin-top:14px">
@@ -3710,6 +3889,7 @@ function renderAuth(){
     AUTH.user=($('#auUser').value||'').trim().toLowerCase();
     if($('#auEmail')) AUTH.email=($('#auEmail').value||'').trim();
     AUTH.pass=$('#auPass').value||'';
+    if($('#auRemember')) AUTH.remember=$('#auRemember').checked;
   };
   const fail=m=>{ AUTH.busy=false; AUTH.err=m; renderAuth(); };
 
@@ -3752,6 +3932,8 @@ function renderAuth(){
         // to test which usernames or emails exist.
         const nope = 'That did not match. Check the username or email, and the password.';
         if(!addr) return fail(nope);
+        REMEMBER = AUTH.remember;
+        try{ sessionStorage.setItem('triage:remember', REMEMBER?'1':'0'); }catch(e){}
         const {error}=await SB.auth.signInWithPassword({email:addr,password:pass});
         if(error) return fail(nope);
       }
@@ -3765,20 +3947,54 @@ function renderAuth(){
   $('#auPass').onkeydown=e=>{ if(e.key==='Enter') go(); };
   $('#auSwap').onclick=()=>{ stash(); AUTH.mode=up?'in':'up'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
 
-  if($('#auReset')) $('#auReset').onclick=async e=>{
+  if($('#auReset')) $('#auReset').onclick=e=>{
     e.preventDefault();
     stash();
-    // Reset goes by email, not by username: the recovery link is sent to the
-    // address on the account, and asking for it directly keeps this form from
-    // answering "which email is behind this username".
-    const addr=prompt('Which email is on the account?');
-    if(!addr) return;
-    try{ await SB.auth.resetPasswordForEmail(addr.trim(),{redirectTo:location.href}); }catch(err){}
-    // Said the same way whether or not the address exists: telling a stranger
-    // which emails have accounts here is not information worth giving away.
-    AUTH.err=''; AUTH.msg='If that address has an account, a reset link is on its way.';
+    AUTH.mode='reset'; AUTH.err=''; AUTH.msg='';
     renderAuth();
   };
+}
+
+/* Reset goes by email, not by username: the recovery link is sent to the
+   address on the account, and asking for it directly keeps this form from
+   answering "which email is behind this username". An in-page form rather
+   than a native prompt() — prompt() is silently blocked in a fair few
+   contexts (installed PWA, some in-app browsers), which made this
+   unreachable rather than merely ugly. */
+function renderReset(){
+  $('#root').innerHTML=`
+  <div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede">Reset your password</p>
+    <p class="say">Enter the email on your account and we will send a link to set a new password.</p>
+    <div class="card">
+      <label class="lab">Email</label>
+      <input id="rsEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
+      ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
+      ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go" id="rsGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'…':'Send reset link'}</button>
+        <button class="btn-sm" id="rsBack">Back to sign in</button>
+      </div>
+    </div>
+    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="PRIVACY.md" target="_blank" rel="noopener">privacy notice</a>. Your API keys are never uploaded — they stay in this browser.</p>
+  </div>`;
+
+  const go=async ()=>{
+    const email=($('#rsEmail').value||'').trim();
+    AUTH.email=email;
+    if(!email) { AUTH.err='Enter the email on your account.'; AUTH.msg=''; return renderReset(); }
+    AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderReset();
+    try{ await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); }catch(err){}
+    AUTH.busy=false;
+    // Said the same way whether or not the address exists: telling a stranger
+    // which emails have accounts here is not information worth giving away.
+    AUTH.msg='If that address has an account, a reset link is on its way.';
+    renderReset();
+  };
+  $('#rsGo').onclick=go;
+  $('#rsEmail').onkeydown=e=>{ if(e.key==='Enter') go(); };
+  $('#rsBack').onclick=()=>{ AUTH.mode='in'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
 }
 
 /* Shown once, to accounts that pre-date usernames. They signed in with their
@@ -3960,13 +4176,31 @@ async function afterAuthInner(){
   if(cloudNow()) await migrateLocal();
 }
 
+/* A reset link that's expired or was already used comes back with the
+   failure encoded in the URL hash instead of a session \u2014 nothing strips it
+   or surfaces it otherwise, which leaves people on a blank sign-in screen
+   with a cryptic URL and no idea why. Read it once, then send them straight
+   to requesting a fresh link instead of guessing. */
+function consumeAuthHashError(){
+  const h=location.hash;
+  if(!h || h.indexOf('error=')===-1) return;
+  const desc=new URLSearchParams(h.slice(1)).get('error_description');
+  history.replaceState(null,'',location.pathname+location.search);
+  AUTH.mode='reset';
+  AUTH.err=(desc?desc.replace(/\+/g,' '):'That link did not work')+' \u2014 request a new one below.';
+}
+
 async function boot(){
   if(CLOUD) splash('Starting\u2026');
   if(CLOUD){
+    consumeAuthHashError();
     try{
       const {data}=await SB.auth.getSession();
       USER=(data&&data.session&&data.session.user)||null;
     }catch(e){ USER=null; }
+    // Arrived on a reset link: take the new password before showing the app,
+    // however the session got here.
+    if(RECOVERY_LINK && USER) RECOVER=true;
     let last=USER?USER.id:null;
     SB.auth.onAuthStateChange((ev,sess)=>{
       const now=(sess&&sess.user)||null;
