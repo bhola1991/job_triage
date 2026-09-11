@@ -711,7 +711,19 @@ const HAS_WS = typeof window.storage !== 'undefined' && window.storage
    stolen set of API keys. */
 const CFG   = window.TRIAGE_CONFIG || {};
 const CLOUD = !!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase);
-const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+/* "Remember me": which native Storage the session token lives in. localStorage
+   survives closing the browser; sessionStorage dies with the tab. The choice
+   is stashed in sessionStorage itself so a refresh in the same tab still finds
+   an unremembered session, and only actually closing the tab loses it. */
+let REMEMBER = true;
+try{ REMEMBER = sessionStorage.getItem('triage:remember') !== '0'; }catch(e){}
+const authStorage = {
+  getItem:  k => (REMEMBER?localStorage:sessionStorage).getItem(k),
+  setItem:  (k,v) => (REMEMBER?localStorage:sessionStorage).setItem(k,v),
+  removeItem: k => (REMEMBER?localStorage:sessionStorage).removeItem(k),
+};
+const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,
+                {auth:{storage:authStorage}}) : null;
 let USER = null;                      // the signed-in auth user, or null
 /* Never leaves the device it was typed on. */
 const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
@@ -3659,7 +3671,7 @@ document.addEventListener('click',async e=>{
    what changes by having an account, because "your CV stays in your browser"
    stopped being true the moment this screen existed and pretending otherwise
    would be the dishonest kind of onboarding. */
-let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'' };
+let AUTH = { mode:'in', msg:'', err:'', busy:false, user:'', email:'', pass:'', remember:true };
 
 /* Usernames are lowercase and narrow on purpose: they are an identifier people
    type, and a name that differs from another only by case or by a space is a
@@ -3693,6 +3705,9 @@ function renderAuth(){
       <p class="hint">Only ever used to reset your password. It is not shown to anyone else.</p>`:''}
       <label class="lab" style="margin-top:12px">Password</label>
       ${pwField('auPass', up?'new-password':'current-password', up?'At least 8 characters':'', AUTH.pass)}
+      ${up?'':`<label class="hint" style="display:flex;align-items:center;gap:7px;margin-top:10px;cursor:pointer">
+        <input type="checkbox" id="auRemember" ${AUTH.remember?'checked':''} style="accent-color:var(--signal);cursor:pointer">
+        Remember me on this device</label>`}
       ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
       ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
       <div class="btn-row" style="margin-top:14px">
@@ -3710,6 +3725,7 @@ function renderAuth(){
     AUTH.user=($('#auUser').value||'').trim().toLowerCase();
     if($('#auEmail')) AUTH.email=($('#auEmail').value||'').trim();
     AUTH.pass=$('#auPass').value||'';
+    if($('#auRemember')) AUTH.remember=$('#auRemember').checked;
   };
   const fail=m=>{ AUTH.busy=false; AUTH.err=m; renderAuth(); };
 
@@ -3752,6 +3768,8 @@ function renderAuth(){
         // to test which usernames or emails exist.
         const nope = 'That did not match. Check the username or email, and the password.';
         if(!addr) return fail(nope);
+        REMEMBER = AUTH.remember;
+        try{ sessionStorage.setItem('triage:remember', REMEMBER?'1':'0'); }catch(e){}
         const {error}=await SB.auth.signInWithPassword({email:addr,password:pass});
         if(error) return fail(nope);
       }
