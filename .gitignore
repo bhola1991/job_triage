@@ -12,3 +12,10 @@ job-triage-ui.html
 # and it runs local-only. Used to reach the screens that sit behind the sign-in
 # wall while testing. Built on demand, never edited by hand.
 __preview_local.html
+
+# Design-tool exports. The .dc.html sources and the tokens are tracked under
+# design/; these are the runtime and the packaging around them.
+*.zip
+design/support.js
+.thumbnail
+Job triage app mockups/

@@ -1,0 +1,1438 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><meta name="design_doc_mode" content="canvas"><style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#0B100D;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#E9F0EB}
+a{color:#4FB58C;text-decoration:none}a:hover{color:#6FD79D}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid #1E2A24;scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 22px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#56C88A;color:#08150E;border-radius:2px;text-decoration:none}
+.dv-tname{font:500 13px/1.2 system-ui,sans-serif;color:#E9F0EB}
+.dv-opts{display:flex;flex-wrap:wrap;gap:32px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1C2620;color:#E9F0EB;border-radius:2px;text-decoration:none;border:1px solid #29372F}
+.dv-olabel{display:block;font:400 11px/1.5 system-ui,sans-serif;color:#8B9C92;max-width:70ch}
+.dv-olabel .dv-oid{margin-right:8px}
+.dv-card{max-width:100%;border-radius:4px;overflow:hidden;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+.dv-opt:target .dv-oid{background:#56C88A;color:#08150E;border-color:#56C88A}
+.dv-next{margin:24px 0 0;font:12px/1.6 system-ui,sans-serif;color:#798B81}
+.m{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.eb{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.pill{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid transparent;white-space:nowrap}
+.key{font-family:ui-monospace,Consolas,monospace;font-size:10px;padding:2px 6px;border-radius:2px;border:1px solid #29372F;background:#1C2620;color:#8B9C92}
+</style></helmet>
+
+<template id="__bundler_thumbnail"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="#0E1411"/><rect x="60" y="66" width="4" height="26" fill="#56C88A"/><rect x="74" y="70" width="66" height="7" rx="2" fill="#E9F0EB"/><rect x="74" y="83" width="44" height="6" rx="2" fill="#8B9C92"/><rect x="60" y="104" width="4" height="26" fill="#E2685C"/><rect x="74" y="108" width="58" height="7" rx="2" fill="#E9F0EB"/><rect x="74" y="121" width="38" height="6" rx="2" fill="#8B9C92"/><rect x="60" y="142" width="4" height="26" fill="#57AEC9"/><rect x="74" y="146" width="50" height="7" rx="2" fill="#E9F0EB"/><rect x="74" y="159" width="30" height="6" rx="2" fill="#8B9C92"/><rect x="60" y="34" width="80" height="5" rx="2" fill="#D9A441"/></svg></template>
+
+<section class="dv-turn" id="t3">
+<div class="dv-thd"><a class="dv-tid" href="#t3">3</a><span class="dv-tname">Four colours that each mean one thing &mdash; ruled rows, not boxes</span></div>
+
+<div class="dv-opts">
+
+<!-- ══════════════ 3a  QUEUE, FOUR-COLOUR ══════════════ -->
+<div class="dv-opt" id="3a">
+<div class="dv-olabel"><a class="dv-oid" href="#3a">3a</a><span><b style="color:#EDF3EF;font-weight:500">The queue, re-coloured</b> &mdash; green is the only thing you should act on now, red is late, amber is closing, blue-teal is sent and not your move. The bordered cards are gone; rows are ruled and every fact is a label over a value.</span></div>
+<div class="dv-card" style="width:1180px">
+<div style="background:#18211C;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #324237;background:#1F2A23;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <span class="m" style="font-size:11px;color:#8A9C8E;">AI Operations &middot; Bangalore + remote</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#E2685C;background:rgba(226,104,92,.13);border-color:#5A2E2A;">1 overdue</span>
+    <span class="pill" style="color:#D9A441;background:rgba(217,164,65,.12);border-color:#5A4620;">2 closing</span>
+    <span class="pill" style="color:#57AEC9;background:rgba(87,174,201,.12);border-color:#2C4F5C;">14 awaiting</span>
+    <div class="m" style="width:28px;height:28px;border-radius:50%;background:#26332A;border:1px solid #324237;display:flex;align-items:center;justify-content:center;font-size:11px;color:#56C88A;">SB</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:236px 1fr;">
+
+    <div style="border-right:1px solid #324237;padding:22px 20px;display:flex;flex-direction:column;gap:24px;">
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">What the colours mean</div>
+        <div style="display:flex;flex-direction:column;gap:0;">
+          <div style="display:grid;grid-template-columns:3px 1fr 28px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#56C88A;height:22px;"></i><div><div style="font-size:12.5px;color:#EDF3EF;">Do this now</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">your move, nothing blocking</div></div><span class="m" style="font-size:13px;color:#56C88A;text-align:right;">9</span></div>
+          <div style="display:grid;grid-template-columns:3px 1fr 28px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#E2685C;height:22px;"></i><div><div style="font-size:12.5px;color:#EDF3EF;">Overdue</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">past the follow-up date</div></div><span class="m" style="font-size:13px;color:#E2685C;text-align:right;">1</span></div>
+          <div style="display:grid;grid-template-columns:3px 1fr 28px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#D9A441;height:22px;"></i><div><div style="font-size:12.5px;color:#EDF3EF;">Closing</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">old posting, going off the board</div></div><span class="m" style="font-size:13px;color:#D9A441;text-align:right;">2</span></div>
+          <div style="display:grid;grid-template-columns:3px 1fr 28px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#57AEC9;height:22px;"></i><div><div style="font-size:12.5px;color:#EDF3EF;">Awaiting</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">sent, and not your move yet</div></div><span class="m" style="font-size:13px;color:#57AEC9;text-align:right;">14</span></div>
+          <div style="display:grid;grid-template-columns:3px 1fr 28px;gap:0 11px;align-items:baseline;padding:9px 0;"><i style="background:#3E4F44;height:22px;"></i><div><div style="font-size:12.5px;color:#93A597;">Closed</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">answered no, or ran out</div></div><span class="m" style="font-size:13px;color:#8A9C8E;text-align:right;">62</span></div>
+        </div>
+        <div style="font-size:11px;color:#8A9C8E;line-height:1.55;margin-top:12px;text-wrap:pretty;">One colour, one instruction. Nothing is coloured for decoration, so a coloured row always means something is wanted of you.</div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">Today</div>
+        <div style="display:flex;flex-direction:column;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">triaged</span><span class="m" style="font-size:13px;color:#EDF3EF;">12 / 20</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">applied</span><span class="m" style="font-size:13px;color:#56C88A;">4</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">chased</span><span class="m" style="font-size:13px;color:#57AEC9;">2</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;"><span style="font-size:12px;color:#93A597;">skipped</span><span class="m" style="font-size:13px;color:#93A597;">8</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">Filtered to</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill" style="color:#EDF3EF;background:#26332A;border-color:#324237;">rank &ge; 60</span>
+          <span class="pill" style="color:#EDF3EF;background:#26332A;border-color:#324237;">bangalore + remote</span>
+          <span class="pill" style="color:#8A9C8E;border-color:#324237;">+ add</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:20px 24px 30px;">
+
+      <div style="display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid #E2685C;">
+        <span style="font-size:14px;font-weight:500;color:#E2685C;">Overdue</span>
+        <span class="m" style="font-size:12px;color:#8A9C8E;">1</span>
+        <div style="flex:1"></div>
+        <span class="m" style="font-size:11px;color:#8A9C8E;">a nudge beats starting somewhere new</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#E2685C;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#EDF3EF;">70</span>
+        <div style="min-width:0;"><div style="font-size:14px;">AI Operations Lead</div><div style="font-size:12px;color:#93A597;">Observe.AI &middot; Bangalore</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">silent for</div><div class="m" style="font-size:13px;color:#E2685C;margin-top:3px;">11 days</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">sent</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">08-31</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #E2685C;background:#E2685C;color:#1A0A08;">Write the chase</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #56C88A;">
+        <span style="font-size:14px;font-weight:500;color:#56C88A;">Do these first</span>
+        <span class="m" style="font-size:12px;color:#8A9C8E;">9</span>
+        <div style="flex:1"></div>
+        <span class="m" style="font-size:11px;color:#8A9C8E;">sorted by rank</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#56C88A;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">72</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Forward Deployed Engineer</div><div style="font-size:12px;color:#93A597;">Sarvam AI &middot; Bangalore &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">82 &middot; 54</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#56C88A;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">68</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Cold approach &mdash; agritech ops</div><div style="font-size:12px;color:#93A597;">Cropin &middot; Bangalore &middot; cold approach</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">71 &middot; 63</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">contacts</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">2 found</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Write the DM</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#56C88A;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">66</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Solutions Engineer, India</div><div style="font-size:12px;color:#93A597;">Hasura &middot; Remote &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">74 &middot; 52</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">9d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid #232E27;"><span class="m" style="font-size:11px;color:#8A9C8E;">6 more</span></div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #D9A441;">
+        <span style="font-size:14px;font-weight:500;color:#D9A441;">Closing soon</span>
+        <span class="m" style="font-size:12px;color:#8A9C8E;">2</span>
+        <div style="flex:1"></div>
+        <span class="m" style="font-size:11px;color:#8A9C8E;">old postings get filled, not withdrawn</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#D9A441;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">65</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Staff Solutions Engineer</div><div style="font-size:12px;color:#93A597;">Portkey &middot; Remote &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">70 &middot; 61</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#D9A441;margin-top:3px;">24d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply today</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#D9A441;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">62</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Enterprise Deployment Manager</div><div style="font-size:12px;color:#93A597;">Glean &middot; Remote, India &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">68 &middot; 55</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#D9A441;margin-top:3px;">31d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply today</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #57AEC9;">
+        <span style="font-size:14px;font-weight:500;color:#57AEC9;">Awaiting them</span>
+        <span class="m" style="font-size:12px;color:#8A9C8E;">14</span>
+        <div style="flex:1"></div>
+        <span class="m" style="font-size:11px;color:#8A9C8E;">nothing to do here yet</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#57AEC9;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#93A597;">63</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Platform Ops Manager</div><div style="font-size:12px;color:#93A597;">Zeta &middot; Bangalore &middot; applied</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">state</div><div style="font-size:13px;color:#57AEC9;margin-top:3px;">in review</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">sent</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #2C4F5C;background:rgba(87,174,201,.12);color:#57AEC9;">Chase on 09-18</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:3px 36px 1fr 150px 118px 196px;gap:0 14px;align-items:center;padding:14px 0;border-bottom:1px solid #232E27;">
+        <i style="background:#57AEC9;height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#93A597;">61</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Delivery Lead, ML</div><div style="font-size:12px;color:#93A597;">Fractal &middot; Bangalore &middot; applied</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">state</div><div style="font-size:13px;color:#57AEC9;margin-top:3px;">call booked</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">when</div><div class="m" style="font-size:13px;color:#EDF3EF;margin-top:3px;">09-15 16:00</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">Log a note</button>
+        </div>
+      </div>
+
+      <div style="text-align:center;padding:11px 0;"><span class="m" style="font-size:11px;color:#8A9C8E;">12 more awaiting</span></div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 3b  DETAIL, FOUR-COLOUR ══════════════ -->
+<div class="dv-opt" id="3b">
+<div class="dv-olabel"><a class="dv-oid" href="#3b">3b</a><span><b style="color:#EDF3EF;font-weight:500">The job, opened</b> &mdash; the same colour law one level down. The two score panels become ruled label-value pairs, the posting age carries amber on its own, and the rail reads as a record rather than a stack of cards.</span></div>
+<div class="dv-card" style="width:1180px">
+<div style="background:#18211C;">
+
+  <div style="display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid #324237;background:#1F2A23;">
+    <a class="m" style="font-size:12px;">&larr; queue</a>
+    <span class="m" style="font-size:11px;color:#8A9C8E;">2 of 47</span>
+    <div style="flex:1"></div>
+    <span class="key">J</span><span class="m" style="font-size:11px;color:#8A9C8E;">next</span>
+    <span class="key">K</span><span class="m" style="font-size:11px;color:#8A9C8E;">previous</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 330px;">
+    <div style="padding:24px 28px 34px;border-right:1px solid #324237;">
+
+      <div style="display:flex;align-items:center;gap:9px;margin-bottom:12px;">
+        <i style="width:3px;height:13px;background:#D9A441;"></i>
+        <span class="eb" style="color:#D9A441;">closing &mdash; posted 24 days ago</span>
+      </div>
+
+      <h1 style="margin:0;font-size:19px;font-weight:500;letter-spacing:-.01em;">Staff Solutions Engineer</h1>
+      <div style="font-size:13px;color:#93A597;margin-top:4px;">Portkey &middot; Remote, India &middot; posted role &middot; ashby feed</div>
+
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:0 20px;margin-top:22px;border-top:1px solid #324237;border-bottom:1px solid #324237;">
+        <div style="padding:14px 0;"><div class="eb" style="color:#8A9C8E;">Rank</div><div class="m" style="font-size:24px;line-height:1;color:#56C88A;margin-top:7px;">65</div><div style="font-size:11px;color:#8A9C8E;margin-top:6px;">9th of 214</div></div>
+        <div style="padding:14px 0;"><div class="eb" style="color:#8A9C8E;">Fit</div><div class="m" style="font-size:24px;line-height:1;color:#EDF3EF;margin-top:7px;">70</div><div style="font-size:11px;color:#8A9C8E;margin-top:6px;">what you can do</div></div>
+        <div style="padding:14px 0;"><div class="eb" style="color:#8A9C8E;">Reach</div><div class="m" style="font-size:24px;line-height:1;color:#EDF3EF;margin-top:7px;">61</div><div style="font-size:11px;color:#8A9C8E;margin-top:6px;">whether they will look</div></div>
+        <div style="padding:14px 0;"><div class="eb" style="color:#8A9C8E;">Window</div><div class="m" style="font-size:24px;line-height:1;color:#D9A441;margin-top:7px;">24d</div><div style="font-size:11px;color:#D9A441;margin-top:6px;">apply today or drop it</div></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:26px;margin-top:22px;">
+        <div>
+          <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Why it fits</div>
+          <div style="font-size:12.5px;color:#93A597;line-height:1.6;margin-top:11px;text-wrap:pretty;">A deployment role at an infrastructure company selling to engineering teams. Your four enterprise rollouts are the whole argument, and the posting asks for exactly the customer-facing half of that work.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:11px;">
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">direct experience</span>
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">rare combination</span>
+          </div>
+        </div>
+        <div>
+          <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Why it is reachable</div>
+          <div style="font-size:12.5px;color:#93A597;line-height:1.6;text-wrap:pretty;margin-top:11px;">Remote-first and hiring in India, so no visa question. Against it: twenty-four days open means a shortlist already exists, and nobody here has answered a cold message from you before.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:11px;">
+            <span class="pill" style="color:#93A597;background:#26332A;border-color:#324237;">no visa question</span>
+            <span class="pill" style="color:#D9A441;background:rgba(217,164,65,.12);border-color:#5A4620;">shortlist likely</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="eb" style="color:#8A9C8E;margin:26px 0 0;padding-bottom:8px;border-bottom:1px solid #324237;">Quoted from the posting</div>
+      <div style="display:flex;flex-direction:column;gap:13px;margin-top:13px;">
+        <div style="font-size:13px;color:#EDF3EF;line-height:1.6;border-left:2px solid #324237;padding-left:14px;">&ldquo;You will own the first ninety days of every enterprise account, from architecture call to production traffic.&rdquo;</div>
+        <div style="font-size:13px;color:#EDF3EF;line-height:1.6;border-left:2px solid #324237;padding-left:14px;">&ldquo;We hire for evidence of shipping, not for credentials.&rdquo;</div>
+      </div>
+
+      <div class="eb" style="color:#8A9C8E;margin:26px 0 0;padding-bottom:8px;border-bottom:1px solid #324237;">History</div>
+      <div style="display:flex;flex-direction:column;">
+        <div style="display:grid;grid-template-columns:14px 92px 1fr;gap:0 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid #232E27;"><i style="width:5px;height:5px;border-radius:50%;background:#3E4F44;"></i><span class="m" style="font-size:11px;color:#8A9C8E;">2026-08-18</span><span style="font-size:12.5px;color:#93A597;">Found on the Ashby feed, full description read.</span></div>
+        <div style="display:grid;grid-template-columns:14px 92px 1fr;gap:0 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid #232E27;"><i style="width:5px;height:5px;border-radius:50%;background:#56C88A;"></i><span class="m" style="font-size:11px;color:#8A9C8E;">2026-08-19</span><span style="font-size:12.5px;color:#93A597;">Scored 70 / 61 &mdash; high confidence.</span></div>
+        <div style="display:grid;grid-template-columns:14px 92px 1fr;gap:0 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid #232E27;"><i style="width:5px;height:5px;border-radius:50%;background:#93A597;"></i><span class="m" style="font-size:11px;color:#8A9C8E;">2026-08-29</span><span style="font-size:12.5px;color:#93A597;">Snoozed for a week.</span></div>
+        <div style="display:grid;grid-template-columns:14px 92px 1fr;gap:0 12px;align-items:baseline;padding:10px 0;border-bottom:1px solid #232E27;"><i style="width:5px;height:5px;border-radius:50%;background:#D9A441;"></i><span class="m" style="font-size:11px;color:#D9A441;">2026-09-11</span><span style="font-size:12.5px;color:#EDF3EF;">Twenty-four days old &mdash; moved to closing.</span></div>
+      </div>
+    </div>
+
+    <div style="padding:24px 22px;display:flex;flex-direction:column;gap:24px;background:#1F2A23;">
+
+      <div>
+        <div style="display:flex;align-items:center;gap:9px;padding:10px 12px;border-left:3px solid #D9A441;background:rgba(217,164,65,.12);">
+          <span style="font-size:12.5px;color:#EDF3EF;line-height:1.5;text-wrap:pretty;">Postings this old are usually filled within the fortnight. Send it today or skip it honestly.</span>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:13px;">
+          <button style="font-family:inherit;font-size:13px;font-weight:700;padding:11px 14px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;text-align:left;">Apply &mdash; and log it</button>
+          <button style="font-family:inherit;font-size:13px;padding:11px 14px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;text-align:left;">Reach out to a contact first</button>
+          <div style="display:flex;gap:7px;">
+            <button style="flex:1;font-family:inherit;font-size:13px;padding:9px 14px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;text-align:left;">Skip</button>
+            <button style="flex:1;font-family:inherit;font-size:13px;padding:9px 14px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#8A9C8E;text-align:left;">Snooze</button>
+          </div>
+          <a class="m" style="font-size:12px;padding-top:4px;">open the original posting &#8599;</a>
+        </div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">The record</div>
+        <div style="display:flex;flex-direction:column;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">channel</span><span style="font-size:12.5px;color:#EDF3EF;">posted role</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">source</span><span class="m" style="font-size:12.5px;color:#EDF3EF;">ashby feed</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">confidence</span><span style="font-size:12.5px;color:#EDF3EF;">high &mdash; full text</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">posted window</span><span class="m" style="font-size:12.5px;color:#D9A441;">08-18 exact</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:baseline;padding:9px 0;"><span style="font-size:12px;color:#93A597;">state</span><span style="font-size:12.5px;color:#56C88A;">not yet actioned</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Two people found</div>
+        <div style="display:flex;flex-direction:column;">
+          <div style="display:grid;grid-template-columns:1fr auto;gap:0 10px;align-items:baseline;padding:10px 0;border-bottom:1px solid #232E27;"><div><div style="font-size:13px;">Rohit K.</div><div style="font-size:11.5px;color:#93A597;margin-top:2px;">Head of solutions &middot; likely hiring manager</div></div><span class="pill" style="color:#57AEC9;background:rgba(87,174,201,.12);border-color:#2C4F5C;">DM open</span></div>
+          <div style="display:grid;grid-template-columns:1fr auto;gap:0 10px;align-items:baseline;padding:10px 0;"><div><div style="font-size:13px;">Meera T.</div><div style="font-size:11.5px;color:#93A597;margin-top:2px;">Solutions engineer &middot; public profile</div></div><span class="pill" style="color:#93A597;border-color:#324237;">no channel</span></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Your note</div>
+        <div style="padding:11px 0;font-size:12.5px;color:#8A9C8E;">Lead with the Kochi rollout&hellip;</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 3c  THE COLOUR LAW ══════════════ -->
+<div class="dv-opt" id="3c">
+<div class="dv-olabel"><a class="dv-oid" href="#3c">3c</a><span><b style="color:#E9F0EB;font-weight:500">The law itself</b> &mdash; the adopted palette. A green near-black ground, four accents with one instruction each, and the light theme where the accent tints the whole row rather than only its edge.</span></div>
+<div class="dv-card" style="width:820px">
+<div style="background:#18211C;padding:26px 28px 30px;">
+
+  <div style="font-size:15px;font-weight:500;color:#EDF3EF;">Ground</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(118px,100%),1fr));gap:0;margin-top:12px;border-top:1px solid #324237;border-bottom:1px solid #324237;">
+    <div style="padding:13px 14px 13px 0;"><div style="height:26px;background:#18211C;border:1px solid #324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#18211C ground</div></div>
+    <div style="padding:13px 14px;"><div style="height:26px;background:#1F2A23;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#1F2A23 chrome</div></div>
+    <div style="padding:13px 14px;"><div style="height:26px;background:#26332A;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#26332A inset</div></div>
+    <div style="padding:13px 14px;"><div style="height:26px;background:#324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#324237 rule</div></div>
+    <div style="padding:13px 14px;"><div style="height:26px;background:#EDF3EF;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#EDF3EF text</div></div>
+    <div style="padding:13px 0 13px 14px;"><div style="height:26px;background:#F1F5F2;border:1px solid #324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#F1F5F2 light</div></div>
+  </div>
+  <div style="font-size:12px;color:#93A597;line-height:1.6;margin-top:12px;text-wrap:pretty;">Near-black, but green rather than neutral. The light theme is the same hue turned inside out &mdash; the dark ground becomes the ink.</div>
+
+  <div style="font-size:15px;font-weight:500;color:#EDF3EF;margin-top:28px;">Four accents, four instructions</div>
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;padding-bottom:9px;margin-top:12px;border-bottom:1px solid #324237;" class="eb">
+    <span style="color:#8A9C8E;">ink</span><span style="color:#8A9C8E;">what it means</span><span style="color:#8A9C8E;">allowed on</span><span style="color:#8A9C8E;text-align:right;">light pair</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;align-items:center;padding:15px 0;border-bottom:1px solid #232E27;">
+    <div><div style="height:26px;background:#56C88A;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#56C88A</div></div>
+    <div><div style="font-size:13.5px;color:#EDF3EF;">Do this now</div><div style="font-size:11.5px;color:#93A597;margin-top:3px;line-height:1.5;">Your move and nothing is blocking it. The only fill-weight button on the screen.</div></div>
+    <div style="font-size:11.5px;color:#93A597;line-height:1.5;">primary button, rank figure, row bar</div>
+    <div><div style="height:26px;background:#157F42;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#157F42</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;align-items:center;padding:15px 0;border-bottom:1px solid #232E27;">
+    <div><div style="height:26px;background:#E2685C;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#E2685C</div></div>
+    <div><div style="font-size:13.5px;color:#EDF3EF;">Overdue</div><div style="font-size:11.5px;color:#93A597;margin-top:3px;line-height:1.5;">Past the follow-up date you set. Never used for a low score &mdash; a bad job is not an emergency.</div></div>
+    <div style="font-size:11.5px;color:#93A597;line-height:1.5;">section rule, silent-for value, chase button</div>
+    <div><div style="height:26px;background:#C33B2E;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#C33B2E</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;align-items:center;padding:15px 0;border-bottom:1px solid #232E27;">
+    <div><div style="height:26px;background:#D9A441;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#D9A441</div></div>
+    <div><div style="font-size:13.5px;color:#EDF3EF;">Closing</div><div style="font-size:11.5px;color:#93A597;margin-top:3px;line-height:1.5;">The posting is old enough to be filled soon. Urgency from the clock, not from you.</div></div>
+    <div style="font-size:11.5px;color:#93A597;line-height:1.5;">posted-age value, window figure, one banner</div>
+    <div><div style="height:26px;background:#8A6314;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#8A6314</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;align-items:center;padding:15px 0;border-bottom:1px solid #232E27;">
+    <div><div style="height:26px;background:#57AEC9;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#57AEC9</div></div>
+    <div><div style="font-size:13.5px;color:#EDF3EF;">Awaiting</div><div style="font-size:11.5px;color:#93A597;margin-top:3px;line-height:1.5;">Sent, and the next move is theirs. Cool on purpose: it must never compete with the green.</div></div>
+    <div style="font-size:11.5px;color:#93A597;line-height:1.5;">state value, scheduled-chase button, counts</div>
+    <div><div style="height:26px;background:#1E6C86;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#1E6C86</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:88px minmax(0,1fr) 138px 88px;gap:0 18px;align-items:center;padding:15px 0;border-bottom:1px solid #324237;">
+    <div><div style="height:26px;background:#3E4F44;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#3E4F44</div></div>
+    <div><div style="font-size:13.5px;color:#93A597;">Closed, or out of selection</div><div style="font-size:11.5px;color:#93A597;margin-top:3px;line-height:1.5;">Grey is now only ever the absence of an instruction, which is what it was always good at.</div></div>
+    <div style="font-size:11.5px;color:#93A597;line-height:1.5;">faded dots, closed column, secondary text</div>
+    <div><div style="height:26px;background:#B6C4BC;border-radius:2px;"></div><div class="m" style="font-size:10px;color:#8A9C8E;margin-top:5px;">#B6C4BC</div></div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(300px,100%),1fr));gap:26px;margin-top:24px;">
+    <div>
+      <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Three rules that keep it honest</div>
+      <div style="padding:10px 0;border-bottom:1px solid #232E27;font-size:12.5px;color:#93A597;line-height:1.55;text-wrap:pretty;">A row carries at most one accent. If a job is both closing and overdue, the nearer deadline wins and the other becomes plain text.</div>
+      <div style="padding:10px 0;border-bottom:1px solid #232E27;font-size:12.5px;color:#93A597;line-height:1.55;text-wrap:pretty;">Score is never an accent. A 72 and a 41 are both just figures &mdash; colour says what to do, the number says how good it is.</div>
+      <div style="padding:10px 0;font-size:12.5px;color:#93A597;line-height:1.55;text-wrap:pretty;">Dark states the accent on the edge; light states it across the whole cell. Same instruction, read the way each ground reads best.</div>
+    </div>
+    <div>
+      <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;">Dark &mdash; edge only</div>
+      <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px 0;border-bottom:1px solid #232E27;"><i style="background:#56C88A;height:24px;"></i><span class="m" style="font-size:14px;color:#56C88A;">72</span><span style="font-size:12.5px;color:#EDF3EF;">Forward Deployed Engineer</span><span class="m" style="font-size:11px;color:#8A9C8E;">apply</span></div>
+      <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px 0;border-bottom:1px solid #232E27;"><i style="background:#E2685C;height:24px;"></i><span class="m" style="font-size:14px;color:#EDF3EF;">70</span><span style="font-size:12.5px;color:#EDF3EF;">AI Operations Lead</span><span class="m" style="font-size:11px;color:#E2685C;">11d silent</span></div>
+      <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px 0;border-bottom:1px solid #232E27;"><i style="background:#D9A441;height:24px;"></i><span class="m" style="font-size:14px;color:#56C88A;">65</span><span style="font-size:12.5px;color:#EDF3EF;">Staff Solutions Engineer</span><span class="m" style="font-size:11px;color:#D9A441;">24d old</span></div>
+      <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px 0;"><i style="background:#57AEC9;height:24px;"></i><span class="m" style="font-size:14px;color:#93A597;">63</span><span style="font-size:12.5px;color:#EDF3EF;">Platform Ops Manager</span><span class="m" style="font-size:11px;color:#57AEC9;">in review</span></div>
+
+      <div class="eb" style="color:#8A9C8E;padding-bottom:8px;border-bottom:1px solid #324237;margin-top:22px;">Light &mdash; whole cell</div>
+      <div style="background:#F1F5F2;padding:8px 10px;">
+        <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px;background:#E9F4ED;"><i style="background:#157F42;height:24px;"></i><span class="m" style="font-size:14px;color:#157F42;">72</span><span style="font-size:12.5px;color:#18211C;">Forward Deployed Engineer</span><span class="m" style="font-size:11px;color:#4F5E56;">apply</span></div>
+        <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px;background:#FBECEA;"><i style="background:#C33B2E;height:24px;"></i><span class="m" style="font-size:14px;color:#18211C;">70</span><span style="font-size:12.5px;color:#18211C;">AI Operations Lead</span><span class="m" style="font-size:11px;color:#C33B2E;">11d silent</span></div>
+        <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px;background:#FAF1DF;"><i style="background:#8A6314;height:24px;"></i><span class="m" style="font-size:14px;color:#157F42;">65</span><span style="font-size:12.5px;color:#18211C;">Staff Solutions Engineer</span><span class="m" style="font-size:11px;color:#8A6314;">24d old</span></div>
+        <div style="display:grid;grid-template-columns:3px 30px minmax(0,1fr) auto;gap:0 11px;align-items:center;padding:10px;background:#E6F2F7;"><i style="background:#1E6C86;height:24px;"></i><span class="m" style="font-size:14px;color:#4F5E56;">63</span><span style="font-size:12.5px;color:#18211C;">Platform Ops Manager</span><span class="m" style="font-size:11px;color:#1E6C86;">in review</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: &ldquo;put <a class="dv-oid" href="#3a">3a</a>&rsquo;s colour law through the board in <a class="dv-oid" href="#1c">1c</a>&rdquo; &middot; &ldquo;light-theme <a class="dv-oid" href="#3a">3a</a>&rdquo; &middot; &ldquo;make the queue in <a class="dv-oid" href="#3a">3a</a> respond to A / X / C for real&rdquo;</p>
+</section>
+
+<section class="dv-turn" id="t2">
+<div class="dv-thd"><a class="dv-tid" href="#t2">2</a><span class="dv-tname">Profile and the fit &times; reach plot</span></div>
+
+<div class="dv-opts">
+
+<!-- ══════════════ 2a  PROFILE ══════════════ -->
+<div class="dv-opt" id="2a">
+<div class="dv-olabel"><a class="dv-oid" href="#2a">2a</a><span><b style="color:#E9F0EB;font-weight:500">Profile</b> &mdash; the CV read back as facts, including the ones that count against you. Directions are rated against that background, not against the market, and each one says what it would cost to make it real.</span></div>
+<div class="dv-card" style="width:1180px">
+<div style="background:radial-gradient(760px 320px at 18% -12%,rgba(86,200,138,.07),transparent 60%),#0E1411;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #29372F;background:#151D18;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;border:1px solid #29372F;border-radius:5px;overflow:hidden;">
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;">Queue</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Map</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Pipeline</span>
+      <span style="font-size:12px;padding:6px 13px;background:#1C2620;color:#56C88A;border-left:1px solid #29372F;">Profile</span>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 340px;">
+
+    <div style="padding:26px 28px 34px;border-right:1px solid #29372F;">
+
+      <div style="display:flex;align-items:flex-start;gap:16px;">
+        <div class="m" style="width:52px;height:52px;border-radius:3px;background:#1C2620;border:1px solid #29372F;display:flex;align-items:center;justify-content:center;font-size:17px;color:#56C88A;flex-shrink:0;">SB</div>
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0;font-size:19px;font-weight:500;letter-spacing:-.01em;">Shreya B.</h1>
+          <div style="font-size:13px;color:#8B9C92;margin-top:3px;">Bangalore, India &middot; open to remote &middot; 6 years, operations and delivery</div>
+        </div>
+        <div style="display:flex;gap:7px;flex-shrink:0;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 11px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Replace CV</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 11px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Re-read</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:9px;margin-top:14px;padding:10px 13px;border:1px solid #29372F;border-radius:4px;background:#151D18;">
+        <span class="m" style="font-size:12px;color:#E9F0EB;">shreya-b-cv-2026.pdf</span>
+        <span class="m" style="font-size:11px;color:#798B81;">read 2026-09-04 &middot; 41 facts extracted</span>
+        <div style="flex:1"></div>
+        <span class="pill" style="color:#8B9C92;border-color:#29372F;">never uploaded</span>
+      </div>
+
+      <div style="height:1px;background:#29372F;margin:26px 0 0;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;">
+        <div style="padding:20px 22px 20px 0;border-right:1px solid #29372F;">
+          <div class="eb" style="color:#798B81;margin-bottom:4px;">What you can claim</div>
+          <div style="font-size:11px;color:#798B81;margin-bottom:12px;line-height:1.5;">Evidenced in the CV. Raises fit.</div>
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#56C88A;flex-shrink:0;"></i><div style="font-size:13px;">Model rollout operations<span style="color:#798B81;font-size:11.5px;"> &middot; 3 yrs, four enterprise deployments</span></div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#56C88A;flex-shrink:0;"></i><div style="font-size:13px;">Customer-facing delivery<span style="color:#798B81;font-size:11.5px;"> &middot; named in three roles</span></div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#56C88A;flex-shrink:0;"></i><div style="font-size:13px;">Python, SQL, light infra<span style="color:#798B81;font-size:11.5px;"> &middot; shipped, not studied</span></div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#56C88A;flex-shrink:0;"></i><div style="font-size:13px;">Regulated Indian enterprise<span style="color:#798B81;font-size:11.5px;"> &middot; banking, insurance</span></div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#56C88A;flex-shrink:0;"></i><div style="font-size:13px;">Managed a team of five</div></div>
+          </div>
+        </div>
+        <div style="padding:20px 0 20px 22px;">
+          <div class="eb" style="color:#798B81;margin-bottom:4px;">What you cannot claim</div>
+          <div style="font-size:11px;color:#798B81;margin-bottom:12px;line-height:1.5;">Held deliberately. Lowers reach, never fit.</div>
+          <div style="display:flex;flex-direction:column;gap:9px;">
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#86988D;flex-shrink:0;"></i><div style="font-size:13px;color:#8B9C92;">No CS degree</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#86988D;flex-shrink:0;"></i><div style="font-size:13px;color:#8B9C92;">No big-lab or FAANG name</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#86988D;flex-shrink:0;"></i><div style="font-size:13px;color:#8B9C92;">No published research</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#86988D;flex-shrink:0;"></i><div style="font-size:13px;color:#8B9C92;">No US or EU work authorisation</div></div>
+            <div style="display:flex;gap:10px;align-items:baseline;"><i style="width:6px;height:6px;border-radius:50%;background:#86988D;flex-shrink:0;"></i><div style="font-size:13px;color:#8B9C92;">Never shipped a model you trained</div></div>
+          </div>
+          <div style="font-size:11px;color:#798B81;line-height:1.55;margin-top:13px;text-wrap:pretty;">These are the honest edges of the CV. Naming them is what keeps a gap out of the fit score, where it does not belong.</div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin:24px 0 4px;">
+        <span style="font-size:15px;font-weight:500;">Directions open to you</span>
+        <span class="m" style="font-size:12px;color:#798B81;">3 generated</span>
+      </div>
+      <div style="font-size:12px;color:#8B9C92;margin-bottom:14px;">Rated against your background, not against the market. Pick one and the queue re-scores.</div>
+
+      <div style="display:flex;flex-direction:column;gap:9px;">
+
+        <div style="border:1px solid #2C5540;border-left:3px solid #56C88A;border-radius:3px;background:linear-gradient(90deg,rgba(86,200,138,.07),transparent 55%),#151D18;padding:15px 17px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:15px;font-weight:500;">AI Operations</span>
+                <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">moderate</span>
+                <span class="pill" style="color:#56C88A;background:#1F3A2A;">active</span>
+              </div>
+              <div style="font-size:12.5px;color:#8B9C92;line-height:1.55;margin-top:7px;text-wrap:pretty;">Forward-deployed and delivery roles at labs and AI-native companies. Your rollout record is the qualification; the missing research background rarely gets asked about.</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;"><div class="m" style="font-size:24px;line-height:1;color:#56C88A;">214</div><div class="eb" style="color:#798B81;margin-top:5px;">scored</div></div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #29372F;border-left:3px solid #86988D;border-radius:3px;background:#151D18;padding:15px 17px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:15px;font-weight:500;">Technical Programme Management</span>
+                <span class="pill" style="color:#8B9C92;border-color:#29372F;">easy</span>
+              </div>
+              <div style="font-size:12.5px;color:#8B9C92;line-height:1.55;margin-top:7px;text-wrap:pretty;">The sideways step. Nothing on your CV argues against it and the volume is high &mdash; but so is the competition, and the ceiling is lower than the other two.</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;"><div class="m" style="font-size:24px;line-height:1;color:#8B9C92;">&mdash;</div><div class="eb" style="color:#798B81;margin-top:5px;">not run</div></div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #29372F;border-left:3px solid #798B81;border-radius:3px;background:#151D18;padding:15px 17px;">
+          <div style="display:flex;align-items:flex-start;gap:12px;">
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-size:15px;font-weight:500;">Applied Research Engineering</span>
+                <span class="pill" style="color:#E2685C;background:rgba(226,104,92,.13);border-color:#5A2E2A;">moonshot</span>
+              </div>
+              <div style="font-size:12.5px;color:#8B9C92;line-height:1.55;margin-top:7px;text-wrap:pretty;">Reachable only through a portfolio you do not have yet. Two shipped models of your own, publicly, would move this from moonshot to moderate in about nine months.</div>
+            </div>
+            <div style="text-align:right;flex-shrink:0;"><div class="m" style="font-size:24px;line-height:1;color:#8B9C92;">&mdash;</div><div class="eb" style="color:#798B81;margin-top:5px;">not run</div></div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:7px;align-items:center;border:1px dashed #29372F;border-radius:3px;padding:11px 14px;">
+          <span style="flex:1;font-size:13px;color:#798B81;">Name a direction yourself and have it assessed&hellip;</span>
+          <button style="font-family:inherit;font-size:12px;padding:6px 11px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Assess it</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:24px 20px;display:flex;flex-direction:column;gap:22px;background:#1C2620;">
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Where it looks</div>
+        <div style="font-size:11px;color:#798B81;line-height:1.5;margin-bottom:11px;text-wrap:pretty;">Six general portals always, plus the registries your field actually posts on.</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">linkedin</span>
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">indeed</span>
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">wellfound</span>
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">glassdoor</span>
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">upwork</span>
+          <span class="pill" style="color:#8B9C92;background:#151D18;border-color:#29372F;">ziprecruiter</span>
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">ycombinator</span>
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">ashbyhq</span>
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">lever</span>
+          <span class="pill" style="color:#798B81;border-color:#29372F;">+ add</span>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Where you can work</div>
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          <div style="border:1px solid #29372F;border-radius:4px;background:#151D18;padding:11px 12px;font-size:13px;">Bangalore, India</div>
+          <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:#8B9C92;"><i style="width:30px;height:17px;border-radius:2px;background:#1F3A2A;border:1px solid #56C88A;position:relative;flex-shrink:0;"><b style="position:absolute;right:2px;top:1px;width:11px;height:11px;border-radius:50%;background:#56C88A;"></b></i>include remote roles anywhere</div>
+          <div style="font-size:11px;color:#798B81;line-height:1.5;text-wrap:pretty;">A remote posting names the employer&rsquo;s city or none at all &mdash; never yours &mdash; so this is doing more work than it looks.</div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Keys and data</div>
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid #29372F;border-radius:4px;background:#151D18;padding:11px 12px;">
+            <div style="flex:1;min-width:0;"><div style="font-size:13px;">DeepSeek</div><div class="m" style="font-size:11px;color:#798B81;">sk&hellip;4f2a &middot; scoring</div></div>
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">set</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:9px;border:1px solid #29372F;border-radius:4px;background:#151D18;padding:11px 12px;">
+            <div style="flex:1;min-width:0;"><div style="font-size:13px;">Apify</div><div style="font-size:11px;color:#798B81;">board search, contacts</div></div>
+            <span class="pill" style="color:#8B9C92;border-color:#29372F;">optional</span>
+          </div>
+          <div style="font-size:11px;color:#798B81;line-height:1.55;text-wrap:pretty;">Keys stay in this browser and never sync. Everything else lives in browser storage &mdash; take a copy.</div>
+          <button style="font-family:inherit;font-size:13px;padding:9px 13px;border-radius:5px;border:1px solid #29372F;background:#151D18;color:#E9F0EB;text-align:left;">Backup &amp; transfer</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 2b  PLOT DASHBOARD ══════════════ -->
+<div class="dv-opt" id="2b">
+<div class="dv-olabel"><a class="dv-oid" href="#2b">2b</a><span><b style="color:#E9F0EB;font-weight:500">The map</b> &mdash; every scored job on fit against reach, with a box dragged round the corner worth a week. The quadrants are named, because an unlabelled scatter is a puzzle; out-of-selection dots recede rather than disappear.</span></div>
+<div class="dv-card" style="width:1180px">
+<div style="background:#0E1411;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #29372F;background:#151D18;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;border:1px solid #29372F;border-radius:5px;overflow:hidden;">
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;">Queue</span>
+      <span style="font-size:12px;padding:6px 13px;background:#1C2620;color:#56C88A;border-left:1px solid #29372F;">Map</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Pipeline</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Profile</span>
+    </div>
+    <button style="font-family:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Find work</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 340px;">
+
+    <div style="padding:22px 24px 28px;border-right:1px solid #29372F;">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;">
+        <span style="font-size:15px;font-weight:500;">214 scored jobs</span>
+        <span class="m" style="font-size:12px;color:#56C88A;">8 in selection</span>
+      </div>
+      <div style="font-size:12px;color:#8B9C92;margin-bottom:16px;">Fit up, reachability across. Drag a box to work a corner.</div>
+
+      <svg viewBox="0 0 680 460" style="width:100%;height:auto;display:block;background:#151D18;border:1px solid #29372F;border-radius:4px;">
+        <rect x="352" y="40" width="262" height="180" fill="rgba(86,200,138,.07)"></rect>
+        <line x1="44" y1="220" x2="614" y2="220" stroke="#232E28" stroke-width="1"></line>
+        <line x1="329" y1="40" x2="329" y2="400" stroke="#232E28" stroke-width="1"></line>
+        <line x1="44" y1="400" x2="614" y2="400" stroke="#29372F" stroke-width="1"></line>
+        <line x1="44" y1="40" x2="44" y2="400" stroke="#29372F" stroke-width="1"></line>
+
+        <text x="52" y="58" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" letter-spacing="1.4">GREAT ON PAPER, LONG ODDS</text>
+        <text x="606" y="58" fill="#56C88A" font-size="10.5" font-family="ui-monospace,Consolas,monospace" letter-spacing="1.4" text-anchor="end">WORTH THE WEEK</text>
+        <text x="52" y="392" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" letter-spacing="1.4">LEAVE IT</text>
+        <text x="606" y="392" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" letter-spacing="1.4" text-anchor="end">EASY, BUT NOT FOR YOU</text>
+
+        <circle cx="352" cy="105" r="6" fill="#56C88A"></circle>
+        <circle cx="403" cy="144" r="6" fill="#56C88A"></circle>
+        <circle cx="340" cy="134" r="6" fill="#56C88A"></circle>
+        <circle cx="375" cy="152" r="6" fill="#56C88A"></circle>
+        <circle cx="420" cy="119" r="6" fill="#56C88A"></circle>
+        <circle cx="449" cy="162" r="6" fill="#56C88A"></circle>
+        <circle cx="386" cy="83" r="6" fill="#56C88A"></circle>
+        <circle cx="472" cy="141" r="6" fill="#56C88A"></circle>
+
+        <circle cx="386" cy="83" r="12" fill="none" stroke="#56C88A" stroke-width="1"></circle>
+
+        <circle cx="92" cy="96" r="5" fill="#3A4A41"></circle>
+        <circle cx="118" cy="142" r="5" fill="#3A4A41"></circle>
+        <circle cx="145" cy="72" r="5" fill="#3A4A41"></circle>
+        <circle cx="163" cy="188" r="5" fill="#3A4A41"></circle>
+        <circle cx="188" cy="115" r="5" fill="#3A4A41"></circle>
+        <circle cx="205" cy="63" r="5" fill="#3A4A41"></circle>
+        <circle cx="224" cy="166" r="5" fill="#3A4A41"></circle>
+        <circle cx="247" cy="98" r="5" fill="#3A4A41"></circle>
+        <circle cx="268" cy="205" r="5" fill="#3A4A41"></circle>
+        <circle cx="284" cy="131" r="5" fill="#3A4A41"></circle>
+        <circle cx="301" cy="78" r="5" fill="#3A4A41"></circle>
+        <circle cx="313" cy="176" r="5" fill="#3A4A41"></circle>
+        <circle cx="96" cy="243" r="5" fill="#3A4A41"></circle>
+        <circle cx="131" cy="286" r="5" fill="#3A4A41"></circle>
+        <circle cx="158" cy="331" r="5" fill="#3A4A41"></circle>
+        <circle cx="176" cy="255" r="5" fill="#3A4A41"></circle>
+        <circle cx="199" cy="299" r="5" fill="#3A4A41"></circle>
+        <circle cx="221" cy="362" r="5" fill="#3A4A41"></circle>
+        <circle cx="243" cy="271" r="5" fill="#3A4A41"></circle>
+        <circle cx="262" cy="338" r="5" fill="#3A4A41"></circle>
+        <circle cx="288" cy="294" r="5" fill="#3A4A41"></circle>
+        <circle cx="308" cy="248" r="5" fill="#3A4A41"></circle>
+        <circle cx="318" cy="356" r="5" fill="#3A4A41"></circle>
+        <circle cx="347" cy="268" r="5" fill="#3A4A41"></circle>
+        <circle cx="372" cy="318" r="5" fill="#3A4A41"></circle>
+        <circle cx="396" cy="255" r="5" fill="#3A4A41"></circle>
+        <circle cx="418" cy="341" r="5" fill="#3A4A41"></circle>
+        <circle cx="441" cy="287" r="5" fill="#3A4A41"></circle>
+        <circle cx="466" cy="364" r="5" fill="#3A4A41"></circle>
+        <circle cx="489" cy="301" r="5" fill="#3A4A41"></circle>
+        <circle cx="512" cy="252" r="5" fill="#3A4A41"></circle>
+        <circle cx="536" cy="332" r="5" fill="#3A4A41"></circle>
+        <circle cx="561" cy="278" r="5" fill="#3A4A41"></circle>
+        <circle cx="585" cy="349" r="5" fill="#3A4A41"></circle>
+        <circle cx="498" cy="196" r="5" fill="#3A4A41"></circle>
+        <circle cx="527" cy="171" r="5" fill="#3A4A41"></circle>
+        <circle cx="556" cy="212" r="5" fill="#3A4A41"></circle>
+        <circle cx="581" cy="152" r="5" fill="#3A4A41"></circle>
+        <circle cx="601" cy="229" r="5" fill="#3A4A41"></circle>
+        <circle cx="333" cy="216" r="5" fill="#3A4A41"></circle>
+
+        <rect x="330" y="70" width="170" height="106" fill="none" stroke="#56C88A" stroke-width="1" stroke-dasharray="4 3"></rect>
+        <rect x="326" y="66" width="8" height="8" fill="#56C88A"></rect>
+        <rect x="496" y="66" width="8" height="8" fill="#56C88A"></rect>
+        <rect x="326" y="172" width="8" height="8" fill="#56C88A"></rect>
+        <rect x="496" y="172" width="8" height="8" fill="#56C88A"></rect>
+
+        <text x="44" y="424" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace">0</text>
+        <text x="329" y="424" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" text-anchor="middle">reach 50</text>
+        <text x="614" y="424" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" text-anchor="end">100</text>
+        <text x="34" y="404" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" text-anchor="end">0</text>
+        <text x="34" y="224" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" text-anchor="end">50</text>
+        <text x="34" y="46" fill="#798B81" font-size="10.5" font-family="ui-monospace,Consolas,monospace" text-anchor="end">fit 100</text>
+      </svg>
+
+      <div style="display:flex;align-items:center;gap:16px;margin-top:14px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#8B9C92;"><i style="width:9px;height:9px;border-radius:50%;background:#56C88A;"></i>in selection</div>
+        <div style="display:flex;align-items:center;gap:8px;font-size:12px;color:#8B9C92;"><i style="width:9px;height:9px;border-radius:50%;background:#3A4A41;"></i>outside it</div>
+        <div style="flex:1"></div>
+        <button style="font-family:inherit;font-size:12px;padding:6px 11px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Clear box</button>
+        <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Send 8 to the queue</button>
+      </div>
+    </div>
+
+    <div style="padding:22px 20px;display:flex;flex-direction:column;gap:22px;background:#1C2620;">
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">The box</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:11px;">
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;"><div class="m" style="font-size:24px;line-height:1;color:#56C88A;">8</div><div style="font-size:11px;color:#798B81;margin-top:5px;">jobs</div></div>
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;"><div class="m" style="font-size:24px;line-height:1;color:#E9F0EB;">71</div><div style="font-size:11px;color:#798B81;margin-top:5px;">median rank</div></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:7px;margin-top:11px;font-size:12px;">
+          <div style="display:flex;justify-content:space-between;color:#8B9C92;"><span>fit range</span><span class="m" style="color:#E9F0EB;">66 &ndash; 88</span></div>
+          <div style="display:flex;justify-content:space-between;color:#8B9C92;"><span>reach range</span><span class="m" style="color:#E9F0EB;">52 &ndash; 75</span></div>
+          <div style="display:flex;justify-content:space-between;color:#8B9C92;"><span>posted / cold</span><span class="m" style="color:#E9F0EB;">6 / 2</span></div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">In the box</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <div style="border:1px solid #2C5540;border-left:2px solid #56C88A;border-radius:3px;background:#151D18;padding:10px 12px;">
+            <div style="display:flex;align-items:baseline;gap:9px;"><span class="m" style="font-size:15px;color:#56C88A;">72</span><span style="font-size:13px;flex:1;min-width:0;">Forward Deployed Engineer</span></div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:3px;">Sarvam AI &middot; <span class="m">82 / 54</span></div>
+          </div>
+          <div style="border:1px solid #29372F;border-left:2px solid #A9BCB1;border-radius:3px;background:#151D18;padding:10px 12px;">
+            <div style="display:flex;align-items:baseline;gap:9px;"><span class="m" style="font-size:15px;color:#A9BCB1;">68</span><span style="font-size:13px;flex:1;min-width:0;">Cold approach &mdash; agritech ops</span></div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:3px;">Cropin &middot; <span class="m">71 / 63</span></div>
+          </div>
+          <div style="border:1px solid #29372F;border-left:2px solid #56C88A;border-radius:3px;background:#151D18;padding:10px 12px;">
+            <div style="display:flex;align-items:baseline;gap:9px;"><span class="m" style="font-size:15px;color:#56C88A;">66</span><span style="font-size:13px;flex:1;min-width:0;">Solutions Engineer, India</span></div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:3px;">Hasura &middot; <span class="m">74 / 52</span></div>
+          </div>
+          <div style="border:1px solid #29372F;border-left:2px solid #56C88A;border-radius:3px;background:#151D18;padding:10px 12px;">
+            <div style="display:flex;align-items:baseline;gap:9px;"><span class="m" style="font-size:15px;color:#56C88A;">65</span><span style="font-size:13px;flex:1;min-width:0;">Delivery Lead, ML</span></div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:3px;">Fractal &middot; <span class="m">69 / 58</span></div>
+          </div>
+          <div style="text-align:center;padding-top:2px;"><span class="m" style="font-size:11px;color:#798B81;">4 more</span></div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Plot</div>
+        <div style="display:flex;flex-direction:column;gap:9px;font-size:12.5px;color:#8B9C92;">
+          <div style="display:flex;align-items:center;gap:9px;"><i style="width:14px;height:14px;border-radius:2px;border:1px solid #56C88A;background:#1F3A2A;flex-shrink:0;"></i>posted roles</div>
+          <div style="display:flex;align-items:center;gap:9px;"><i style="width:14px;height:14px;border-radius:2px;border:1px solid #29372F;background:#151D18;flex-shrink:0;"></i>cold approaches</div>
+          <div style="display:flex;align-items:center;gap:9px;"><i style="width:14px;height:14px;border-radius:2px;border:1px solid #29372F;background:#151D18;flex-shrink:0;"></i>already applied</div>
+        </div>
+        <div style="font-size:11px;color:#798B81;line-height:1.55;margin-top:11px;text-wrap:pretty;">Rank is a weighted geometric mean of the two axes, so the diagonal is not a straight line &mdash; a job brilliant on one axis and hopeless on the other sinks rather than landing mid-table.</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: &ldquo;let me drag the box on <a class="dv-oid" href="#2b">2b</a> for real&rdquo; &middot; &ldquo;show the CV-upload and first-run state of <a class="dv-oid" href="#2a">2a</a>&rdquo; &middot; &ldquo;put <a class="dv-oid" href="#2b">2b</a>&rsquo;s quadrant naming into <a class="dv-oid" href="#1a">1a</a>&rsquo;s little plot&rdquo;</p>
+</section>
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">Job triage &mdash; queue, detail and mobile, on your tokens</span></div>
+
+<div class="dv-opts">
+
+<!-- ══════════════ 1a  FOCUS STACK ══════════════ -->
+<div class="dv-opt" id="1a">
+<div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Triage queue as a <b style="color:#E9F0EB;font-weight:500">focus stack</b> &mdash; one job in front of you, the rest a deck behind it. Keyboard-first: the three verbs are three keys. Score is a two-axis plot, not two bars.</div>
+<div class="dv-card" style="width:1180px">
+<div style="background:radial-gradient(760px 320px at 18% -12%,rgba(86,200,138,.07),transparent 60%),#0E1411;padding:0;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #29372F;background:#151D18;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <span class="m" style="font-size:11px;color:#798B81;">AI Operations &middot; Bangalore + remote</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#E2685C;background:rgba(226,104,92,.13);border-color:#5A2E2A;">3 overdue</span>
+    <span class="m" style="font-size:11px;color:#798B81;">triaged today 12 / 20</span>
+    <div class="m" style="width:28px;height:28px;border-radius:50%;background:#1C2620;border:1px solid #29372F;display:flex;align-items:center;justify-content:center;font-size:11px;color:#56C88A;">SB</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 288px;">
+
+    <div style="padding:26px 26px 30px;border-right:1px solid #29372F;">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:16px;">
+        <span class="eb" style="color:#798B81;">In the queue</span>
+        <span class="m" style="font-size:12px;color:#8B9C92;">1 of 47</span>
+        <div style="flex:1;height:2px;background:#1C2620;border-radius:2px;overflow:hidden;max-width:220px;"><i style="display:block;height:100%;width:26%;background:#56C88A;"></i></div>
+      </div>
+
+      <div style="position:relative;">
+        <div style="position:absolute;left:14px;right:14px;top:-9px;height:9px;background:#151D18;border:1px solid #29372F;border-bottom:none;border-radius:3px 3px 0 0;opacity:.55;"></div>
+        <div style="position:absolute;left:7px;right:7px;top:-4px;height:8px;background:#151D18;border:1px solid #29372F;border-bottom:none;border-radius:3px 3px 0 0;opacity:.8;"></div>
+
+        <div style="position:relative;border:1px solid #29372F;border-left:3px solid #56C88A;border-radius:3px;background:#151D18;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+          <div style="display:grid;grid-template-columns:1fr 246px;">
+
+            <div style="padding:20px 22px 18px;">
+              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+                <span class="pill" style="color:#56C88A;background:#1F3A2A;">posted role</span>
+                <span class="pill" style="color:#8B9C92;border-color:#29372F;">new</span>
+                <span class="pill" style="color:#56C88A;border-color:#1F3A2A;">4d ago</span>
+                <span class="pill" style="color:#8B9C92;border-color:#29372F;">greenhouse feed</span>
+              </div>
+              <div style="font-size:19px;font-weight:500;letter-spacing:-.01em;">Forward Deployed Engineer</div>
+              <div style="font-size:13px;color:#8B9C92;margin-top:3px;">Sarvam AI &middot; Bangalore, India &middot; on-site 3d</div>
+
+              <div style="height:1px;background:#29372F;margin:16px 0 14px;"></div>
+
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;">
+                <div>
+                  <div class="eb" style="color:#798B81;margin-bottom:6px;">Why it fits</div>
+                  <div style="font-size:12.5px;color:#8B9C92;line-height:1.55;text-wrap:pretty;">Ops-heavy deployment work at a lab small enough to read the application. Your three years running model rollouts is the job description, near enough.</div>
+                </div>
+                <div>
+                  <div class="eb" style="color:#798B81;margin-bottom:6px;">Why it is reachable</div>
+                  <div style="font-size:12.5px;color:#8B9C92;line-height:1.55;text-wrap:pretty;">Forty-person team, no degree filter in the posting, and the hiring manager answers on the public forum. No referral needed.</div>
+                </div>
+              </div>
+
+              <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:14px;">
+                <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">strong fit</span>
+                <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">rare combination</span>
+                <span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">no degree filter</span>
+                <span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">full description read</span>
+              </div>
+            </div>
+
+            <div style="border-left:1px solid #29372F;background:#1C2620;padding:20px 20px;display:flex;flex-direction:column;gap:14px;">
+              <div>
+                <div class="eb" style="color:#798B81;margin-bottom:8px;">Rank</div>
+                <div style="display:flex;align-items:baseline;gap:8px;">
+                  <span class="m" style="font-size:34px;line-height:1;color:#56C88A;">72</span>
+                  <span class="m" style="font-size:11px;color:#798B81;">/ 100</span>
+                </div>
+              </div>
+
+              <div style="position:relative;width:206px;height:206px;border:1px solid #29372F;border-radius:3px;background:#151D18;">
+                <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:#29372F;"></div>
+                <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:#29372F;"></div>
+                <div style="position:absolute;left:0;right:0;top:0;bottom:0;background:linear-gradient(to top right,transparent 55%,rgba(86,200,138,.07));"></div>
+                <span class="m" style="position:absolute;left:7px;bottom:6px;font-size:9.5px;color:#798B81;">reach &rarr;</span>
+                <span class="m" style="position:absolute;left:7px;top:6px;font-size:9.5px;color:#798B81;">&uarr; fit</span>
+                <i style="position:absolute;left:34%;top:30%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <i style="position:absolute;left:22%;top:62%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <i style="position:absolute;left:61%;top:48%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <i style="position:absolute;left:73%;top:71%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <i style="position:absolute;left:46%;top:44%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <i style="position:absolute;left:15%;top:14%;width:5px;height:5px;border-radius:50%;background:#3A4A41;"></i>
+                <div style="position:absolute;left:54%;top:18%;width:11px;height:11px;border-radius:50%;background:#56C88A;box-shadow:0 0 0 5px rgba(86,200,138,.12);transform:translate(-50%,-50%);"></div>
+                <span class="m" style="position:absolute;left:58%;top:12%;font-size:10px;color:#56C88A;">this one</span>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:7px;">
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#8B9C92;"><span>fit</span><span class="m" style="color:#E9F0EB;">82</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#8B9C92;"><span>reach</span><span class="m" style="color:#E9F0EB;">54</span></div>
+                <div style="display:flex;justify-content:space-between;font-size:11px;color:#798B81;"><span>confidence</span><span class="m" style="color:#8B9C92;">high</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:7px;padding:13px 22px;border-top:1px solid #29372F;background:#151D18;">
+            <a class="m" style="font-size:12px;">open posting &#8599;</a>
+            <div style="flex:1"></div>
+            <span class="key">C</span>
+            <button style="font-family:inherit;font-size:13px;padding:7px 13px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Reach out cold</button>
+            <span class="key">X</span>
+            <button style="font-family:inherit;font-size:13px;padding:7px 13px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Skip</button>
+            <span class="key">A</span>
+            <button style="font-family:inherit;font-size:13px;font-weight:700;padding:7px 15px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Apply</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="eb" style="color:#798B81;margin:24px 0 9px;">Next up</div>
+      <div style="display:flex;flex-direction:column;gap:9px;">
+        <div style="display:flex;align-items:center;gap:12px;border:1px solid #29372F;border-left:2px solid #A9BCB1;border-radius:3px;background:#151D18;padding:11px 14px;opacity:.72;">
+          <span class="m" style="font-size:15px;color:#A9BCB1;width:26px;">68</span>
+          <div style="flex:1;min-width:0;"><div style="font-size:13.5px;">Cold approach &mdash; agritech ops</div><div style="font-size:11.5px;color:#8B9C92;">Cropin &middot; Bangalore</div></div>
+          <span class="pill" style="color:#A9BCB1;background:#23302A;">cold approach</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;border:1px solid #29372F;border-left:2px solid #56C88A;border-radius:3px;background:#151D18;padding:11px 14px;opacity:.5;">
+          <span class="m" style="font-size:15px;color:#56C88A;width:26px;">66</span>
+          <div style="flex:1;min-width:0;"><div style="font-size:13.5px;">Solutions Engineer, India</div><div style="font-size:11.5px;color:#8B9C92;">Hasura &middot; Remote</div></div>
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">posted role</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;border:1px solid #29372F;border-left:2px solid #56C88A;border-radius:3px;background:#151D18;padding:11px 14px;opacity:.3;">
+          <span class="m" style="font-size:15px;color:#56C88A;width:26px;">64</span>
+          <div style="flex:1;min-width:0;"><div style="font-size:13.5px;">Deployment Strategist</div><div style="font-size:11.5px;color:#8B9C92;">Neysa &middot; Remote</div></div>
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">posted role</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:22px 18px;display:flex;flex-direction:column;gap:22px;">
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Keys</div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12px;color:#8B9C92;">
+          <div style="display:flex;align-items:center;gap:9px;"><span class="key" style="width:22px;text-align:center;">A</span>apply, and log it</div>
+          <div style="display:flex;align-items:center;gap:9px;"><span class="key" style="width:22px;text-align:center;">X</span>skip &mdash; never shown again</div>
+          <div style="display:flex;align-items:center;gap:9px;"><span class="key" style="width:22px;text-align:center;">C</span>draft a cold approach</div>
+          <div style="display:flex;align-items:center;gap:9px;"><span class="key" style="width:22px;text-align:center;">&#9251;</span>expand the full posting</div>
+          <div style="display:flex;align-items:center;gap:9px;"><span class="key" style="width:22px;text-align:center;">U</span>undo the last one</div>
+        </div>
+      </div>
+      <div style="height:1px;background:#29372F;"></div>
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">This session</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;"><div class="m" style="font-size:24px;line-height:1;color:#56C88A;">4</div><div style="font-size:11px;color:#798B81;margin-top:5px;">applied</div></div>
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;"><div class="m" style="font-size:24px;line-height:1;color:#8B9C92;">8</div><div style="font-size:11px;color:#798B81;margin-top:5px;">skipped</div></div>
+        </div>
+        <div style="font-size:11px;color:#798B81;line-height:1.5;margin-top:10px;text-wrap:pretty;">Twenty a day is the target. It is the only number that has ever correlated with an offer.</div>
+      </div>
+      <div style="height:1px;background:#29372F;"></div>
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Filtered to</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill" style="color:#E9F0EB;background:#1C2620;border-color:#29372F;">rank &ge; 60</span>
+          <span class="pill" style="color:#E9F0EB;background:#1C2620;border-color:#29372F;">bangalore + remote</span>
+          <span class="pill" style="color:#E9F0EB;background:#1C2620;border-color:#29372F;">posted &lt; 21d</span>
+          <span class="pill" style="color:#798B81;border-color:#29372F;">+ add</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 1b  DENSE QUEUE ══════════════ -->
+<div class="dv-opt" id="1b">
+<div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>The same queue as a <b style="color:#E9F0EB;font-weight:500">dense sorted list</b> &mdash; mouse-first, scannable, sectioned by what to do rather than by stage. Score is one number plus a paired micro-bar.</div>
+<div class="dv-card" style="width:1180px">
+<div style="background:#0E1411;">
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #29372F;background:#151D18;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;border:1px solid #29372F;border-radius:5px;overflow:hidden;">
+      <span style="font-size:12px;padding:6px 13px;background:#1C2620;color:#56C88A;">Queue</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Map</span>
+      <span style="font-size:12px;padding:6px 13px;color:#8B9C92;border-left:1px solid #29372F;">Pipeline</span>
+    </div>
+    <button style="font-family:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Find work</button>
+  </div>
+
+  <div style="display:grid;grid-template-columns:288px 1fr;">
+    <div style="border-right:1px solid #29372F;padding:20px 18px;display:flex;flex-direction:column;gap:22px;background:#0E1411;">
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Direction</div>
+        <div style="border:1px solid #29372F;border-radius:4px;background:#151D18;padding:13px 14px;">
+          <div style="font-size:14px;">AI Operations</div>
+          <div style="display:flex;align-items:center;gap:7px;margin-top:8px;">
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">moderate</span>
+            <span class="m" style="font-size:11px;color:#798B81;">214 scored</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Fit &times; reach</div>
+        <div style="position:relative;height:172px;border:1px solid #29372F;border-radius:3px;background:#151D18;">
+          <div style="position:absolute;left:0;right:0;top:50%;height:1px;background:#232E28;"></div>
+          <div style="position:absolute;top:0;bottom:0;left:50%;width:1px;background:#232E28;"></div>
+          <div style="position:absolute;left:50%;right:0;top:0;height:50%;background:rgba(86,200,138,.07);border-left:1px solid rgba(86,200,138,.28);"></div>
+          <i style="position:absolute;left:63%;top:22%;width:6px;height:6px;border-radius:50%;background:#56C88A;"></i>
+          <i style="position:absolute;left:71%;top:31%;width:6px;height:6px;border-radius:50%;background:#56C88A;"></i>
+          <i style="position:absolute;left:55%;top:38%;width:6px;height:6px;border-radius:50%;background:#56C88A;"></i>
+          <i style="position:absolute;left:81%;top:19%;width:6px;height:6px;border-radius:50%;background:#56C88A;"></i>
+          <i style="position:absolute;left:22%;top:14%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <i style="position:absolute;left:31%;top:26%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <i style="position:absolute;left:14%;top:52%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <i style="position:absolute;left:44%;top:63%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <i style="position:absolute;left:68%;top:74%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <i style="position:absolute;left:36%;top:81%;width:6px;height:6px;border-radius:50%;background:#3A4A41;"></i>
+          <span class="m" style="position:absolute;right:7px;top:6px;font-size:9.5px;color:#56C88A;">worth the week</span>
+        </div>
+        <div style="font-size:11px;color:#798B81;line-height:1.5;margin-top:8px;text-wrap:pretty;">Drag a box to filter the list. 18 jobs sit top-right.</div>
+      </div>
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Channel</div>
+        <div style="display:flex;flex-direction:column;gap:7px;font-size:12.5px;">
+          <div style="display:flex;justify-content:space-between;color:#E9F0EB;"><span style="display:flex;align-items:center;gap:8px;"><i style="width:8px;height:8px;background:#56C88A;border-radius:2px;"></i>Posted roles</span><span class="m" style="color:#8B9C92;">176</span></div>
+          <div style="display:flex;justify-content:space-between;color:#E9F0EB;"><span style="display:flex;align-items:center;gap:8px;"><i style="width:8px;height:8px;background:#A9BCB1;border-radius:2px;"></i>Cold approaches</span><span class="m" style="color:#8B9C92;">38</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:22px 24px 30px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <span style="font-size:15px;font-weight:500;">Do these first</span>
+        <span class="m" style="font-size:12px;color:#798B81;">9</span>
+        <div style="flex:1"></div>
+        <span class="m" style="font-size:11px;color:#798B81;">sorted by rank</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;padding:0 14px 8px;border-bottom:1px solid #29372F;" class="eb"><span style="color:#798B81;">rank</span><span style="color:#798B81;">role</span><span style="color:#798B81;">channel</span><span style="color:#798B81;">fit / reach</span><span style="color:#798B81;text-align:right;">action</span></div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;align-items:center;padding:13px 14px;border-bottom:1px solid #1C2620;border-left:2px solid #56C88A;background:#151D18;">
+        <span class="m" style="font-size:17px;color:#56C88A;">72</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Forward Deployed Engineer</div><div style="font-size:12px;color:#8B9C92;">Sarvam AI &middot; Bangalore &middot; 4d ago</div></div>
+        <span class="pill" style="color:#56C88A;background:#1F3A2A;justify-self:start;">posted role</span>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:82%;background:#56C88A;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">82</span></div>
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:54%;background:#86988D;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">54</span></div>
+        </div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Apply</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;align-items:center;padding:13px 14px;border-bottom:1px solid #1C2620;border-left:2px solid #A9BCB1;background:#151D18;">
+        <span class="m" style="font-size:17px;color:#A9BCB1;">68</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Cold approach &mdash; agritech ops</div><div style="font-size:12px;color:#8B9C92;">Cropin &middot; Bangalore &middot; 2 contacts</div></div>
+        <span class="pill" style="color:#A9BCB1;background:#23302A;justify-self:start;">cold approach</span>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:71%;background:#A9BCB1;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">71</span></div>
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:63%;background:#86988D;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">63</span></div>
+        </div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid #A9BCB1;background:#A9BCB1;color:#0E1411;">Write the DM</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;align-items:center;padding:13px 14px;border-bottom:1px solid #1C2620;border-left:2px solid #56C88A;background:#151D18;">
+        <span class="m" style="font-size:17px;color:#56C88A;">66</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Solutions Engineer, India</div><div style="font-size:12px;color:#8B9C92;">Hasura &middot; Remote &middot; 9d ago</div></div>
+        <span class="pill" style="color:#56C88A;background:#1F3A2A;justify-self:start;">posted role</span>
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:74%;background:#56C88A;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">74</span></div>
+          <div style="display:flex;align-items:center;gap:7px;"><span style="flex:1;height:3px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:52%;background:#86988D;"></i></span><span class="m" style="font-size:10px;color:#8B9C92;width:15px;text-align:right;">52</span></div>
+        </div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Apply</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:10px;margin:26px 0 12px;">
+        <span style="font-size:15px;font-weight:500;">Waiting on them</span>
+        <span class="m" style="font-size:12px;color:#798B81;">14</span>
+        <span class="pill" style="color:#E2685C;background:#4A2622;border-color:#5A2E2A;">3 overdue</span>
+      </div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;align-items:center;padding:13px 14px;border-bottom:1px solid #1C2620;border-left:2px solid #E2685C;background:linear-gradient(90deg,rgba(226,104,92,.13),transparent 45%),#151D18;">
+        <span class="m" style="font-size:17px;color:#56C88A;">70</span>
+        <div style="min-width:0;"><div style="font-size:14px;">AI Operations Lead</div><div style="font-size:12px;color:#8B9C92;">Observe.AI &middot; Bangalore</div></div>
+        <span class="pill" style="color:#E2685C;background:rgba(226,104,92,.13);border-color:#5A2E2A;justify-self:start;">11d silent</span>
+        <span class="m" style="font-size:11px;color:#798B81;">sent 2026-08-31</span>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Write the chase</button>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:38px 1fr 128px 148px 216px;gap:0 14px;align-items:center;padding:13px 14px;border-bottom:1px solid #1C2620;border-left:2px solid #FFFFFF;background:linear-gradient(90deg,rgba(255,255,255,.07),transparent 40%),#151D18;">
+        <span class="m" style="font-size:17px;color:#A9BCB1;">64</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Deployment Strategist</div><div style="font-size:12px;color:#8B9C92;">Neysa &middot; Remote</div></div>
+        <span class="pill" style="color:#FFFFFF;border-color:#4A5A50;justify-self:start;">live</span>
+        <span style="font-size:11.5px;color:#8B9C92;">asked for a call</span>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:5px 10px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Details</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:5px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Log a note</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 1c  PIPELINE BOARD, LIGHT ══════════════ -->
+<div class="dv-opt" id="1c">
+<div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>The pipeline as a <b style="color:#E9F0EB;font-weight:500">stage board</b>, light theme &mdash; five columns, and the column colour is the only score signal until you open a card. Proves the tokens invert cleanly.</div>
+<div class="dv-card" style="width:1180px;border:1px solid #D3DFD8;">
+<div style="background:#F6F9F7;color:#131C17;">
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #D3DFD8;background:#FFFFFF;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <div style="flex:1"></div>
+    <div style="display:flex;border:1px solid #D3DFD8;border-radius:5px;overflow:hidden;">
+      <span style="font-size:12px;padding:6px 13px;color:#56675D;">Queue</span>
+      <span style="font-size:12px;padding:6px 13px;color:#56675D;border-left:1px solid #D3DFD8;">Map</span>
+      <span style="font-size:12px;padding:6px 13px;background:#EDF3EF;color:#157F42;border-left:1px solid #D3DFD8;">Pipeline</span>
+    </div>
+    <button style="font-family:inherit;font-size:13px;font-weight:700;padding:7px 14px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Find work</button>
+  </div>
+
+  <div style="padding:22px 22px 28px;display:grid;grid-template-columns:repeat(5,1fr);gap:14px;">
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div style="display:flex;align-items:baseline;gap:7px;padding-bottom:8px;border-bottom:2px solid #157F42;"><span style="font-size:13px;font-weight:500;">New</span><span class="m" style="font-size:12px;color:#63736A;">47</span></div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Forward Deployed Engineer</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Sarvam AI</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:9px;"><span class="m" style="font-size:17px;color:#157F42;line-height:1;">72</span><span class="pill" style="color:#157F42;background:#DCF0E4;">posted</span></div>
+      </div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Cold approach &mdash; agritech</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Cropin</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:9px;"><span class="m" style="font-size:17px;color:#55665C;line-height:1;">68</span><span class="pill" style="color:#55665C;background:#E6EDE8;">cold</span></div>
+      </div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Solutions Engineer, India</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Hasura</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:9px;"><span class="m" style="font-size:17px;color:#157F42;line-height:1;">66</span><span class="pill" style="color:#157F42;background:#DCF0E4;">posted</span></div>
+      </div>
+      <div style="border:1px dashed #D3DFD8;border-radius:3px;padding:11px;text-align:center;"><span class="m" style="font-size:11px;color:#63736A;">44 more</span></div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div style="display:flex;align-items:baseline;gap:7px;padding-bottom:8px;border-bottom:2px solid #C6D3CB;"><span style="font-size:13px;font-weight:500;">Applied</span><span class="m" style="font-size:12px;color:#63736A;">31</span></div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Platform Ops Manager</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Zeta</div>
+        <div class="m" style="font-size:11px;color:#63736A;margin-top:9px;">sent 2026-09-07</div>
+      </div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Delivery Lead, ML</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Fractal</div>
+        <div class="m" style="font-size:11px;color:#63736A;margin-top:9px;">sent 2026-09-05</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div style="display:flex;align-items:baseline;gap:7px;padding-bottom:8px;border-bottom:2px solid #C33B2E;"><span style="font-size:13px;font-weight:500;">Waiting</span><span class="m" style="font-size:12px;color:#63736A;">14</span><span class="pill" style="color:#C33B2E;background:#FBE4E1;border-color:#EEBAB4;">3 due</span></div>
+      <div style="border:1px solid #EEBAB4;border-left:2px solid #C33B2E;border-radius:3px;background:linear-gradient(90deg,rgba(195,59,46,.10),transparent 60%),#FFFFFF;padding:12px;">
+        <div style="font-size:13.5px;font-weight:500;">AI Operations Lead</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Observe.AI</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:9px;"><span class="pill" style="color:#C33B2E;background:#FBE4E1;border-color:#EEBAB4;">11d silent</span></div>
+        <button style="width:100%;margin-top:10px;font-family:inherit;font-size:12px;font-weight:700;padding:6px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;text-align:left;padding-left:10px;">Write the chase</button>
+      </div>
+      <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:12px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+        <div style="font-size:13.5px;font-weight:500;">Head of Deployment</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Sarvam AI</div>
+        <div style="display:flex;align-items:center;gap:7px;margin-top:9px;"><span class="pill" style="color:#65756B;border-color:#C6D3CB;">4d silent</span></div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div style="display:flex;align-items:baseline;gap:7px;padding-bottom:8px;border-bottom:2px solid #0B3D22;"><span style="font-size:13px;font-weight:500;">In conversation</span><span class="m" style="font-size:12px;color:#63736A;">3</span></div>
+      <div style="border:1px solid #A8D8BC;border-left:2px solid #0B3D22;border-radius:3px;background:linear-gradient(90deg,rgba(11,61,34,.07),transparent 50%),#FFFFFF;padding:12px;box-shadow:0 8px 24px rgba(19,28,23,.12);">
+        <div style="font-size:13.5px;font-weight:500;">Deployment Strategist</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Neysa</div>
+        <div style="font-size:12px;color:#131C17;margin-top:9px;border-left:2px solid #A8D8BC;padding-left:9px;line-height:1.45;">asked for a call next week</div>
+        <button style="width:100%;margin-top:10px;font-family:inherit;font-size:12px;font-weight:700;padding:6px 10px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;text-align:left;">Log a note</button>
+      </div>
+      <div style="border:1px solid #A8D8BC;border-left:2px solid #0B3D22;border-radius:3px;background:#FFFFFF;padding:12px;">
+        <div style="font-size:13.5px;font-weight:500;">Founding SE</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Portkey</div>
+        <div class="m" style="font-size:11px;color:#63736A;margin-top:9px;">call 2026-09-15, 16:00</div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px;">
+      <div style="display:flex;align-items:baseline;gap:7px;padding-bottom:8px;border-bottom:2px solid #E2E9E4;"><span style="font-size:13px;font-weight:500;color:#56675D;">Closed</span><span class="m" style="font-size:12px;color:#63736A;">62</span></div>
+      <div style="border:1px solid #E2E9E4;border-radius:3px;background:#FFFFFF;padding:12px;opacity:.55;">
+        <div style="font-size:13.5px;font-weight:500;">Technical Program Manager</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Razorpay</div>
+        <div class="m" style="font-size:11px;color:#63736A;margin-top:9px;">no reply, 30d</div>
+      </div>
+      <div style="border:1px solid #E2E9E4;border-radius:3px;background:#FFFFFF;padding:12px;opacity:.55;">
+        <div style="font-size:13.5px;font-weight:500;">Solutions Architect</div>
+        <div style="font-size:12px;color:#56675D;margin-top:2px;">Freshworks</div>
+        <div class="m" style="font-size:11px;color:#63736A;margin-top:9px;">rejected</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 1d  JOB DETAIL ══════════════ -->
+<div class="dv-opt" id="1d">
+<div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a><b style="color:#E9F0EB;font-weight:500">Single job, opened</b> &mdash; the two axes argued separately, evidence quoted from the posting itself, and the whole history in one column. Actions pin to the rail so they never scroll away.</div>
+<div class="dv-card" style="width:1180px">
+<div style="background:#0E1411;">
+  <div style="display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid #29372F;background:#151D18;">
+    <a class="m" style="font-size:12px;">&larr; queue</a>
+    <span class="m" style="font-size:11px;color:#798B81;">4 of 47</span>
+    <div style="flex:1"></div>
+    <span class="key">J</span><span class="m" style="font-size:11px;color:#798B81;">next</span>
+    <span class="key">K</span><span class="m" style="font-size:11px;color:#798B81;">previous</span>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 340px;">
+    <div style="padding:26px 28px 34px;border-right:1px solid #29372F;">
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:11px;">
+        <span class="pill" style="color:#56C88A;background:#1F3A2A;">posted role</span>
+        <span class="pill" style="color:#8B9C92;border-color:#29372F;">new</span>
+        <span class="pill" style="color:#8B9C92;border-color:#29372F;">greenhouse feed</span>
+        <span class="pill" style="color:#8B9C92;border-color:#29372F;">full description read</span>
+      </div>
+      <h1 style="margin:0;font-size:19px;font-weight:500;letter-spacing:-.01em;">Forward Deployed Engineer</h1>
+      <div style="font-size:13px;color:#8B9C92;margin-top:4px;">Sarvam AI &middot; Bangalore, India &middot; on-site 3 days &middot; posted 4 days ago</div>
+
+      <div style="height:1px;background:#29372F;margin:20px 0;"></div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:22px;">
+        <div style="border:1px solid #2C5540;border-radius:4px;background:linear-gradient(180deg,rgba(86,200,138,.07),transparent),#151D18;padding:16px 17px;">
+          <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:10px;">
+            <span class="eb" style="color:#798B81;">Fit</span>
+            <span class="m" style="font-size:24px;line-height:1;color:#56C88A;">82</span>
+          </div>
+          <div style="font-size:12.5px;color:#8B9C92;line-height:1.6;text-wrap:pretty;">Three years of model rollout operations against a job that is model rollout operations. Customer-facing delivery, Python fluency and a track record shipping into regulated Indian enterprises &mdash; all three named in the posting, all three on your CV.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;">
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">direct experience</span>
+            <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">rare combination</span>
+          </div>
+        </div>
+        <div style="border:1px solid #364339;border-radius:4px;background:#151D18;padding:16px 17px;">
+          <div style="display:flex;align-items:baseline;gap:9px;margin-bottom:10px;">
+            <span class="eb" style="color:#798B81;">Reach</span>
+            <span class="m" style="font-size:24px;line-height:1;color:#86988D;">54</span>
+          </div>
+          <div style="font-size:12.5px;color:#8B9C92;line-height:1.6;text-wrap:pretty;">Forty people and hiring fast, which helps. Against it: no big-lab name on your CV and the role has been open long enough to have a shortlist. Applying cold puts you in a pile of two hundred &mdash; a named contact roughly doubles this number.</div>
+          <div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:12px;">
+            <span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">no degree filter</span>
+            <span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">no referral yet</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="eb" style="color:#798B81;margin:26px 0 10px;">Quoted from the posting</div>
+      <div style="border-left:2px solid #29372F;padding:2px 0 2px 14px;display:flex;flex-direction:column;gap:12px;">
+        <div style="font-size:13px;color:#E9F0EB;line-height:1.6;">&ldquo;You will sit with the customer&rsquo;s engineering team for weeks at a time, and own the deployment end to end.&rdquo;</div>
+        <div style="font-size:13px;color:#E9F0EB;line-height:1.6;">&ldquo;No specific degree required. We care whether you have shipped.&rdquo;</div>
+      </div>
+
+      <div class="eb" style="color:#798B81;margin:26px 0 10px;">History</div>
+      <div style="display:flex;flex-direction:column;">
+        <div style="display:grid;grid-template-columns:96px 1fr;gap:12px;padding:9px 0;border-top:1px solid #1C2620;"><span class="m" style="font-size:11px;color:#798B81;">2026-09-07</span><span style="font-size:12.5px;color:#8B9C92;">Scored 82 / 54 from the full description.</span></div>
+        <div style="display:grid;grid-template-columns:96px 1fr;gap:12px;padding:9px 0;border-top:1px solid #1C2620;"><span class="m" style="font-size:11px;color:#798B81;">2026-09-08</span><span style="font-size:12.5px;color:#8B9C92;">Two contacts found &mdash; a founding engineer and the ops lead.</span></div>
+        <div style="display:grid;grid-template-columns:96px 1fr;gap:12px;padding:9px 0;border-top:1px solid #1C2620;border-bottom:1px solid #1C2620;"><span class="m" style="font-size:11px;color:#798B81;">2026-09-10</span><span style="font-size:12.5px;color:#8B9C92;">Surfaced to the top of the queue.</span></div>
+      </div>
+    </div>
+
+    <div style="padding:24px 20px;display:flex;flex-direction:column;gap:22px;background:#1C2620;">
+      <div style="border:1px solid #29372F;border-radius:4px;background:#151D18;padding:16px;">
+        <div class="eb" style="color:#798B81;margin-bottom:8px;">Rank</div>
+        <div style="display:flex;align-items:baseline;gap:9px;"><span class="m" style="font-size:34px;line-height:1;color:#56C88A;">72</span><span style="font-size:12px;color:#8B9C92;">4th of 214</span></div>
+        <div style="font-size:11px;color:#798B81;line-height:1.5;margin-top:10px;text-wrap:pretty;">Weighted geometric mean of the two axes, so a job that is brilliant on one and hopeless on the other sinks.</div>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:7px;">
+        <button style="font-family:inherit;font-size:13px;font-weight:700;padding:10px 14px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;text-align:left;">Apply &mdash; and log it</button>
+        <button style="font-family:inherit;font-size:13px;padding:10px 14px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;text-align:left;">Reach out to a contact first</button>
+        <div style="display:flex;gap:7px;">
+          <button style="flex:1;font-family:inherit;font-size:13px;padding:9px 14px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;text-align:left;">Skip</button>
+          <button style="flex:1;font-family:inherit;font-size:13px;padding:9px 14px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;text-align:left;">Snooze</button>
+        </div>
+        <a class="m" style="font-size:12px;padding-top:4px;">open the original posting &#8599;</a>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:10px;">Two people found</div>
+        <div style="display:flex;flex-direction:column;gap:9px;">
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;">
+            <div style="font-size:13px;">Ananya R.</div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:2px;">Founding engineer &middot; public profile</div>
+            <div style="display:flex;gap:5px;margin-top:8px;"><span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">posts publicly</span></div>
+          </div>
+          <div style="border:1px solid #29372F;border-radius:3px;background:#151D18;padding:11px 12px;">
+            <div style="font-size:13px;">Vikram S.</div>
+            <div style="font-size:11.5px;color:#8B9C92;margin-top:2px;">Operations lead &middot; likely hiring manager</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="height:1px;background:#29372F;"></div>
+
+      <div>
+        <div class="eb" style="color:#798B81;margin-bottom:8px;">Your note</div>
+        <div style="border:1px solid #29372F;border-radius:4px;background:#151D18;padding:11px 12px;min-height:66px;font-size:12.5px;color:#798B81;">Mention the Kochi rollout&hellip;</div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<!-- ══════════════ 1e  MOBILE ══════════════ -->
+<div class="dv-opt" id="1e">
+<div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a><b style="color:#E9F0EB;font-weight:500">Mobile triage</b>, both themes &mdash; the focus stack collapses to one card and a thumb row. Dark is the default; light is the same screen, same tokens.</div>
+<div style="display:flex;gap:26px;">
+
+<div style="width:390px;border-radius:34px;overflow:hidden;border:1px solid #29372F;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+<div style="width:390px;height:844px;display:flex;flex-direction:column;background:radial-gradient(700px 340px at 20% -10%,rgba(86,200,138,.07),transparent 60%),#0E1411;color:#E9F0EB;">
+  <div style="height:44px;flex-shrink:0;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;"><span class="m" style="font-size:12px;">9:41</span><span class="m" style="font-size:11px;color:#8B9C92;">&#9679;&#9679;&#9679;&#9679;</span></div>
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 16px 12px;border-bottom:1px solid #29372F;">
+    <span style="font-size:16px;font-weight:500;">Today</span>
+    <span class="m" style="font-size:12px;color:#798B81;">12 / 20 triaged</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#E2685C;background:#4A2622;border-color:#5A2E2A;">3 overdue</span>
+  </div>
+
+  <div style="flex:1;padding:16px;display:flex;flex-direction:column;">
+    <div style="height:2px;background:#1C2620;border-radius:2px;overflow:hidden;margin-bottom:16px;"><i style="display:block;height:100%;width:60%;background:#56C88A;"></i></div>
+
+    <div style="position:relative;">
+      <div style="position:absolute;left:10px;right:10px;top:-6px;height:8px;background:#151D18;border:1px solid #29372F;border-bottom:none;border-radius:3px 3px 0 0;opacity:.6;"></div>
+      <div style="position:relative;border:1px solid #29372F;border-left:3px solid #56C88A;border-radius:3px;background:#151D18;padding:16px;box-shadow:0 10px 30px rgba(0,0,0,.5);">
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+          <span class="pill" style="color:#56C88A;background:#1F3A2A;">posted</span>
+          <span class="pill" style="color:#8B9C92;border-color:#29372F;">new</span>
+          <span class="pill" style="color:#56C88A;border-color:#1F3A2A;">4d ago</span>
+        </div>
+        <div style="font-size:19px;font-weight:500;letter-spacing:-.01em;line-height:1.25;">Forward Deployed Engineer</div>
+        <div style="font-size:12.5px;color:#8B9C92;margin-top:4px;">Sarvam AI &middot; Bangalore</div>
+
+        <div style="display:flex;align-items:center;gap:16px;margin-top:16px;padding:13px 0;border-top:1px solid #29372F;border-bottom:1px solid #29372F;">
+          <div><div class="m" style="font-size:30px;line-height:1;color:#56C88A;">72</div><div class="eb" style="color:#798B81;margin-top:5px;">rank</div></div>
+          <div style="flex:1;display:flex;flex-direction:column;gap:7px;">
+            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:#798B81;width:32px;">fit</span><span style="flex:1;height:4px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:82%;background:#56C88A;"></i></span><span class="m" style="font-size:11px;color:#E9F0EB;width:17px;text-align:right;">82</span></div>
+            <div style="display:flex;align-items:center;gap:8px;"><span style="font-size:11px;color:#798B81;width:32px;">reach</span><span style="flex:1;height:4px;background:#1C2620;border-radius:2px;overflow:hidden;"><i style="display:block;height:100%;width:54%;background:#86988D;"></i></span><span class="m" style="font-size:11px;color:#E9F0EB;width:17px;text-align:right;">54</span></div>
+          </div>
+        </div>
+
+        <div style="font-size:13px;color:#8B9C92;line-height:1.55;margin-top:13px;text-wrap:pretty;">Ops-heavy deployment at a lab small enough to read the application. No degree filter in the posting.</div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:11px;">
+          <span class="pill" style="color:#6FD79D;background:rgba(111,215,157,.10);border-color:#2C5540;">strong fit</span>
+          <span class="pill" style="color:#8B9C92;background:#1C2620;border-color:#29372F;">no degree filter</span>
+        </div>
+        <div style="min-height:44px;display:flex;align-items:center;margin-top:8px;"><a class="m" style="font-size:13px;">read the full posting &#8599;</a></div>
+      </div>
+    </div>
+
+    <div style="flex:1"></div>
+
+    <div style="display:flex;flex-direction:column;gap:7px;">
+      <button style="width:100%;min-height:52px;font-family:inherit;font-size:15px;font-weight:700;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#08150E;">Apply</button>
+      <div style="display:flex;gap:7px;">
+        <button style="flex:1;min-height:44px;font-family:inherit;font-size:14px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#8B9C92;">Skip</button>
+        <button style="flex:1;min-height:44px;font-family:inherit;font-size:14px;border-radius:5px;border:1px solid #29372F;background:#1C2620;color:#E9F0EB;">Reach out</button>
+      </div>
+      <div style="text-align:center;padding-top:5px;"><span class="m" style="font-size:11px;color:#798B81;">46 left &middot; undo</span></div>
+    </div>
+  </div>
+
+  <div style="flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #29372F;background:#151D18;padding-bottom:10px;">
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#56C88A;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span style="font-size:10px;">Today</span></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8B9C92;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><circle cx="9" cy="14" r="1.6"/><circle cx="14" cy="8" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg><span style="font-size:10px;">Map</span></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#E2685C;position:relative;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span style="font-size:10px;">Follow-ups</span><i style="position:absolute;top:8px;right:30px;width:6px;height:6px;border-radius:50%;background:#E2685C;"></i></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#8B9C92;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-5.6 7-5.6s7 2.1 7 5.6"/></svg><span style="font-size:10px;">Profile</span></div>
+  </div>
+</div>
+</div>
+
+<div style="width:390px;border-radius:34px;overflow:hidden;border:1px solid #D3DFD8;box-shadow:0 18px 50px rgba(19,28,23,.18);">
+<div style="width:390px;height:844px;display:flex;flex-direction:column;background:#F6F9F7;color:#131C17;">
+  <div style="height:44px;flex-shrink:0;display:flex;align-items:flex-end;justify-content:space-between;padding:0 22px 6px;background:#FFFFFF;"><span class="m" style="font-size:12px;">9:41</span><span class="m" style="font-size:11px;color:#56675D;">&#9679;&#9679;&#9679;&#9679;</span></div>
+  <div style="display:flex;align-items:center;gap:10px;padding:8px 16px 12px;border-bottom:1px solid #D3DFD8;background:#FFFFFF;">
+    <span style="font-size:16px;font-weight:500;">Follow-ups</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#C33B2E;background:#FBE4E1;border-color:#EEBAB4;">3 overdue</span>
+  </div>
+
+  <div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:12px;overflow:hidden;">
+    <div style="border:1px solid #EEBAB4;border-left:3px solid #C33B2E;border-radius:6px;background:linear-gradient(90deg,rgba(195,59,46,.10),transparent 70%),#FFFFFF;padding:15px;">
+      <div style="font-size:15px;font-weight:500;">Three have gone quiet</div>
+      <div style="font-size:12.5px;color:#56675D;margin-top:4px;line-height:1.5;text-wrap:pretty;">Sent over a week ago. A nudge beats starting somewhere new.</div>
+    </div>
+
+    <div style="border:1px solid #D3DFD8;border-left:2px solid #C33B2E;border-radius:3px;background:#FFFFFF;padding:14px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+      <div style="font-size:15px;font-weight:500;">AI Operations Lead</div>
+      <div style="font-size:12px;color:#56675D;margin-top:2px;">Observe.AI &middot; Bangalore</div>
+      <div style="display:flex;gap:5px;margin-top:9px;"><span class="pill" style="color:#157F42;background:#DCF0E4;">posted</span><span class="pill" style="color:#C33B2E;background:#FBE4E1;border-color:#EEBAB4;">11d silent</span></div>
+      <div style="display:flex;gap:8px;margin-top:13px;">
+        <button style="flex:1;min-height:44px;font-family:inherit;font-size:14px;font-weight:700;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Write the chase</button>
+        <button style="min-width:44px;min-height:44px;padding:0 14px;font-family:inherit;font-size:14px;border-radius:5px;border:1px solid #D3DFD8;background:#EDF3EF;color:#131C17;">Replied</button>
+      </div>
+    </div>
+
+    <div style="border:1px solid #A8D8BC;border-left:2px solid #0B3D22;border-radius:3px;background:linear-gradient(90deg,rgba(11,61,34,.07),transparent 50%),#FFFFFF;padding:14px;">
+      <div style="font-size:15px;font-weight:500;">Deployment Strategist</div>
+      <div style="font-size:12px;color:#56675D;margin-top:2px;">Neysa &middot; Remote</div>
+      <div style="display:flex;gap:5px;margin-top:9px;"><span class="pill" style="color:#55665C;background:#E6EDE8;">cold</span><span class="pill" style="color:#0B3D22;border-color:#A8D8BC;">live</span></div>
+      <div style="font-size:12.5px;color:#131C17;margin-top:11px;border-left:2px solid #A8D8BC;padding-left:10px;line-height:1.5;"><span class="m" style="font-size:11px;color:#63736A;">2026-09-09</span> &middot; asked for a call next week</div>
+      <div style="display:flex;gap:8px;margin-top:13px;">
+        <button style="flex:1;min-height:44px;font-family:inherit;font-size:14px;font-weight:700;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Log a note</button>
+      </div>
+    </div>
+
+    <div style="border:1px solid #D3DFD8;border-radius:3px;background:#FFFFFF;padding:14px;box-shadow:0 1px 2px rgba(19,28,23,.06);">
+      <div style="font-size:15px;font-weight:500;">Head of Deployment</div>
+      <div style="font-size:12px;color:#56675D;margin-top:2px;">Sarvam AI &middot; Bangalore</div>
+      <div style="display:flex;gap:5px;margin-top:9px;"><span class="pill" style="color:#65756B;border-color:#C6D3CB;">sent</span><span class="pill" style="color:#65756B;border-color:#C6D3CB;">4d silent</span></div>
+    </div>
+  </div>
+
+  <div style="flex-shrink:0;display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid #D3DFD8;background:#FFFFFF;padding-bottom:10px;">
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#65756B;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg><span style="font-size:10px;">Today</span></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#65756B;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><circle cx="9" cy="14" r="1.6"/><circle cx="14" cy="8" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg><span style="font-size:10px;">Map</span></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#157F42;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg><span style="font-size:10px;">Follow-ups</span></div>
+    <div style="min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;color:#65756B;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="3.4"/><path d="M5 20c0-3.5 3.1-5.6 7-5.6s7 2.1 7 5.6"/></svg><span style="font-size:10px;">Profile</span></div>
+  </div>
+</div>
+</div>
+
+</div>
+</div>
+
+</div>
+
+<p class="dv-next">Try next: &ldquo;push <a class="dv-oid" href="#1a">1a</a> further &mdash; I want the whole app on the stack metaphor&rdquo; &middot; &ldquo;merge <a class="dv-oid" href="#1b">1b</a>&rsquo;s density into <a class="dv-oid" href="#1d">1d</a>&rsquo;s rail&rdquo; &middot; &ldquo;show me the map and the empty state&rdquo;</p>
+</section>
+
+</x-dc>
+</body>
+</html>
