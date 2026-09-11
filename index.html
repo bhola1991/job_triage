@@ -4013,9 +4013,24 @@ async function afterAuthInner(){
   if(cloudNow()) await migrateLocal();
 }
 
+/* A reset link that's expired or was already used comes back with the
+   failure encoded in the URL hash instead of a session \u2014 nothing strips it
+   or surfaces it otherwise, which leaves people on a blank sign-in screen
+   with a cryptic URL and no idea why. Read it once, then send them straight
+   to requesting a fresh link instead of guessing. */
+function consumeAuthHashError(){
+  const h=location.hash;
+  if(!h || h.indexOf('error=')===-1) return;
+  const desc=new URLSearchParams(h.slice(1)).get('error_description');
+  history.replaceState(null,'',location.pathname+location.search);
+  AUTH.mode='reset';
+  AUTH.err=(desc?desc.replace(/\+/g,' '):'That link did not work')+' \u2014 request a new one below.';
+}
+
 async function boot(){
   if(CLOUD) splash('Starting\u2026');
   if(CLOUD){
+    consumeAuthHashError();
     try{
       const {data}=await SB.auth.getSession();
       USER=(data&&data.session&&data.session.user)||null;
