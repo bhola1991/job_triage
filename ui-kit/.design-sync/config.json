@@ -1,0 +1,13 @@
+{
+  "projectId": "405407ce-e1d3-493a-884e-7467415fc0da",
+  "pkg": "job-triage-ui",
+  "globalName": "JobTriageUI",
+  "shape": "package",
+  "buildCmd": "npm run build",
+  "cssEntry": "dist/styles.css",
+  "readmeHeader": ".design-sync/conventions.md",
+  "overrides": {
+    "QueueRow": { "cardMode": "column" },
+    "QueueSection": { "cardMode": "column" }
+  }
+}
