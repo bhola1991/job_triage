@@ -3688,6 +3688,7 @@ function myUsername(){
 function userName(){ return myUsername() || (USER && USER.email) || ''; }
 
 function renderAuth(){
+  if(AUTH.mode==='reset') return renderReset();
   const up = AUTH.mode==='up';
   $('#root').innerHTML=`
   <div class="onb">
@@ -3783,20 +3784,54 @@ function renderAuth(){
   $('#auPass').onkeydown=e=>{ if(e.key==='Enter') go(); };
   $('#auSwap').onclick=()=>{ stash(); AUTH.mode=up?'in':'up'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
 
-  if($('#auReset')) $('#auReset').onclick=async e=>{
+  if($('#auReset')) $('#auReset').onclick=e=>{
     e.preventDefault();
     stash();
-    // Reset goes by email, not by username: the recovery link is sent to the
-    // address on the account, and asking for it directly keeps this form from
-    // answering "which email is behind this username".
-    const addr=prompt('Which email is on the account?');
-    if(!addr) return;
-    try{ await SB.auth.resetPasswordForEmail(addr.trim(),{redirectTo:location.href}); }catch(err){}
-    // Said the same way whether or not the address exists: telling a stranger
-    // which emails have accounts here is not information worth giving away.
-    AUTH.err=''; AUTH.msg='If that address has an account, a reset link is on its way.';
+    AUTH.mode='reset'; AUTH.err=''; AUTH.msg='';
     renderAuth();
   };
+}
+
+/* Reset goes by email, not by username: the recovery link is sent to the
+   address on the account, and asking for it directly keeps this form from
+   answering "which email is behind this username". An in-page form rather
+   than a native prompt() — prompt() is silently blocked in a fair few
+   contexts (installed PWA, some in-app browsers), which made this
+   unreachable rather than merely ugly. */
+function renderReset(){
+  $('#root').innerHTML=`
+  <div class="onb">
+    <div class="eyebrow">Job Triage</div>
+    <p class="lede">Reset your password</p>
+    <p class="say">Enter the email on your account and we will send a link to set a new password.</p>
+    <div class="card">
+      <label class="lab">Email</label>
+      <input id="rsEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
+      ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
+      ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn-go" id="rsGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'…':'Send reset link'}</button>
+        <button class="btn-sm" id="rsBack">Back to sign in</button>
+      </div>
+    </div>
+    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="PRIVACY.md" target="_blank" rel="noopener">privacy notice</a>. Your API keys are never uploaded — they stay in this browser.</p>
+  </div>`;
+
+  const go=async ()=>{
+    const email=($('#rsEmail').value||'').trim();
+    AUTH.email=email;
+    if(!email) { AUTH.err='Enter the email on your account.'; AUTH.msg=''; return renderReset(); }
+    AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderReset();
+    try{ await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); }catch(err){}
+    AUTH.busy=false;
+    // Said the same way whether or not the address exists: telling a stranger
+    // which emails have accounts here is not information worth giving away.
+    AUTH.msg='If that address has an account, a reset link is on its way.';
+    renderReset();
+  };
+  $('#rsGo').onclick=go;
+  $('#rsEmail').onkeydown=e=>{ if(e.key==='Enter') go(); };
+  $('#rsBack').onclick=()=>{ AUTH.mode='in'; AUTH.err=''; AUTH.msg=''; renderAuth(); };
 }
 
 /* Shown once, to accounts that pre-date usernames. They signed in with their
