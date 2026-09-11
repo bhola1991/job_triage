@@ -37,7 +37,7 @@
     --closed:#3E4F44;
     /* Whole-cell tints are the light theme's statement; dark keeps the edge. */
     --go-row:transparent; --due-row:transparent; --closing-row:transparent; --awaiting-row:transparent;
-    --row-pad:0px;
+    --row-pad:10px;
 
     --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#0A1B0F;
     --cool:#4FB58C;
@@ -343,7 +343,8 @@
   /* Fixed widths on the fact and action columns, so the columns line up across
      rows even though every row is its own grid. */
   .qrow{display:grid;grid-template-columns:3px 38px minmax(0,1fr) 128px 104px 290px;
-    gap:0 16px;align-items:center;padding:13px 0 13px var(--row-pad)}
+    gap:0 16px;align-items:center;padding:13px var(--row-pad);border-radius:4px;cursor:pointer;
+    transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s,background-color .18s}
   .qfacts{display:contents}
   .qbar{grid-row:1;align-self:stretch;min-height:38px;border-radius:1px;background:transparent}
   .qitem.go .qbar{background:var(--go)}         .qitem.go .qrow{background:var(--go-row)}
@@ -351,6 +352,12 @@
   .qitem.closing .qbar{background:var(--closing)} .qitem.closing .qrow{background:var(--closing-row)}
   .qitem.awaiting .qbar{background:var(--awaiting)} .qitem.awaiting .qrow{background:var(--awaiting-row)}
   .qitem.closed .qbar{background:var(--closed)}
+  /* The row under the pointer lifts off the list, so it is plain which one a
+     click will open. Pointer devices only: on touch, hover sticks after a tap. */
+  @media(hover:hover){
+    .qitem .qrow:hover{transform:translateY(-2px) scale(1.012);background:var(--panel);
+      box-shadow:var(--shadow-md);position:relative;z-index:1}
+  }
   .qrank{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;line-height:1;color:var(--text)}
   .qrank.good{color:var(--go)} .qrank.quiet{color:var(--muted)}
   .qt{font-size:14px;line-height:1.35}
@@ -2596,6 +2603,8 @@ function jobDetail(j,i,acc){
   const cts=listOf(j,'contacts'), ev=listOf(j,'events'), st=stOf(j), ch=chOf(j);
   const age=ageOf(j), silent=daysSilent(j), scored=isScored(j), due=isDue(j);
   const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
+  // CSV imports write a missing link as the literal text "nan".
+  const url=String(j.url||'').trim().toLowerCase()==='nan' ? '' : String(j.url||'').trim();
 
   const eyebrow =
       st==='closed'     ? 'closed'
@@ -2667,7 +2676,9 @@ function jobDetail(j,i,acc){
 
     <div class="qd-rail">
       ${advice?`<div class="qd-callout ${advice[0]}">${esc(advice[1])}</div>`:''}
-      ${j.url?`<a class="lnk" href="${esc(j.url)}" target="_blank" rel="noopener">open the original posting ↗</a>`:''}
+      ${url
+        ? `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener">open the original posting ↗</a>`
+        : `<a class="lnk" href="https://www.google.com/search?q=${encodeURIComponent([j.title,j.company,j.location,'job'].filter(Boolean).join(' '))}" target="_blank" rel="noopener">no link saved — search Google for it ↗</a>`}
 
       <div><div class="qd-h">The record</div>
         ${rec('channel', ch==='cold'?'cold approach':'posted role')}
@@ -3797,6 +3808,12 @@ Return only the message text.`});
 }
 
 document.addEventListener('click',async e=>{
+  // Anywhere on a row that is not one of its own controls opens it, by pressing
+  // the row's Details button -- one toggle, however it was reached.
+  if(!e.target.closest('button,a,input,select,textarea,label')){
+    const d=e.target.closest('.qrow')?.querySelector('button[data-act="open"]');
+    if(d){ d.click(); return; }
+  }
   const b=e.target.closest('button[data-act]'); if(!b) return;
   const i=parseInt(b.dataset.i,10), p=P(), j=p&&p.jobs[i]; if(!j) return;
   const a=b.dataset.act;
