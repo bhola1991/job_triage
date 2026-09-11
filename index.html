@@ -724,6 +724,13 @@ const authStorage = {
 };
 const SB    = CLOUD ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY,
                 {auth:{storage:authStorage}}) : null;
+/* Read synchronously, right here, because createClient above has already
+   started eating the URL hash: it fires PASSWORD_RECOVERY while boot() is
+   still thousands of lines away from attaching a listener, so that event is
+   never heard and a reset link just signs you in and shows you the app. The
+   hash is still intact on this line, so the intent is taken from it directly
+   rather than from an event that has already gone. */
+const RECOVERY_LINK = CLOUD && /(^|[#&])type=recovery(&|$)/.test(location.hash);
 let USER = null;                      // the signed-in auth user, or null
 /* Never leaves the device it was typed on. */
 const LOCAL_ONLY = /^triage:(key|prov|apify|hr:)/;
@@ -4035,6 +4042,9 @@ async function boot(){
       const {data}=await SB.auth.getSession();
       USER=(data&&data.session&&data.session.user)||null;
     }catch(e){ USER=null; }
+    // Arrived on a reset link: take the new password before showing the app,
+    // however the session got here.
+    if(RECOVERY_LINK && USER) RECOVER=true;
     let last=USER?USER.id:null;
     SB.auth.onAuthStateChange((ev,sess)=>{
       const now=(sess&&sess.user)||null;
