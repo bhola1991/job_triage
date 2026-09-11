@@ -1,0 +1,47 @@
+{
+  "pages": [
+    { "id": "page-1", "name": "Design system" },
+    { "id": "page-2", "name": "Screens" }
+  ],
+  "artboards": [
+    { "file": "Foundations.dc.html", "title": "Foundations — colour, type, metrics", "page": "page-1", "x": 0, "y": 0, "w": 1280, "h": 1720 },
+    { "file": "Components.dc.html", "title": "Components — every primitive", "page": "page-1", "x": 1400, "y": 0, "w": 1280, "h": 1500 },
+
+    { "file": "Main.dc.html", "title": "App shell — desktop 1440×900", "page": "page-2", "x": 0, "y": 0, "w": 1440, "h": 900 },
+    { "file": "Phone.dc.html", "title": "Phone — 390×844", "page": "page-2", "x": 1560, "y": 0, "w": 390, "h": 844 },
+    { "file": "JobCard.dc.html", "title": "Job card — every state", "page": "page-2", "x": 0, "y": 1030, "w": 1180, "h": 1430 }
+  ],
+  "annotations": [
+    {
+      "id": "note-how",
+      "x": 0,
+      "y": -230,
+      "w": 620,
+      "text": "Start here. Foundations is the document: every colour token in both themes with what it means, the type ramp, the metrics, and the rules that are load-bearing rather than decorative.\n\nComponents is the inventory — assemble new UI from these before inventing anything.\n\nEverything here is at its real shipped value, lifted from index.html rather than remembered."
+    },
+    {
+      "id": "note-rules",
+      "x": 1400,
+      "y": -230,
+      "w": 620,
+      "text": "Three rules worth not breaking:\n\n1. Green is the primary action AND a posted role. Two greens side by side means the hierarchy has not been decided yet.\n\n2. Reachability is always grey. It is a second axis, not a verdict — the moment it takes a hue it starts competing with the channel colours.\n\n3. Mono type means a machine fact: a score, a date, a count. If a person wrote it, it is not mono."
+    },
+    {
+      "id": "note-screens",
+      "x": 0,
+      "y": -230,
+      "w": 560,
+      "page": "page-2",
+      "text": "The shipped screens, repainted to the current palette.\n\nThe five-tab \"before\" artboard that used to sit here has been deleted — it documented a shell that no longer exists, and a before-and-after where the before is gone is a museum piece rather than a design."
+    },
+    {
+      "id": "note-contrast",
+      "x": 1240,
+      "y": 1030,
+      "w": 440,
+      "page": "page-2",
+      "text": "Every foreground/background pair in both themes is at or above 4.5:1.\n\nWorth knowing why that is stated rather than assumed: the light theme's green was 3.49:1 on the first pass — under AA for 13px bold, on the primary button of every card. It was measured, not eyeballed, and had to be darkened to #157F42."
+    }
+  ],
+  "launch": { "view": "canvas", "page": "page-1" }
+}

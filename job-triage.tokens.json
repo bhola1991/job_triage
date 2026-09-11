@@ -1,0 +1,545 @@
+{
+  "global": {
+    "font": {
+      "display": {
+        "value": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        "type": "fontFamilies",
+        "description": "Everything a person reads"
+      },
+      "mono": {
+        "value": "ui-monospace, 'Cascadia Mono', Consolas, monospace",
+        "type": "fontFamilies",
+        "description": "Machine facts only: scores, dates, counts. If a human wrote it, it is not mono"
+      }
+    },
+    "size": {
+      "stat": {
+        "value": "24",
+        "type": "fontSizes",
+        "description": "Stat figure, card rank"
+      },
+      "h1": {
+        "value": "19",
+        "type": "fontSizes",
+        "description": "Page title, open card title"
+      },
+      "title": {
+        "value": "15",
+        "type": "fontSizes",
+        "description": "Card title, section heading"
+      },
+      "body": {
+        "value": "14",
+        "type": "fontSizes",
+        "description": "Base"
+      },
+      "control": {
+        "value": "13",
+        "type": "fontSizes",
+        "description": "Buttons, tabs"
+      },
+      "secondary": {
+        "value": "12",
+        "type": "fontSizes",
+        "description": "Sub-text, meta"
+      },
+      "hint": {
+        "value": "11",
+        "type": "fontSizes",
+        "description": "Explanatory hint"
+      },
+      "eyebrow": {
+        "value": "10",
+        "type": "fontSizes",
+        "description": "Mono, .14em tracking, uppercase"
+      },
+      "pill": {
+        "value": "9.5",
+        "type": "fontSizes",
+        "description": "Stage, channel, flag. Mono, .08em"
+      }
+    },
+    "radius": {
+      "chip": {
+        "value": "2",
+        "type": "borderRadius"
+      },
+      "card": {
+        "value": "3",
+        "type": "borderRadius"
+      },
+      "panel": {
+        "value": "4",
+        "type": "borderRadius"
+      },
+      "button": {
+        "value": "5",
+        "type": "borderRadius"
+      },
+      "banner": {
+        "value": "6",
+        "type": "borderRadius"
+      }
+    },
+    "space": {
+      "cardGap": {
+        "value": "9",
+        "type": "spacing",
+        "description": "Between job cards"
+      },
+      "rowGap": {
+        "value": "7",
+        "type": "spacing",
+        "description": "Button row"
+      },
+      "pad": {
+        "value": "18",
+        "type": "spacing",
+        "description": "Card and sidebar padding"
+      },
+      "block": {
+        "value": "22",
+        "type": "spacing",
+        "description": "Between sidebar blocks"
+      },
+      "section": {
+        "value": "26",
+        "type": "spacing",
+        "description": "Between list sections"
+      },
+      "sidebar": {
+        "value": "288",
+        "type": "sizing",
+        "description": "Sidebar column"
+      },
+      "touch": {
+        "value": "44",
+        "type": "sizing",
+        "description": "Minimum target below 900px"
+      }
+    }
+  },
+  "dark": {
+    "color": {
+      "ink": {
+        "value": "#0E1411",
+        "type": "color",
+        "description": "Page ground"
+      },
+      "panel": {
+        "value": "#151D18",
+        "type": "color",
+        "description": "Cards, sidebar, sheets"
+      },
+      "panel2": {
+        "value": "#1C2620",
+        "type": "color",
+        "description": "Inset surfaces and open detail panels"
+      },
+      "line": {
+        "value": "#29372F",
+        "type": "color",
+        "description": "Every border"
+      },
+      "text": {
+        "value": "#E9F0EB",
+        "type": "color",
+        "description": "Body text"
+      },
+      "muted": {
+        "value": "#8B9C92",
+        "type": "color",
+        "description": "Secondary text"
+      },
+      "dim": {
+        "value": "#798B81",
+        "type": "color",
+        "description": "Hints and eyebrow labels"
+      },
+      "signal": {
+        "value": "#56C88A",
+        "type": "color",
+        "description": "The primary action, and a posted role"
+      },
+      "signal-hi": {
+        "value": "#6FD79D",
+        "type": "color",
+        "description": "Primary hover"
+      },
+      "on-signal": {
+        "value": "#08150E",
+        "type": "color",
+        "description": "Text on a green fill"
+      },
+      "cool": {
+        "value": "#4FB58C",
+        "type": "color",
+        "description": "Links and the focus ring"
+      },
+      "warn": {
+        "value": "#E2685C",
+        "type": "color",
+        "description": "Overdue, destructive, wrong"
+      },
+      "warn-line": {
+        "value": "#5A2E2A",
+        "type": "color",
+        "description": "Border for warn chips"
+      },
+      "good": {
+        "value": "#6FD79D",
+        "type": "color",
+        "description": "Success and positive facts"
+      },
+      "good-line": {
+        "value": "#2C5540",
+        "type": "color",
+        "description": "Border for good chips"
+      },
+      "posted": {
+        "value": "#56C88A",
+        "type": "color",
+        "description": "Posted-role channel"
+      },
+      "posted-dim": {
+        "value": "#1F3A2A",
+        "type": "color",
+        "description": "Posted channel chip fill"
+      },
+      "cold": {
+        "value": "#A9BCB1",
+        "type": "color",
+        "description": "Cold-approach channel: desaturated, nobody has answered"
+      },
+      "cold-dim": {
+        "value": "#23302A",
+        "type": "color",
+        "description": "Cold channel chip fill"
+      },
+      "neutral": {
+        "value": "#86988D",
+        "type": "color",
+        "description": "Reachability. Deliberately grey: a second axis, not a verdict"
+      },
+      "neutral-line": {
+        "value": "#364339",
+        "type": "color",
+        "description": "Border for the sent stage"
+      },
+      "live": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "In conversation: the brightest thing on screen"
+      },
+      "live-line": {
+        "value": "#4A5A50",
+        "type": "color",
+        "description": "Border for the live stage"
+      },
+      "stale-line": {
+        "value": "#232E28",
+        "type": "color",
+        "description": "Border for an old posting"
+      },
+      "glow1": {
+        "value": "rgba(86,200,138,.07)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "glow2": {
+        "value": "rgba(233,240,235,.04)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-tint": {
+        "value": "rgba(86,200,138,.12)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-tint2": {
+        "value": "rgba(86,200,138,.03)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-glow": {
+        "value": "rgba(86,200,138,.28)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "good-tint": {
+        "value": "rgba(111,215,157,.10)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "warn-tint": {
+        "value": "rgba(226,104,92,.13)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "warn-chip": {
+        "value": "#4A2622",
+        "type": "color",
+        "description": "Overdue tab-count fill"
+      },
+      "live-tint": {
+        "value": "rgba(255,255,255,.07)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "plot-fade": {
+        "value": "#3A4A41",
+        "type": "color",
+        "description": "Out-of-selection dots on the map"
+      },
+      "veil": {
+        "value": "rgba(6,11,8,.82)",
+        "type": "color",
+        "description": "Modal backdrop"
+      },
+      "veil-lite": {
+        "value": "rgba(6,11,8,.6)",
+        "type": "color",
+        "description": "Sheet scrim"
+      },
+      "shadow": {
+        "value": "0 1px 2px rgba(0,0,0,.25)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-md": {
+        "value": "0 10px 30px rgba(0,0,0,.5)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-lg": {
+        "value": "0 20px 60px rgba(0,0,0,.5)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      }
+    }
+  },
+  "light": {
+    "color": {
+      "ink": {
+        "value": "#F6F9F7",
+        "type": "color",
+        "description": "Page ground"
+      },
+      "panel": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Cards, sidebar, sheets"
+      },
+      "panel2": {
+        "value": "#EDF3EF",
+        "type": "color",
+        "description": "Inset surfaces and open detail panels"
+      },
+      "line": {
+        "value": "#D3DFD8",
+        "type": "color",
+        "description": "Every border"
+      },
+      "text": {
+        "value": "#131C17",
+        "type": "color",
+        "description": "Body text"
+      },
+      "muted": {
+        "value": "#56675D",
+        "type": "color",
+        "description": "Secondary text"
+      },
+      "dim": {
+        "value": "#63736A",
+        "type": "color",
+        "description": "Hints and eyebrow labels"
+      },
+      "signal": {
+        "value": "#157F42",
+        "type": "color",
+        "description": "The primary action, and a posted role"
+      },
+      "signal-hi": {
+        "value": "#0F6635",
+        "type": "color",
+        "description": "Primary hover"
+      },
+      "on-signal": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Text on a green fill"
+      },
+      "cool": {
+        "value": "#177A47",
+        "type": "color",
+        "description": "Links and the focus ring"
+      },
+      "warn": {
+        "value": "#C33B2E",
+        "type": "color",
+        "description": "Overdue, destructive, wrong"
+      },
+      "warn-line": {
+        "value": "#EEBAB4",
+        "type": "color",
+        "description": "Border for warn chips"
+      },
+      "good": {
+        "value": "#157F42",
+        "type": "color",
+        "description": "Success and positive facts"
+      },
+      "good-line": {
+        "value": "#A8D8BC",
+        "type": "color",
+        "description": "Border for good chips"
+      },
+      "posted": {
+        "value": "#157F42",
+        "type": "color",
+        "description": "Posted-role channel"
+      },
+      "posted-dim": {
+        "value": "#DCF0E4",
+        "type": "color",
+        "description": "Posted channel chip fill"
+      },
+      "cold": {
+        "value": "#55665C",
+        "type": "color",
+        "description": "Cold-approach channel: desaturated, nobody has answered"
+      },
+      "cold-dim": {
+        "value": "#E6EDE8",
+        "type": "color",
+        "description": "Cold channel chip fill"
+      },
+      "neutral": {
+        "value": "#65756B",
+        "type": "color",
+        "description": "Reachability. Deliberately grey: a second axis, not a verdict"
+      },
+      "neutral-line": {
+        "value": "#C6D3CB",
+        "type": "color",
+        "description": "Border for the sent stage"
+      },
+      "live": {
+        "value": "#0B3D22",
+        "type": "color",
+        "description": "In conversation: the brightest thing on screen"
+      },
+      "live-line": {
+        "value": "#A8D8BC",
+        "type": "color",
+        "description": "Border for the live stage"
+      },
+      "stale-line": {
+        "value": "#E2E9E4",
+        "type": "color",
+        "description": "Border for an old posting"
+      },
+      "glow1": {
+        "value": "rgba(21,127,66,.07)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "glow2": {
+        "value": "rgba(19,28,23,.03)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-tint": {
+        "value": "rgba(21,127,66,.11)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-tint2": {
+        "value": "rgba(21,127,66,.03)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "signal-glow": {
+        "value": "rgba(21,127,66,.24)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "good-tint": {
+        "value": "rgba(21,127,66,.10)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "warn-tint": {
+        "value": "rgba(195,59,46,.10)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "warn-chip": {
+        "value": "#FBE4E1",
+        "type": "color",
+        "description": "Overdue tab-count fill"
+      },
+      "live-tint": {
+        "value": "rgba(11,61,34,.07)",
+        "type": "color",
+        "description": "Tint or wash"
+      },
+      "plot-fade": {
+        "value": "#B4C4BA",
+        "type": "color",
+        "description": "Out-of-selection dots on the map"
+      },
+      "veil": {
+        "value": "rgba(19,28,23,.42)",
+        "type": "color",
+        "description": "Modal backdrop"
+      },
+      "veil-lite": {
+        "value": "rgba(19,28,23,.3)",
+        "type": "color",
+        "description": "Sheet scrim"
+      },
+      "shadow": {
+        "value": "0 1px 2px rgba(19,28,23,.06)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-md": {
+        "value": "0 8px 24px rgba(19,28,23,.12)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-lg": {
+        "value": "0 18px 50px rgba(19,28,23,.18)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      }
+    }
+  },
+  "$themes": [
+    {
+      "id": "dark",
+      "name": "Dark",
+      "selectedTokenSets": {
+        "global": "source",
+        "dark": "enabled"
+      }
+    },
+    {
+      "id": "light",
+      "name": "Light",
+      "selectedTokenSets": {
+        "global": "source",
+        "light": "enabled"
+      }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": [
+      "global",
+      "dark",
+      "light"
+    ]
+  }
+}

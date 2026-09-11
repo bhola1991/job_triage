@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#0B100D;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#E9F0EB}
+a{color:#4FB58C;text-decoration:none}a:hover{color:#6FD79D}
+.m{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.eb{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.wheel{container-type:inline-size}
+.sw{--r:38.2cqw;position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px 0 0 -26px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:ui-monospace,Consolas,monospace;font-size:12px;font-weight:700;color:#0B100D;border:2px solid #0B100D;cursor:default}
+.cur{display:grid;grid-template-columns:44px 1fr 78px 92px;gap:0 14px;align-items:center;padding:12px 0;border-bottom:1px solid #1E2A24}
+</style></helmet>
+
+<div style="padding:36px 40px 46px;max-width:1180px;">
+
+<div style="font-size:21px;font-weight:500;letter-spacing:-.01em;">Pick the accents</div>
+<div style="font-size:13px;color:#8B9C92;margin-top:6px;max-width:64ch;line-height:1.55;text-wrap:pretty;">Every swatch on the wheel is the same lightness and chroma, so whichever four or five you name will sit at the same weight against the app&rsquo;s near-black ground. Call them by number.</div>
+
+<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(520px,100%),1fr));gap:44px;margin-top:32px;align-items:start;">
+
+<div class="wheel" style="position:relative;width:100%;max-width:560px;aspect-ratio:1;justify-self:start;">
+  <div style="position:absolute;inset:60px;border-radius:50%;background:conic-gradient(oklch(.75 .15 0),oklch(.75 .15 30),oklch(.75 .15 60),oklch(.75 .15 90),oklch(.75 .15 120),oklch(.75 .15 150),oklch(.75 .15 180),oklch(.75 .15 210),oklch(.75 .15 240),oklch(.75 .15 270),oklch(.75 .15 300),oklch(.75 .15 330),oklch(.75 .15 360));-webkit-mask:radial-gradient(circle,transparent 56%,#000 57%);mask:radial-gradient(circle,transparent 56%,#000 57%);opacity:.34;"></div>
+
+  <div style="position:absolute;left:50%;top:50%;width:232px;height:232px;margin:-116px 0 0 -116px;border-radius:50%;border:1px solid #29372F;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;text-align:center;padding:0 30px;">
+    <div class="eb" style="color:#798B81;">the ground</div>
+    <div class="m" style="font-size:15px;color:#E9F0EB;">#0E1411</div>
+    <div style="font-size:11.5px;color:#798B81;line-height:1.5;margin-top:4px;text-wrap:pretty;">Everything you pick is read against this.</div>
+  </div>
+
+  <div class="sw" style="background:oklch(.75 .15 0);transform:rotate(0deg) translate(var(--r)) rotate(0deg);">1</div>
+  <div class="sw" style="background:oklch(.75 .15 15);transform:rotate(15deg) translate(var(--r)) rotate(-15deg);">2</div>
+  <div class="sw" style="background:oklch(.75 .15 30);transform:rotate(30deg) translate(var(--r)) rotate(-30deg);">3</div>
+  <div class="sw" style="background:oklch(.75 .15 45);transform:rotate(45deg) translate(var(--r)) rotate(-45deg);">4</div>
+  <div class="sw" style="background:oklch(.75 .15 60);transform:rotate(60deg) translate(var(--r)) rotate(-60deg);">5</div>
+  <div class="sw" style="background:oklch(.75 .15 75);transform:rotate(75deg) translate(var(--r)) rotate(-75deg);">6</div>
+  <div class="sw" style="background:oklch(.75 .15 90);transform:rotate(90deg) translate(var(--r)) rotate(-90deg);">7</div>
+  <div class="sw" style="background:oklch(.75 .15 105);transform:rotate(105deg) translate(var(--r)) rotate(-105deg);">8</div>
+  <div class="sw" style="background:oklch(.75 .15 120);transform:rotate(120deg) translate(var(--r)) rotate(-120deg);">9</div>
+  <div class="sw" style="background:oklch(.75 .15 135);transform:rotate(135deg) translate(var(--r)) rotate(-135deg);">10</div>
+  <div class="sw" style="background:oklch(.75 .15 150);transform:rotate(150deg) translate(var(--r)) rotate(-150deg);">11</div>
+  <div class="sw" style="background:oklch(.75 .15 165);transform:rotate(165deg) translate(var(--r)) rotate(-165deg);">12</div>
+  <div class="sw" style="background:oklch(.75 .15 180);transform:rotate(180deg) translate(var(--r)) rotate(-180deg);">13</div>
+  <div class="sw" style="background:oklch(.75 .15 195);transform:rotate(195deg) translate(var(--r)) rotate(-195deg);">14</div>
+  <div class="sw" style="background:oklch(.75 .15 210);transform:rotate(210deg) translate(var(--r)) rotate(-210deg);">15</div>
+  <div class="sw" style="background:oklch(.75 .15 225);transform:rotate(225deg) translate(var(--r)) rotate(-225deg);">16</div>
+  <div class="sw" style="background:oklch(.75 .15 240);transform:rotate(240deg) translate(var(--r)) rotate(-240deg);">17</div>
+  <div class="sw" style="background:oklch(.75 .15 255);transform:rotate(255deg) translate(var(--r)) rotate(-255deg);">18</div>
+  <div class="sw" style="background:oklch(.75 .15 270);transform:rotate(270deg) translate(var(--r)) rotate(-270deg);">19</div>
+  <div class="sw" style="background:oklch(.75 .15 285);transform:rotate(285deg) translate(var(--r)) rotate(-285deg);">20</div>
+  <div class="sw" style="background:oklch(.75 .15 300);transform:rotate(300deg) translate(var(--r)) rotate(-300deg);">21</div>
+  <div class="sw" style="background:oklch(.75 .15 315);transform:rotate(315deg) translate(var(--r)) rotate(-315deg);">22</div>
+  <div class="sw" style="background:oklch(.75 .15 330);transform:rotate(330deg) translate(var(--r)) rotate(-330deg);">23</div>
+  <div class="sw" style="background:oklch(.75 .15 345);transform:rotate(345deg) translate(var(--r)) rotate(-345deg);">24</div>
+</div>
+
+<div style="padding-top:8px;">
+
+  <div class="eb" style="color:#798B81;padding-bottom:9px;border-bottom:1px solid #29372F;">Where the current four sit</div>
+  <div class="cur"><i style="width:28px;height:28px;border-radius:50%;background:#56C88A;"></i><div><div style="font-size:13px;">Do this now</div><div style="font-size:11.5px;color:#798B81;margin-top:2px;">nearest 11 &ndash; 12</div></div><span class="m" style="font-size:12px;color:#8B9C92;">#56C88A</span><span class="m" style="font-size:11px;color:#798B81;text-align:right;">hue 158</span></div>
+  <div class="cur"><i style="width:28px;height:28px;border-radius:50%;background:#E2685C;"></i><div><div style="font-size:13px;">Overdue</div><div style="font-size:11.5px;color:#798B81;margin-top:2px;">nearest 2 &ndash; 3</div></div><span class="m" style="font-size:12px;color:#8B9C92;">#E2685C</span><span class="m" style="font-size:11px;color:#798B81;text-align:right;">hue 28</span></div>
+  <div class="cur"><i style="width:28px;height:28px;border-radius:50%;background:#D9A441;"></i><div><div style="font-size:13px;">Closing</div><div style="font-size:11.5px;color:#798B81;margin-top:2px;">nearest 6</div></div><span class="m" style="font-size:12px;color:#8B9C92;">#D9A441</span><span class="m" style="font-size:11px;color:#798B81;text-align:right;">hue 81</span></div>
+  <div class="cur" style="border-bottom:1px solid #29372F;"><i style="width:28px;height:28px;border-radius:50%;background:#57AEC9;"></i><div><div style="font-size:13px;">Awaiting</div><div style="font-size:11.5px;color:#798B81;margin-top:2px;">nearest 16</div></div><span class="m" style="font-size:12px;color:#8B9C92;">#57AEC9</span><span class="m" style="font-size:11px;color:#798B81;text-align:right;">hue 228</span></div>
+
+  <div style="font-size:12px;color:#8B9C92;line-height:1.6;margin-top:18px;text-wrap:pretty;">They cluster: green, amber and red are all inside a third of the wheel, which is why the app reads as fewer colours than it has. Spreading the picks further apart around the ring is most of the fix.</div>
+
+  <div class="eb" style="color:#798B81;margin-top:30px;padding-bottom:9px;border-bottom:1px solid #29372F;">The roles to fill</div>
+  <div style="display:flex;flex-direction:column;">
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #1E2A24;"><span style="font-size:12.5px;">Do this now</span><span style="font-size:11.5px;color:#798B81;text-align:right;">the only filled button</span></div>
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #1E2A24;"><span style="font-size:12.5px;">Overdue</span><span style="font-size:11.5px;color:#798B81;text-align:right;">past the follow-up date</span></div>
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #1E2A24;"><span style="font-size:12.5px;">Closing</span><span style="font-size:11.5px;color:#798B81;text-align:right;">posting about to be filled</span></div>
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;border-bottom:1px solid #1E2A24;"><span style="font-size:12.5px;">Awaiting</span><span style="font-size:11.5px;color:#798B81;text-align:right;">sent, their move</span></div>
+    <div style="display:flex;justify-content:space-between;gap:14px;padding:10px 0;"><span style="font-size:12.5px;color:#8B9C92;">In conversation <span style="color:#798B81;">(optional fifth)</span></span><span style="font-size:11.5px;color:#798B81;text-align:right;">a live thread, the best state</span></div>
+  </div>
+
+  <div style="font-size:12px;color:#8B9C92;line-height:1.6;margin-top:18px;text-wrap:pretty;">Name them in that order &mdash; e.g. <span class="m" style="color:#E9F0EB;">11, 2, 6, 17, 21</span> &mdash; or just list the numbers you like and I will assign the roles.</div>
+
+</div>
+</div>
+
+<div style="margin-top:40px;">
+  <div class="eb" style="color:#798B81;padding-bottom:9px;border-bottom:1px solid #29372F;">Every swatch on the ground, at row scale</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(min(116px,100%),1fr));gap:0;margin-top:14px;background:#0E1411;">
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 0);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">1</span><span class="m" style="font-size:12px;color:oklch(.75 .15 0);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 15);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">2</span><span class="m" style="font-size:12px;color:oklch(.75 .15 15);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 30);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">3</span><span class="m" style="font-size:12px;color:oklch(.75 .15 30);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 45);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">4</span><span class="m" style="font-size:12px;color:oklch(.75 .15 45);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 60);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">5</span><span class="m" style="font-size:12px;color:oklch(.75 .15 60);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 75);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">6</span><span class="m" style="font-size:12px;color:oklch(.75 .15 75);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 90);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">7</span><span class="m" style="font-size:12px;color:oklch(.75 .15 90);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 0 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 105);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">8</span><span class="m" style="font-size:12px;color:oklch(.75 .15 105);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 120);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">9</span><span class="m" style="font-size:12px;color:oklch(.75 .15 120);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 135);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">10</span><span class="m" style="font-size:12px;color:oklch(.75 .15 135);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 150);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">11</span><span class="m" style="font-size:12px;color:oklch(.75 .15 150);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 165);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">12</span><span class="m" style="font-size:12px;color:oklch(.75 .15 165);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 180);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">13</span><span class="m" style="font-size:12px;color:oklch(.75 .15 180);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 195);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">14</span><span class="m" style="font-size:12px;color:oklch(.75 .15 195);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 210);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">15</span><span class="m" style="font-size:12px;color:oklch(.75 .15 210);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 0 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 225);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">16</span><span class="m" style="font-size:12px;color:oklch(.75 .15 225);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 240);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">17</span><span class="m" style="font-size:12px;color:oklch(.75 .15 240);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 255);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">18</span><span class="m" style="font-size:12px;color:oklch(.75 .15 255);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 270);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">19</span><span class="m" style="font-size:12px;color:oklch(.75 .15 270);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 285);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">20</span><span class="m" style="font-size:12px;color:oklch(.75 .15 285);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 300);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">21</span><span class="m" style="font-size:12px;color:oklch(.75 .15 300);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 315);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">22</span><span class="m" style="font-size:12px;color:oklch(.75 .15 315);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 12px 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 330);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">23</span><span class="m" style="font-size:12px;color:oklch(.75 .15 330);">72 apply</span></div>
+    <div style="display:grid;grid-template-columns:3px 24px 1fr;gap:0 9px;align-items:center;padding:11px 0 11px 0;border-bottom:1px solid #1E2A24;"><i style="background:oklch(.75 .15 345);height:22px;"></i><span class="m" style="font-size:11px;color:#798B81;">24</span><span class="m" style="font-size:12px;color:oklch(.75 .15 345);">72 apply</span></div>
+  </div>
+</div>
+
+</div>
+</x-dc>
+</body>
+</html>

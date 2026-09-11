@@ -1,0 +1,183 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { background: #0E1411; }
+    body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+           font-size: 14px; line-height: 1.5; color: #E9F0EB; }
+    a { color: #4FB58C; text-decoration: none; } a:hover { color: #6FD79D; }
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+    .eyebrow { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 10px;
+               letter-spacing: .14em; text-transform: uppercase; color: #798B81; display: block; }
+    h2 { font-size: 17px; font-weight: 500; letter-spacing: -.01em; margin: 0 0 4px; }
+    .say { color: #8B9C92; font-size: 13px; margin: 0 0 16px; max-width: 82ch; text-wrap: pretty; }
+    .card { background: #151D18; border: 1px solid #29372F; border-radius: 4px; padding: 18px; }
+    .sw { display: flex; align-items: center; gap: 11px; padding: 7px 0; }
+    .chip20 { width: 34px; height: 26px; border-radius: 3px; border: 1px solid #29372F; flex-shrink: 0; }
+    .nm { font-family: ui-monospace, Consolas, monospace; font-size: 12px; width: 132px; flex-shrink: 0; }
+    .hx { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #8B9C92; width: 78px; flex-shrink: 0; }
+    .use { font-size: 12px; color: #8B9C92; }
+    .col2 { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; }
+    .sect { margin-bottom: 34px; }
+  </style>
+</helmet>
+
+<div style="width: 1280px; padding: 30px 34px 40px;">
+
+  <span class="eyebrow">Job Triage &middot; design system</span>
+  <h2 style="font-size: 24px; margin: 8px 0 6px;">Foundations</h2>
+  <p class="say" style="font-size: 14px;">Green, red and white. Every colour in the app resolves through a name below, so the two themes are one design at two lightnesses rather than two designs. Nothing outside the two token blocks hardcodes a colour &mdash; if you are adding UI, take a token or add one here first.</p>
+
+  <!-- ── semantics ── -->
+  <div class="sect">
+    <span class="eyebrow">What the colours mean</span>
+    <h2 style="margin-top: 6px;">Three hues, four jobs</h2>
+    <p class="say">The palette carries meaning, not decoration. Before picking a colour, decide which of these you are saying.</p>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;">
+      <div class="card" style="border-left: 3px solid #56C88A;">
+        <div class="mono" style="font-size: 11px; color: #56C88A; letter-spacing: .08em;">GREEN</div>
+        <div style="font-size: 13px; margin-top: 7px;">The primary action, and a posted role. The ordinary good thing.</div>
+      </div>
+      <div class="card" style="border-left: 3px solid #E2685C;">
+        <div class="mono" style="font-size: 11px; color: #E2685C; letter-spacing: .08em;">RED</div>
+        <div style="font-size: 13px; margin-top: 7px;">Overdue, destructive, wrong. The only colour permitted to interrupt.</div>
+      </div>
+      <div class="card" style="border-left: 3px solid #A9BCB1;">
+        <div class="mono" style="font-size: 11px; color: #A9BCB1; letter-spacing: .08em;">DESATURATED</div>
+        <div style="font-size: 13px; margin-top: 7px;">A cold approach. Nobody has answered yet, so it is cool and quiet.</div>
+      </div>
+      <div class="card" style="border-left: 3px solid #FFFFFF;">
+        <div class="mono" style="font-size: 11px; color: #FFFFFF; letter-spacing: .08em;">WHITE</div>
+        <div style="font-size: 13px; margin-top: 7px;">A live conversation. Somebody is there, so it is the brightest thing on screen.</div>
+      </div>
+    </div>
+    <p class="say" style="margin-top: 14px;"><b style="color:#E9F0EB">Temperature is encoded as lightness</b>, and that reading inverts under the light theme: <span class="mono" style="font-size:12px">--live</span> becomes the deepest green on a white page rather than the palest tone. <b style="color:#E9F0EB">Reachability stays grey on purpose</b> &mdash; it is a second axis, not a verdict, and must never compete with the channel colours for attention.</p>
+  </div>
+
+  <!-- ── colour tokens ── -->
+  <div class="sect">
+    <span class="eyebrow">Colour</span>
+    <h2 style="margin-top: 6px;">Every token, both themes</h2>
+    <p class="say">Left is the default (dark). Right is <span class="mono" style="font-size:12px">:root[data-theme="light"]</span>. Every foreground/background pair here is at or above 4.5:1 &mdash; the light theme's green was 3.49:1 on a first pass and had to be darkened, because it carries white text on the primary button at 13px bold.</p>
+    <div class="col2">
+      <div>
+        <div class="mono" style="font-size: 11px; color: #56C88A; margin-bottom: 8px;">DARK &middot; default</div>
+        <div class="card">
+          <div class="sw"><span class="chip20" style="background:#0E1411"></span><span class="nm">--ink</span><span class="hx">#0E1411</span><span class="use">page ground</span></div>
+          <div class="sw"><span class="chip20" style="background:#151D18"></span><span class="nm">--panel</span><span class="hx">#151D18</span><span class="use">cards, sidebar</span></div>
+          <div class="sw"><span class="chip20" style="background:#1C2620"></span><span class="nm">--panel2</span><span class="hx">#1C2620</span><span class="use">inset, open panel</span></div>
+          <div class="sw"><span class="chip20" style="background:#29372F"></span><span class="nm">--line</span><span class="hx">#29372F</span><span class="use">every border</span></div>
+          <div class="sw"><span class="chip20" style="background:#E9F0EB"></span><span class="nm">--text</span><span class="hx">#E9F0EB</span><span class="use">body</span></div>
+          <div class="sw"><span class="chip20" style="background:#8B9C92"></span><span class="nm">--muted</span><span class="hx">#8B9C92</span><span class="use">secondary</span></div>
+          <div class="sw"><span class="chip20" style="background:#798B81"></span><span class="nm">--dim</span><span class="hx">#798B81</span><span class="use">hints, eyebrows</span></div>
+          <div class="sw"><span class="chip20" style="background:#56C88A"></span><span class="nm">--signal</span><span class="hx">#56C88A</span><span class="use">primary, posted</span></div>
+          <div class="sw"><span class="chip20" style="background:#6FD79D"></span><span class="nm">--signal-hi</span><span class="hx">#6FD79D</span><span class="use">its hover</span></div>
+          <div class="sw"><span class="chip20" style="background:#08150E"></span><span class="nm">--on-signal</span><span class="hx">#08150E</span><span class="use">text on green</span></div>
+          <div class="sw"><span class="chip20" style="background:#E2685C"></span><span class="nm">--warn</span><span class="hx">#E2685C</span><span class="use">overdue, danger</span></div>
+          <div class="sw"><span class="chip20" style="background:#A9BCB1"></span><span class="nm">--cold</span><span class="hx">#A9BCB1</span><span class="use">cold channel</span></div>
+          <div class="sw"><span class="chip20" style="background:#86988D"></span><span class="nm">--neutral</span><span class="hx">#86988D</span><span class="use">reachability</span></div>
+          <div class="sw"><span class="chip20" style="background:#FFFFFF"></span><span class="nm">--live</span><span class="hx">#FFFFFF</span><span class="use">in conversation</span></div>
+          <div class="sw"><span class="chip20" style="background:#4FB58C"></span><span class="nm">--cool</span><span class="hx">#4FB58C</span><span class="use">links, focus ring</span></div>
+        </div>
+      </div>
+      <div>
+        <div class="mono" style="font-size: 11px; color: #157F42; margin-bottom: 8px;">LIGHT &middot; [data-theme="light"]</div>
+        <div class="card" style="background:#FFFFFF;border-color:#D3DFD8;color:#131C17">
+          <div class="sw"><span class="chip20" style="background:#F6F9F7;border-color:#D3DFD8"></span><span class="nm">--ink</span><span class="hx" style="color:#56675D">#F6F9F7</span><span class="use" style="color:#56675D">page ground</span></div>
+          <div class="sw"><span class="chip20" style="background:#FFFFFF;border-color:#D3DFD8"></span><span class="nm">--panel</span><span class="hx" style="color:#56675D">#FFFFFF</span><span class="use" style="color:#56675D">cards, sidebar</span></div>
+          <div class="sw"><span class="chip20" style="background:#EDF3EF;border-color:#D3DFD8"></span><span class="nm">--panel2</span><span class="hx" style="color:#56675D">#EDF3EF</span><span class="use" style="color:#56675D">inset, open panel</span></div>
+          <div class="sw"><span class="chip20" style="background:#D3DFD8;border-color:#D3DFD8"></span><span class="nm">--line</span><span class="hx" style="color:#56675D">#D3DFD8</span><span class="use" style="color:#56675D">every border</span></div>
+          <div class="sw"><span class="chip20" style="background:#131C17;border-color:#D3DFD8"></span><span class="nm">--text</span><span class="hx" style="color:#56675D">#131C17</span><span class="use" style="color:#56675D">body</span></div>
+          <div class="sw"><span class="chip20" style="background:#56675D;border-color:#D3DFD8"></span><span class="nm">--muted</span><span class="hx" style="color:#56675D">#56675D</span><span class="use" style="color:#56675D">secondary</span></div>
+          <div class="sw"><span class="chip20" style="background:#63736A;border-color:#D3DFD8"></span><span class="nm">--dim</span><span class="hx" style="color:#56675D">#63736A</span><span class="use" style="color:#56675D">hints, eyebrows</span></div>
+          <div class="sw"><span class="chip20" style="background:#157F42;border-color:#D3DFD8"></span><span class="nm">--signal</span><span class="hx" style="color:#56675D">#157F42</span><span class="use" style="color:#56675D">primary, posted</span></div>
+          <div class="sw"><span class="chip20" style="background:#0F6635;border-color:#D3DFD8"></span><span class="nm">--signal-hi</span><span class="hx" style="color:#56675D">#0F6635</span><span class="use" style="color:#56675D">its hover</span></div>
+          <div class="sw"><span class="chip20" style="background:#FFFFFF;border-color:#D3DFD8"></span><span class="nm">--on-signal</span><span class="hx" style="color:#56675D">#FFFFFF</span><span class="use" style="color:#56675D">text on green</span></div>
+          <div class="sw"><span class="chip20" style="background:#C33B2E;border-color:#D3DFD8"></span><span class="nm">--warn</span><span class="hx" style="color:#56675D">#C33B2E</span><span class="use" style="color:#56675D">overdue, danger</span></div>
+          <div class="sw"><span class="chip20" style="background:#55665C;border-color:#D3DFD8"></span><span class="nm">--cold</span><span class="hx" style="color:#56675D">#55665C</span><span class="use" style="color:#56675D">cold channel</span></div>
+          <div class="sw"><span class="chip20" style="background:#65756B;border-color:#D3DFD8"></span><span class="nm">--neutral</span><span class="hx" style="color:#56675D">#65756B</span><span class="use" style="color:#56675D">reachability</span></div>
+          <div class="sw"><span class="chip20" style="background:#0B3D22;border-color:#D3DFD8"></span><span class="nm">--live</span><span class="hx" style="color:#56675D">#0B3D22</span><span class="use" style="color:#56675D">in conversation</span></div>
+          <div class="sw"><span class="chip20" style="background:#177A47;border-color:#D3DFD8"></span><span class="nm">--cool</span><span class="hx" style="color:#56675D">#177A47</span><span class="use" style="color:#56675D">links, focus ring</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── type ── -->
+  <div class="sect">
+    <span class="eyebrow">Type</span>
+    <h2 style="margin-top: 6px;">Two families, one ramp</h2>
+    <p class="say"><span class="mono" style="font-size:12px">--disp</span> is <span class="mono" style="font-size:12px">system-ui</span> for everything readable. <span class="mono" style="font-size:12px">--mono</span> is <span class="mono" style="font-size:12px">ui-monospace</span> and is reserved for <b style="color:#E9F0EB">numbers and machine facts</b> &mdash; scores, dates, counts, labels the app generated rather than a person wrote. That split is the strongest signal in the type system: if a human wrote it, it is not mono.</p>
+    <div class="card">
+      <div style="display: grid; grid-template-columns: 92px 108px 1fr; gap: 11px 16px; align-items: baseline;">
+        <span class="mono" style="font-size:11px;color:#798B81">24px / 500</span><span class="mono" style="font-size:11px;color:#798B81">stat, rank</span><span class="mono" style="font-size:24px;line-height:1;color:#56C88A">72</span>
+        <span class="mono" style="font-size:11px;color:#798B81">19px / 500</span><span class="mono" style="font-size:11px;color:#798B81">h1, open card</span><span style="font-size:19px;font-weight:500;letter-spacing:-.01em">Forward Deployed Engineer</span>
+        <span class="mono" style="font-size:11px;color:#798B81">15px / 500</span><span class="mono" style="font-size:11px;color:#798B81">card title, h3</span><span style="font-size:15px;font-weight:500">Do these first</span>
+        <span class="mono" style="font-size:11px;color:#798B81">14px / 400</span><span class="mono" style="font-size:11px;color:#798B81">body, base</span><span style="font-size:14px">The body size everything else is measured against.</span>
+        <span class="mono" style="font-size:11px;color:#798B81">13px / 400</span><span class="mono" style="font-size:11px;color:#798B81">buttons, tabs</span><span style="font-size:13px">Search the job boards</span>
+        <span class="mono" style="font-size:11px;color:#798B81">12px / 400</span><span class="mono" style="font-size:11px;color:#798B81">secondary, sub</span><span style="font-size:12px;color:#8B9C92">Sarvam AI &middot; Bangalore, India</span>
+        <span class="mono" style="font-size:11px;color:#798B81">11px / 400</span><span class="mono" style="font-size:11px;color:#798B81">hint</span><span style="font-size:11px;color:#798B81;line-height:1.45">Narrows the big portals to this place, and to anything remote.</span>
+        <span class="mono" style="font-size:11px;color:#798B81">10px / .14em</span><span class="mono" style="font-size:11px;color:#798B81">eyebrow, mono</span><span class="eyebrow">Find work</span>
+        <span class="mono" style="font-size:11px;color:#798B81">9.5px / .08em</span><span class="mono" style="font-size:11px;color:#798B81">stage, chip, flag</span><span class="mono" style="font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid #29372F;color:#8B9C92">new</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── metrics ── -->
+  <div class="sect">
+    <span class="eyebrow">Metrics</span>
+    <h2 style="margin-top: 6px;">Radii, borders, spacing, shadow</h2>
+    <p class="say">Small radii and 1px borders throughout &mdash; this is a dense working tool, not a marketing page. Nothing is rounded past 6px, and no border is thicker than 1px except a card's left accent, which is carrying meaning.</p>
+    <div class="col2">
+      <div class="card">
+        <span class="eyebrow" style="margin-bottom:10px">Radius</span>
+        <div style="display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap">
+          <div style="text-align:center"><div style="width:52px;height:38px;background:#1C2620;border:1px solid #29372F;border-radius:2px"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:5px">2px chip</div></div>
+          <div style="text-align:center"><div style="width:52px;height:38px;background:#1C2620;border:1px solid #29372F;border-radius:3px"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:5px">3px card</div></div>
+          <div style="text-align:center"><div style="width:52px;height:38px;background:#1C2620;border:1px solid #29372F;border-radius:4px"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:5px">4px panel</div></div>
+          <div style="text-align:center"><div style="width:52px;height:38px;background:#1C2620;border:1px solid #29372F;border-radius:5px"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:5px">5px button</div></div>
+          <div style="text-align:center"><div style="width:52px;height:38px;background:#1C2620;border:1px solid #29372F;border-radius:6px"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:5px">6px banner</div></div>
+        </div>
+        <span class="eyebrow" style="margin: 18px 0 10px">Shadow</span>
+        <div style="display:flex;gap:16px;flex-wrap:wrap">
+          <div style="text-align:center"><div style="width:74px;height:40px;background:#151D18;border:1px solid #29372F;border-radius:4px;box-shadow:0 1px 2px rgba(0,0,0,.25)"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:6px">--shadow</div></div>
+          <div style="text-align:center"><div style="width:74px;height:40px;background:#151D18;border:1px solid #29372F;border-radius:4px;box-shadow:0 10px 30px rgba(0,0,0,.5)"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:6px">--shadow-md</div></div>
+          <div style="text-align:center"><div style="width:74px;height:40px;background:#151D18;border:1px solid #29372F;border-radius:4px;box-shadow:0 20px 60px rgba(0,0,0,.5)"></div><div class="mono" style="font-size:10px;color:#798B81;margin-top:6px">--shadow-lg</div></div>
+        </div>
+      </div>
+      <div class="card">
+        <span class="eyebrow" style="margin-bottom:10px">Spacing in use</span>
+        <div style="display:grid;grid-template-columns:66px 1fr;gap:8px 14px;font-size:12.5px;color:#8B9C92">
+          <span class="mono" style="color:#E9F0EB">288px</span><span>sidebar column</span>
+          <span class="mono" style="color:#E9F0EB">18px</span><span>sidebar and card padding</span>
+          <span class="mono" style="color:#E9F0EB">13/15px</span><span>job card padding (18/20 when open)</span>
+          <span class="mono" style="color:#E9F0EB">22px</span><span>between sidebar blocks</span>
+          <span class="mono" style="color:#E9F0EB">26px</span><span>between list sections</span>
+          <span class="mono" style="color:#E9F0EB">9px</span><span>between job cards</span>
+          <span class="mono" style="color:#E9F0EB">7px</span><span>button row gap</span>
+          <span class="mono" style="color:#E9F0EB">44px</span><span>minimum touch target below 900px</span>
+          <span class="mono" style="color:#E9F0EB">900px</span><span>breakpoint: sidebar becomes a sheet</span>
+          <span class="mono" style="color:#E9F0EB">560px</span><span>breakpoint: card score stacks</span>
+        </div>
+        <span class="eyebrow" style="margin: 18px 0 10px">Rules worth keeping</span>
+        <ul style="margin:0;padding-left:17px;font-size:12.5px;color:#8B9C92;line-height:1.65">
+          <li>Group siblings with <span class="mono" style="font-size:11.5px">flex</span> + <span class="mono" style="font-size:11.5px">gap</span>, never margins or source whitespace.</li>
+          <li>Numbers are <span class="mono" style="font-size:11.5px">--mono</span> with <span class="mono" style="font-size:11.5px">tabular-nums</span>, so columns of them line up.</li>
+          <li>Motion is one 0.45s rise on entry; everything else is 0.12&ndash;0.22s. All of it is off under <span class="mono" style="font-size:11.5px">prefers-reduced-motion</span>.</li>
+          <li>No emoji. Icons are inline SVG, stroke-based, on a 24px grid.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+</div>
+</x-dc>
+</body>
+</html>

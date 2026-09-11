@@ -1,0 +1,425 @@
+{
+  "global": {
+    "font": {
+      "display": {
+        "value": "system-ui, -apple-system, 'Segoe UI', sans-serif",
+        "type": "fontFamilies",
+        "description": "Everything a person reads"
+      },
+      "mono": {
+        "value": "ui-monospace, 'Cascadia Mono', Consolas, monospace",
+        "type": "fontFamilies",
+        "description": "Machine facts only: scores, dates, counts. If a human wrote it, it is not mono"
+      }
+    },
+    "size": {
+      "stat": {
+        "value": "24",
+        "type": "fontSizes",
+        "description": "Stat figure, card rank"
+      },
+      "h1": {
+        "value": "19",
+        "type": "fontSizes",
+        "description": "Page title, open card title"
+      },
+      "title": {
+        "value": "15",
+        "type": "fontSizes",
+        "description": "Card title, section heading"
+      },
+      "body": {
+        "value": "14",
+        "type": "fontSizes",
+        "description": "Base"
+      },
+      "control": {
+        "value": "13",
+        "type": "fontSizes",
+        "description": "Buttons, tabs"
+      },
+      "secondary": {
+        "value": "12",
+        "type": "fontSizes",
+        "description": "Sub-text, meta"
+      },
+      "hint": {
+        "value": "11",
+        "type": "fontSizes",
+        "description": "Explanatory hint"
+      },
+      "eyebrow": {
+        "value": "10",
+        "type": "fontSizes",
+        "description": "Mono, .14em tracking, uppercase"
+      },
+      "pill": {
+        "value": "9.5",
+        "type": "fontSizes",
+        "description": "Stage, channel, flag. Mono, .08em"
+      }
+    },
+    "radius": {
+      "chip": {
+        "value": "2",
+        "type": "borderRadius"
+      },
+      "card": {
+        "value": "3",
+        "type": "borderRadius"
+      },
+      "panel": {
+        "value": "4",
+        "type": "borderRadius"
+      },
+      "button": {
+        "value": "5",
+        "type": "borderRadius"
+      },
+      "banner": {
+        "value": "6",
+        "type": "borderRadius"
+      }
+    },
+    "space": {
+      "cardGap": {
+        "value": "9",
+        "type": "spacing",
+        "description": "Between job cards"
+      },
+      "rowGap": {
+        "value": "7",
+        "type": "spacing",
+        "description": "Button row"
+      },
+      "pad": {
+        "value": "18",
+        "type": "spacing",
+        "description": "Card and sidebar padding"
+      },
+      "block": {
+        "value": "22",
+        "type": "spacing",
+        "description": "Between sidebar blocks"
+      },
+      "section": {
+        "value": "26",
+        "type": "spacing",
+        "description": "Between list sections"
+      },
+      "sidebar": {
+        "value": "288",
+        "type": "sizing",
+        "description": "Sidebar column"
+      },
+      "touch": {
+        "value": "44",
+        "type": "sizing",
+        "description": "Minimum target below 900px"
+      }
+    }
+  },
+  "dark": {
+    "color": {
+      "ink": {
+        "value": "#18211C",
+        "type": "color",
+        "description": "Page ground"
+      },
+      "panel": {
+        "value": "#1F2A23",
+        "type": "color",
+        "description": "Chrome: header, sidebar, sheets"
+      },
+      "panel2": {
+        "value": "#26332A",
+        "type": "color",
+        "description": "Inset surfaces, secondary buttons"
+      },
+      "line": {
+        "value": "#324237",
+        "type": "color",
+        "description": "Structural rule"
+      },
+      "hair": {
+        "value": "#232E27",
+        "type": "color",
+        "description": "Row rule inside a list"
+      },
+      "text": {
+        "value": "#EDF3EF",
+        "type": "color",
+        "description": "Body text"
+      },
+      "muted": {
+        "value": "#93A597",
+        "type": "color",
+        "description": "Secondary text"
+      },
+      "dim": {
+        "value": "#8A9C8E",
+        "type": "color",
+        "description": "Hints and eyebrow labels"
+      },
+      "go": {
+        "value": "#56C88A",
+        "type": "color",
+        "description": "Do this now. The only filled button"
+      },
+      "on-go": {
+        "value": "#0A1B0F",
+        "type": "color",
+        "description": "Text on a go fill"
+      },
+      "go-line": {
+        "value": "#2C5540",
+        "type": "color",
+        "description": "Border for go chips"
+      },
+      "go-tint": {
+        "value": "rgba(86,200,138,.12)",
+        "type": "color",
+        "description": "Go wash"
+      },
+      "due": {
+        "value": "#E2685C",
+        "type": "color",
+        "description": "Overdue: past the follow-up date"
+      },
+      "on-due": {
+        "value": "#1A0A08",
+        "type": "color",
+        "description": "Text on a due fill"
+      },
+      "due-line": {
+        "value": "#5A2E2A",
+        "type": "color",
+        "description": "Border for due chips"
+      },
+      "due-tint": {
+        "value": "rgba(226,104,92,.14)",
+        "type": "color",
+        "description": "Due wash"
+      },
+      "closing": {
+        "value": "#D9A441",
+        "type": "color",
+        "description": "Closing: posting about to be filled"
+      },
+      "closing-line": {
+        "value": "#5A4620",
+        "type": "color",
+        "description": "Border for closing chips"
+      },
+      "closing-tint": {
+        "value": "rgba(217,164,65,.13)",
+        "type": "color",
+        "description": "Closing wash"
+      },
+      "awaiting": {
+        "value": "#57AEC9",
+        "type": "color",
+        "description": "Sent, and their move"
+      },
+      "awaiting-line": {
+        "value": "#2C4F5C",
+        "type": "color",
+        "description": "Border for awaiting chips"
+      },
+      "awaiting-tint": {
+        "value": "rgba(87,174,201,.13)",
+        "type": "color",
+        "description": "Awaiting wash"
+      },
+      "closed": {
+        "value": "#3E4F44",
+        "type": "color",
+        "description": "Closed, or out of selection"
+      },
+      "shadow": {
+        "value": "0 1px 2px rgba(0,0,0,.3)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-lg": {
+        "value": "0 20px 60px rgba(0,0,0,.55)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      }
+    }
+  },
+  "light": {
+    "color": {
+      "ink": {
+        "value": "#F1F5F2",
+        "type": "color",
+        "description": "Page ground"
+      },
+      "panel": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Chrome: header, sidebar, sheets"
+      },
+      "panel2": {
+        "value": "#E9EFEB",
+        "type": "color",
+        "description": "Inset surfaces, secondary buttons"
+      },
+      "line": {
+        "value": "#D5DFD8",
+        "type": "color",
+        "description": "Structural rule"
+      },
+      "hair": {
+        "value": "#E6ECE8",
+        "type": "color",
+        "description": "Row rule inside a list"
+      },
+      "text": {
+        "value": "#18211C",
+        "type": "color",
+        "description": "Body text. The dark ground, used as ink"
+      },
+      "muted": {
+        "value": "#4F5E56",
+        "type": "color",
+        "description": "Secondary text"
+      },
+      "dim": {
+        "value": "#5C6B63",
+        "type": "color",
+        "description": "Hints and eyebrow labels"
+      },
+      "go": {
+        "value": "#157F42",
+        "type": "color",
+        "description": "Do this now. The only filled button"
+      },
+      "on-go": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Text on a go fill"
+      },
+      "go-line": {
+        "value": "#A8D8BC",
+        "type": "color",
+        "description": "Border for go chips"
+      },
+      "go-chip": {
+        "value": "#DCF0E4",
+        "type": "color",
+        "description": "Go chip fill"
+      },
+      "go-row": {
+        "value": "#E9F4ED",
+        "type": "color",
+        "description": "Whole-row tint for a go row"
+      },
+      "due": {
+        "value": "#C33B2E",
+        "type": "color",
+        "description": "Overdue: past the follow-up date"
+      },
+      "on-due": {
+        "value": "#FFFFFF",
+        "type": "color",
+        "description": "Text on a due fill"
+      },
+      "due-line": {
+        "value": "#EEBAB4",
+        "type": "color",
+        "description": "Border for due chips"
+      },
+      "due-chip": {
+        "value": "#FBE4E1",
+        "type": "color",
+        "description": "Due chip fill"
+      },
+      "due-row": {
+        "value": "#FBECEA",
+        "type": "color",
+        "description": "Whole-row tint for a due row"
+      },
+      "closing": {
+        "value": "#8A6314",
+        "type": "color",
+        "description": "Closing: posting about to be filled"
+      },
+      "closing-line": {
+        "value": "#E0C98F",
+        "type": "color",
+        "description": "Border for closing chips"
+      },
+      "closing-chip": {
+        "value": "#F7EBD2",
+        "type": "color",
+        "description": "Closing chip fill"
+      },
+      "closing-row": {
+        "value": "#FAF1DF",
+        "type": "color",
+        "description": "Whole-row tint for a closing row"
+      },
+      "awaiting": {
+        "value": "#1E6C86",
+        "type": "color",
+        "description": "Sent, and their move"
+      },
+      "awaiting-line": {
+        "value": "#A9D3E0",
+        "type": "color",
+        "description": "Border for awaiting chips"
+      },
+      "awaiting-chip": {
+        "value": "#DCEFF5",
+        "type": "color",
+        "description": "Awaiting chip fill"
+      },
+      "awaiting-row": {
+        "value": "#E6F2F7",
+        "type": "color",
+        "description": "Whole-row tint for an awaiting row"
+      },
+      "closed": {
+        "value": "#B6C4BC",
+        "type": "color",
+        "description": "Closed, or out of selection"
+      },
+      "shadow": {
+        "value": "0 1px 2px rgba(24,33,28,.07)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      },
+      "shadow-lg": {
+        "value": "0 18px 50px rgba(24,33,28,.24)",
+        "type": "boxShadow",
+        "description": "Elevation"
+      }
+    }
+  },
+  "$themes": [
+    {
+      "id": "dark",
+      "name": "Dark",
+      "selectedTokenSets": {
+        "global": "source",
+        "dark": "enabled"
+      }
+    },
+    {
+      "id": "light",
+      "name": "Light",
+      "selectedTokenSets": {
+        "global": "source",
+        "light": "enabled"
+      }
+    }
+  ],
+  "$metadata": {
+    "tokenSetOrder": [
+      "global",
+      "dark",
+      "light"
+    ]
+  }
+}

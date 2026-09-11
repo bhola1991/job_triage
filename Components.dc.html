@@ -1,0 +1,205 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { background: #0E1411; }
+    body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+           font-size: 14px; line-height: 1.5; color: #E9F0EB; }
+    a { color: #4FB58C; text-decoration: none; } a:hover { color: #6FD79D; }
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+    .eyebrow { font-family: ui-monospace, Consolas, monospace; font-size: 10px; display: block;
+               letter-spacing: .14em; text-transform: uppercase; color: #798B81; }
+    h2 { font-size: 17px; font-weight: 500; letter-spacing: -.01em; margin: 6px 0 4px; }
+    .say { color: #8B9C92; font-size: 12.5px; margin: 0 0 14px; max-width: 78ch; text-wrap: pretty; }
+    .card { background: #151D18; border: 1px solid #29372F; border-radius: 4px; padding: 18px; }
+    .sect { margin-bottom: 30px; }
+    .row { display: flex; gap: 9px; flex-wrap: wrap; align-items: center; }
+    .spec { font-family: ui-monospace, Consolas, monospace; font-size: 11px; color: #798B81; margin-top: 9px; }
+    /* the real component rules, lifted verbatim */
+    button { font-family: inherit; font-size: 13px; cursor: pointer; border-radius: 5px;
+      border: 1px solid #29372F; background: #1C2620; color: #E9F0EB; padding: 8px 13px; }
+    .btn-go { background: #56C88A; color: #08150E; border-color: #56C88A; font-weight: 700;
+      box-shadow: 0 1px 2px rgba(0,0,0,.25); }
+    .btn-sm { padding: 5px 9px; font-size: 12px; }
+    button:disabled { opacity: .38; cursor: not-allowed; }
+    .chip { font-size: 11.5px; padding: 3px 8px; border-radius: 2px; background: #1C2620;
+      border: 1px solid #29372F; color: #8B9C92; }
+    .chip.g { color: #6FD79D; border-color: #2C5540; }
+    .chip.r { color: #E2685C; border-color: #5A2E2A; }
+    .stage { font-family: ui-monospace, Consolas, monospace; font-size: 9.5px; letter-spacing: .08em;
+      text-transform: uppercase; padding: 2px 7px; border-radius: 2px; border: 1px solid #29372F; color: #8B9C92; }
+    .chn { font-family: ui-monospace, Consolas, monospace; font-size: 9.5px; letter-spacing: .08em;
+      text-transform: uppercase; padding: 2px 7px; border-radius: 2px; }
+    .flag { font-family: ui-monospace, Consolas, monospace; font-size: 9.5px; padding: 2px 6px;
+      border-radius: 2px; background: #1C2620; color: #8B9C92; letter-spacing: .04em; }
+    .segs { display: flex; border: 1px solid #29372F; border-radius: 5px; overflow: hidden; }
+    .seg { border: none; border-radius: 0; background: transparent; color: #8B9C92; padding: 5px 11px; font-size: 12px; }
+    .seg + .seg { border-left: 1px solid #29372F; }
+    .seg.on { background: #1C2620; color: #56C88A; }
+    input[type=text] { width: 100%; background: #0E1411; color: #E9F0EB; border: 1px solid #29372F;
+      border-radius: 3px; padding: 9px; font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+    .lab { display: block; font-size: 12px; color: #8B9C92; margin-bottom: 5px; }
+    .hint { font-size: 11px; color: #798B81; margin-top: 6px; line-height: 1.45; }
+    .fold { border: 1px solid #29372F; border-radius: 5px; background: #1C2620; }
+    .fold > .sum { padding: 9px 11px; font-size: 12.5px; display: flex; align-items: center; gap: 8px; }
+    .fold > .sum::after { content: ''; width: 6px; height: 6px; margin-left: auto;
+      border-right: 1.5px solid #8B9C92; border-bottom: 1.5px solid #8B9C92; transform: translateY(-2px) rotate(45deg); }
+    .bar { height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden; }
+    .bar i { display: block; height: 100%; }
+    .empty { border: 1px dashed #29372F; border-radius: 4px; padding: 26px 20px; text-align: center; color: #8B9C92; }
+    .empty b { display: block; color: #E9F0EB; font-size: 15px; font-weight: 500; margin-bottom: 6px; }
+  </style>
+</helmet>
+
+<div style="width: 1280px; padding: 30px 34px 40px;">
+  <span class="eyebrow">Job Triage &middot; design system</span>
+  <h2 style="font-size: 24px; margin: 8px 0 6px;">Components</h2>
+  <p class="say" style="font-size: 14px;">Every primitive in the app, at its real values. New UI should be assembled from these before anything is invented &mdash; if a thing you need is not here, it is worth asking whether the design needs it or whether an existing piece was meant to do that job.</p>
+
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+
+    <div class="sect card">
+      <span class="eyebrow">Buttons</span>
+      <h2>One primary per context</h2>
+      <p class="say">Green is reserved for the single most likely next action in whatever you are looking at. Two greens side by side means the hierarchy has not been decided.</p>
+      <div class="row">
+        <button class="btn-go">Primary</button>
+        <button>Secondary</button>
+        <button class="btn-go btn-sm">Primary small</button>
+        <button class="btn-sm">Small</button>
+        <button class="btn-sm" disabled>Disabled</button>
+      </div>
+      <div class="spec">13px &middot; 8/13 padding &middot; r5 &middot; sm: 12px &middot; 5/9 &middot; min-height 44px below 900px</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Segmented control</span>
+      <h2>Filters, not navigation</h2>
+      <p class="say">A different shape from tabs on purpose: these change what a view shows, tabs change which view you are in. Used for the channel filter and the sort.</p>
+      <div class="row">
+        <div class="segs">
+          <button class="seg on">All <span class="mono" style="font-size:11px;color:#798B81">214</span></button>
+          <button class="seg">Posted <span class="mono" style="font-size:11px;color:#798B81">176</span></button>
+          <button class="seg">Cold <span class="mono" style="font-size:11px;color:#798B81">38</span></button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <div class="segs">
+          <button class="seg on">Best</button>
+          <button class="seg">Recently posted</button>
+          <button class="seg">Recently added</button>
+        </div>
+      </div>
+      <div class="spec">12px &middot; 5/11 padding &middot; r5 on the group, 0 on members</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Status pills</span>
+      <h2>Channel, stage, age</h2>
+      <p class="say">All 9.5px mono, uppercase, .08em tracking. Channel is filled, everything else is outlined &mdash; so the channel reads first and the rest sits behind it.</p>
+      <div class="row">
+        <span class="chn" style="color:#56C88A;background:#1F3A2A">posted role</span>
+        <span class="chn" style="color:#A9BCB1;background:#23302A">cold approach</span>
+      </div>
+      <div class="row" style="margin-top:9px">
+        <span class="stage">new</span>
+        <span class="stage" style="color:#86988D;border-color:#364339">sent</span>
+        <span class="stage" style="color:#E2685C;border-color:#5A2E2A">due</span>
+        <span class="stage" style="color:#FFFFFF;border-color:#4A5A50">live</span>
+        <span class="stage" style="color:#798B81">closed</span>
+      </div>
+      <div class="row" style="margin-top:9px">
+        <span class="stage" style="color:#56C88A;border-color:#1F3A2A">4d ago</span>
+        <span class="stage">3w ago</span>
+        <span class="stage" style="color:#798B81;border-color:#232E28">4mo ago</span>
+        <span class="stage" style="font-style:italic">~2&ndash;6w ago</span>
+      </div>
+      <div class="spec">age: green &le;14d &middot; plain to 60d &middot; dim beyond &middot; italic = estimated, not stated</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Chips and flags</span>
+      <h2>Facts, not actions</h2>
+      <p class="say">Chips carry profile facts and board names. Flags are the scorer's verdicts, and only they get green or red &mdash; a flag is a judgement, a chip is a label.</p>
+      <div class="row">
+        <span class="chip">ycombinator.com</span>
+        <span class="chip g">ran multi-state field ops</span>
+        <span class="chip r">no formal CS degree</span>
+      </div>
+      <div class="row" style="margin-top:9px">
+        <span class="flag" style="color:#6FD79D">strong fit</span>
+        <span class="flag" style="color:#6FD79D">rare combination fit</span>
+        <span class="flag">thin data</span>
+        <span class="flag" style="color:#E2685C">credential gated</span>
+      </div>
+      <div class="spec">chip 11.5px r2 &middot; flag 9.5px mono r2 &middot; both 2&ndash;3px vertical padding</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Form</span>
+      <h2>Input, label, hint</h2>
+      <p class="say">Inputs are mono, because most of what gets typed here is machine-ish &mdash; a location, a slug, a key. Hints sit under the control they explain and stay at 11px so they never compete with it.</p>
+      <label class="lab">Location</label>
+      <input type="text" value="Bangalore">
+      <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide.</p>
+      <div class="spec">12px mono &middot; 9px padding &middot; r3 &middot; focus: border --cool</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Disclosure</span>
+      <h2>Rare things, one press away</h2>
+      <p class="say">Native <span class="mono" style="font-size:11.5px">&lt;details&gt;</span>. Used for the sidebar's rare half and for list sections you did not come for &mdash; below the bar, unscored, closed. Open state survives re-render.</p>
+      <div class="fold"><div class="sum">Other ways to add</div></div>
+      <div class="fold" style="margin-top:9px"><div class="sum">Data &amp; keys</div></div>
+      <div class="spec">12.5px &middot; 9/11 padding &middot; r5 &middot; chevron is a rotated 6px border corner</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">The two axes</span>
+      <h2>Fit and reachability</h2>
+      <p class="say">The core idea of the app, and the one thing never to collapse. Fit takes the channel colour; reachability is always grey. Each stated once, labelled, with the number beside its bar.</p>
+      <div style="display:flex;align-items:center;gap:12px">
+        <div class="mono" style="font-size:19px;color:#56C88A;line-height:1">72</div>
+        <div style="flex:1;display:flex;flex-direction:column;gap:4px;max-width:210px">
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:10px;color:#798B81;width:30px">fit</span>
+            <span class="bar" style="flex:1"><i style="width:82%;background:#56C88A"></i></span>
+            <span class="mono" style="font-size:10px;color:#8B9C92;width:16px;text-align:right">82</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:7px">
+            <span style="font-size:10px;color:#798B81;width:30px">reach</span>
+            <span class="bar" style="flex:1"><i style="width:54%;background:#86988D"></i></span>
+            <span class="mono" style="font-size:10px;color:#8B9C92;width:16px;text-align:right">54</span>
+          </div>
+        </div>
+      </div>
+      <div class="spec">rank = fit^0.65 &times; reach^0.35 &times; confidence &middot; bar h3 r2</div>
+    </div>
+
+    <div class="sect card">
+      <span class="eyebrow">Empty and next</span>
+      <h2>Say what to do, not what is missing</h2>
+      <p class="say">An empty state names the action that fills it. The banner above every tab is the single derived instruction &mdash; calm green when clear, red when something is overdue.</p>
+      <div class="empty"><b>Nothing clears the bar</b>Either this batch was weak or you have worked through it &mdash; pull in more roles.</div>
+      <div style="display:flex;align-items:center;gap:16px;margin-top:12px;border:1px solid #29372F;border-left:3px solid #E2685C;border-radius:6px;padding:14px 16px;background:linear-gradient(90deg,rgba(226,104,92,.13),transparent 60%)">
+        <div style="flex:1">
+          <div style="font-size:15px;font-weight:500;margin-bottom:2px">3 follow-ups overdue</div>
+          <div style="font-size:12px;color:#8B9C92">A short nudge beats starting somewhere new.</div>
+        </div>
+        <button class="btn-go">Open follow-ups</button>
+      </div>
+      <div class="spec">banner r6 &middot; 3px left accent &middot; gradient wash fades by 60%</div>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

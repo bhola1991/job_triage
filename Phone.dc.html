@@ -1,0 +1,144 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; }
+    html, body { background: #0E1411; }
+    body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+           font-size: 14px; line-height: 1.5; }
+    a { color: #4FB58C; text-decoration: none; }
+    a:hover { color: #6FD79D; }
+    .mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }
+    .chn { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px;
+           letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px; border-radius: 2px; }
+    .stage { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; font-size: 9.5px;
+             letter-spacing: .08em; text-transform: uppercase; padding: 2px 7px;
+             border-radius: 2px; border: 1px solid #29372F; color: #8B9C92; }
+  </style>
+</helmet>
+
+<div style="width: 390px; height: 844px; overflow: hidden; display: flex; flex-direction: column; color: #E9F0EB; background: radial-gradient(700px 340px at 20% -10%, rgba(86,200,138,.07), transparent 60%), #0E1411;">
+
+  <!-- compact header. no fake status bar: the real one paints above this. -->
+  <div style="display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-bottom: 1px solid #29372F; background: linear-gradient(180deg, #1C2620, #151D18); flex-shrink: 0;">
+    <h1 style="margin: 0; font-size: 17px; font-weight: 500; letter-spacing: -0.01em; background: linear-gradient(90deg, #E9F0EB, #56C88A 160%); -webkit-background-clip: text; background-clip: text; color: transparent;">Job Triage</h1>
+    <div style="flex: 1;"></div>
+    <span class="mono" style="font-size: 11px; color: #798B81;">AI Operations</span>
+    <div class="mono" style="width: 30px; height: 30px; border-radius: 50%; background: #1C2620; border: 1px solid #29372F; display: flex; align-items: center; justify-content: center; font-size: 12px; color: #56C88A; flex-shrink: 0;">SB</div>
+  </div>
+
+  <!-- scrolling region -->
+  <div style="flex: 1; overflow: hidden; padding: 14px 16px 0;">
+
+    <div style="display: flex; flex-direction: column; gap: 12px; background: linear-gradient(90deg, rgba(226,104,92,.13), transparent 70%); border: 1px solid #29372F; border-left: 3px solid #E2685C; border-radius: 6px; padding: 14px; margin-bottom: 16px;">
+      <div>
+        <div style="font-size: 15px; font-weight: 500; margin-bottom: 3px;">3 follow-ups overdue</div>
+        <div style="font-size: 12px; color: #8B9C92; text-wrap: pretty;">Sent over a week ago with no reply. A nudge beats starting somewhere new.</div>
+      </div>
+      <button style="width: 100%; min-height: 44px; font-family: inherit; font-size: 14px; font-weight: 700; border-radius: 5px; border: 1px solid #56C88A; background: #56C88A; color: #08150E;">Open follow-ups</button>
+    </div>
+
+    <div style="display: flex; border: 1px solid #29372F; border-radius: 5px; overflow: hidden; margin-bottom: 14px;">
+      <div style="flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; background: #1C2620; color: #56C88A;">All <span class="mono" style="font-size: 11px; color: #798B81;">214</span></div>
+      <div style="flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; color: #8B9C92; border-left: 1px solid #29372F;">Posted <span class="mono" style="font-size: 11px; color: #798B81;">176</span></div>
+      <div style="flex: 1; min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 5px; font-size: 13px; color: #8B9C92; border-left: 1px solid #29372F;">Cold <span class="mono" style="font-size: 11px; color: #798B81;">38</span></div>
+    </div>
+
+    <div style="display: flex; align-items: baseline; gap: 9px; margin-bottom: 10px;">
+      <h3 style="margin: 0; font-size: 15px; font-weight: 500;">Do these first</h3>
+      <span class="mono" style="font-size: 12px; color: #798B81;">9</span>
+    </div>
+
+    <!-- card, narrow variant: score moves under the title instead of beside it -->
+    <div style="border: 1px solid #29372F; border-left: 2px solid #56C88A; border-radius: 3px; background: #151D18; padding: 13px 14px; margin-bottom: 10px;">
+      <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Forward Deployed Engineer</div>
+      <div style="font-size: 12px; color: #8B9C92;">Sarvam AI &middot; Bangalore</div>
+      <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;">
+        <span class="chn" style="color: #56C88A; background: #1F3A2A;">posted</span>
+        <span class="stage">new</span>
+        <span class="stage" style="color: #56C88A; border-color: #1F3A2A;">4d ago</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; margin-top: 11px;">
+        <div class="mono" style="font-size: 22px; color: #56C88A; line-height: 1; flex-shrink: 0;">72</div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="font-size: 10px; color: #798B81; width: 30px;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 82%; background: #56C88A;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">82</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="font-size: 10px; color: #798B81; width: 30px;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 54%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">54</span>
+          </div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button style="flex: 1; min-height: 44px; font-family: inherit; font-size: 13px; font-weight: 700; border-radius: 5px; border: 1px solid #56C88A; background: #56C88A; color: #08150E;">Draft outreach</button>
+        <button style="min-width: 44px; min-height: 44px; font-family: inherit; font-size: 13px; border-radius: 5px; border: 1px solid #29372F; background: #1C2620; color: #E9F0EB; padding: 0 14px;">Details</button>
+        <button style="min-width: 44px; min-height: 44px; font-family: inherit; font-size: 13px; border-radius: 5px; border: 1px solid #29372F; background: #1C2620; color: #E9F0EB;">&middot;&middot;&middot;</button>
+      </div>
+    </div>
+
+    <div style="border: 1px solid #29372F; border-left: 2px solid #A9BCB1; border-radius: 3px; background: #151D18; padding: 13px 14px;">
+      <div style="font-size: 15px; font-weight: 500; margin-bottom: 2px;">Cold approach</div>
+      <div style="font-size: 12px; color: #8B9C92;">Cropin &middot; Bangalore</div>
+      <div style="display: flex; gap: 5px; flex-wrap: wrap; margin-top: 8px;">
+        <span class="chn" style="color: #A9BCB1; background: #23302A;">cold</span>
+        <span class="stage">new</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; margin-top: 11px;">
+        <div class="mono" style="font-size: 22px; color: #A9BCB1; line-height: 1; flex-shrink: 0;">68</div>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="font-size: 10px; color: #798B81; width: 30px;">fit</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 71%; background: #A9BCB1;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">71</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 7px;">
+            <span style="font-size: 10px; color: #798B81; width: 30px;">reach</span>
+            <span style="flex: 1; height: 3px; background: #1C2620; border-radius: 2px; overflow: hidden;"><i style="display: block; height: 100%; width: 63%; background: #86988D;"></i></span>
+            <span class="mono" style="font-size: 10px; color: #8B9C92; width: 16px; text-align: right;">63</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- the fix: actions live at the thumb, not under 60 cards -->
+  <div style="flex-shrink: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border-top: 1px solid #29372F; background: linear-gradient(180deg, #151D18, #1C2620); padding-bottom: 6px;">
+    <div style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #56C88A;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      <span style="font-size: 10px;">Today</span>
+    </div>
+    <div style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #8B9C92;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><circle cx="9" cy="14" r="1.6"/><circle cx="14" cy="8" r="1.6"/><circle cx="18" cy="12" r="1.6"/></svg>
+      <span style="font-size: 10px;">Map</span>
+    </div>
+    <div style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;">
+      <div style="width: 42px; height: 42px; border-radius: 50%; background: #56C88A; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 14px rgba(86,200,138,.28); margin-top: -14px;">
+        <svg width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="#08150E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16.2" y2="16.2"/></svg>
+      </div>
+      <span style="font-size: 10px; color: #56C88A; margin-top: -2px;">Find work</span>
+    </div>
+    <div style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #8B9C92; position: relative;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span style="font-size: 10px;">Follow-ups</span>
+      <span class="mono" style="position: absolute; top: 6px; left: 50%; margin-left: 4px; font-size: 9px; padding: 1px 5px; border-radius: 8px; background: #5A2E2A; color: #E2685C;">12</span>
+    </div>
+    <div style="min-height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; color: #8B9C92;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>
+      <span style="font-size: 10px;">All</span>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics><style>
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:#101613;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;color:#EDF3EF}
+a{color:#56C88A;text-decoration:none}a:hover{color:#7EDDAC}
+.m{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-variant-numeric:tabular-nums}
+.eb{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:10px;letter-spacing:.14em;text-transform:uppercase}
+.pill{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace;font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid transparent;white-space:nowrap}
+.row{display:grid;grid-template-columns:3px 36px minmax(190px,1fr) minmax(104px,132px) minmax(84px,104px) minmax(150px,188px);gap:0 14px;align-items:center;padding:14px 0}
+@media (max-width:1060px){
+.row{grid-template-columns:3px 36px minmax(0,1fr);gap:10px 14px}
+.row>i{grid-row:1/span 4}
+.row>span:first-of-type{grid-row:1}
+.row>div{grid-column:3}
+.row>div:last-child{justify-content:flex-start!important}
+}
+</style></helmet>
+
+<div style="padding:34px 36px 44px;max-width:1300px;">
+
+<div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;">
+  <span style="font-size:20px;font-weight:500;letter-spacing:-.01em;">The new ground</span>
+  <span class="m" style="font-size:13px;color:#56C88A;">#18211C</span>
+</div>
+<div style="font-size:13px;color:#93A597;margin-top:6px;max-width:70ch;line-height:1.55;text-wrap:pretty;">Near-black, but green rather than neutral &mdash; dark enough that all four accents carry at full strength, and warm enough that the green reads as the page&rsquo;s own colour rather than an intruder. The light mode below is the same hue turned inside out: the dark ground becomes the text.</div>
+
+<div style="display:flex;gap:0;margin-top:22px;border-top:1px solid #324237;border-bottom:1px solid #324237;">
+  <div style="flex:1;padding:14px 16px 14px 0;"><div style="height:26px;background:#18211C;border:1px solid #324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#18211C ground</div></div>
+  <div style="flex:1;padding:14px 16px;"><div style="height:26px;background:#1F2A23;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#1F2A23 panel</div></div>
+  <div style="flex:1;padding:14px 16px;"><div style="height:26px;background:#324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#324237 rule</div></div>
+  <div style="flex:1;padding:14px 16px;"><div style="height:26px;background:#EDF3EF;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#EDF3EF text</div></div>
+  <div style="flex:1;padding:14px 16px;"><div style="height:26px;background:#F1F5F2;border:1px solid #324237;border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">#F1F5F2 light ground</div></div>
+  <div style="flex:1;padding:14px 0 14px 16px;"><div style="height:26px;background:linear-gradient(90deg,#56C88A 0 25%,#E2685C 25% 50%,#D9A441 50% 75%,#57AEC9 75%);border-radius:2px;"></div><div class="m" style="font-size:10.5px;color:#8A9C8E;margin-top:6px;">accents unchanged</div></div>
+</div>
+
+<div class="eb" style="color:#8A9C8E;margin:34px 0 12px;">Dark &mdash; the queue</div>
+
+<div style="border-radius:4px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.55);">
+<div style="background:#18211C;color:#EDF3EF;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #324237;background:#1F2A23;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <span class="m" style="font-size:11px;color:#8A9C8E;">AI Operations &middot; Bangalore + remote</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#E2685C;background:rgba(226,104,92,.14);border-color:#5A2E2A;">1 overdue</span>
+    <span class="pill" style="color:#D9A441;background:rgba(217,164,65,.13);border-color:#5A4620;">2 closing</span>
+    <span class="pill" style="color:#57AEC9;background:rgba(87,174,201,.13);border-color:#2C4F5C;">14 awaiting</span>
+    <div class="m" style="width:28px;height:28px;border-radius:50%;background:#26332A;border:1px solid #324237;display:flex;align-items:center;justify-content:center;font-size:11px;color:#56C88A;">SB</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:232px minmax(0,1fr);">
+
+    <div style="border-right:1px solid #324237;padding:22px 20px;display:flex;flex-direction:column;gap:24px;">
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">What the colours mean</div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#56C88A;height:20px;"></i><div><div style="font-size:12.5px;">Do this now</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">your move, nothing blocking</div></div><span class="m" style="font-size:13px;color:#56C88A;text-align:right;">9</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#E2685C;height:20px;"></i><div><div style="font-size:12.5px;">Overdue</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">past the follow-up date</div></div><span class="m" style="font-size:13px;color:#E2685C;text-align:right;">1</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#D9A441;height:20px;"></i><div><div style="font-size:12.5px;">Closing</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">going off the board</div></div><span class="m" style="font-size:13px;color:#D9A441;text-align:right;">2</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #232E27;"><i style="background:#57AEC9;height:20px;"></i><div><div style="font-size:12.5px;">Awaiting</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">sent, their move</div></div><span class="m" style="font-size:13px;color:#57AEC9;text-align:right;">14</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;"><i style="background:#3E4F44;height:20px;"></i><div><div style="font-size:12.5px;color:#93A597;">Closed</div><div style="font-size:11px;color:#8A9C8E;margin-top:2px;">answered no, or ran out</div></div><span class="m" style="font-size:13px;color:#8A9C8E;text-align:right;">62</span></div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">Today</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">triaged</span><span class="m" style="font-size:13px;">12 / 20</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">applied</span><span class="m" style="font-size:13px;color:#56C88A;">4</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #232E27;"><span style="font-size:12px;color:#93A597;">chased</span><span class="m" style="font-size:13px;color:#57AEC9;">2</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;"><span style="font-size:12px;color:#93A597;">skipped</span><span class="m" style="font-size:13px;color:#93A597;">8</span></div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#8A9C8E;margin-bottom:12px;">Filtered to</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill" style="color:#EDF3EF;background:#26332A;border-color:#324237;">rank &ge; 60</span>
+          <span class="pill" style="color:#EDF3EF;background:#26332A;border-color:#324237;">bangalore + remote</span>
+          <span class="pill" style="color:#8A9C8E;border-color:#324237;">+ add</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:20px 24px 28px;">
+
+      <div style="display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid #E2685C;">
+        <span style="font-size:14px;font-weight:500;color:#E2685C;">Overdue</span><span class="m" style="font-size:12px;color:#8A9C8E;">1</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#8A9C8E;">a nudge beats starting somewhere new</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #232E27;">
+        <i style="background:#E2685C;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;">70</span>
+        <div style="min-width:0;"><div style="font-size:14px;">AI Operations Lead</div><div style="font-size:12px;color:#93A597;">Observe.AI &middot; Bangalore</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">silent for</div><div class="m" style="font-size:13px;color:#E2685C;margin-top:3px;">11 days</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">sent</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">08-31</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #E2685C;background:#E2685C;color:#1A0A08;">Write the chase</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #56C88A;">
+        <span style="font-size:14px;font-weight:500;color:#56C88A;">Do these first</span><span class="m" style="font-size:12px;color:#8A9C8E;">9</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#8A9C8E;">sorted by rank</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #232E27;">
+        <i style="background:#56C88A;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">72</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Forward Deployed Engineer</div><div style="font-size:12px;color:#93A597;">Sarvam AI &middot; Bangalore &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">82 &middot; 54</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply</button>
+        </div>
+      </div>
+      <div class="row" style="border-bottom:1px solid #232E27;">
+        <i style="background:#56C88A;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">68</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Cold approach &mdash; agritech ops</div><div style="font-size:12px;color:#93A597;">Cropin &middot; Bangalore &middot; cold approach</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">71 &middot; 63</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">contacts</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">2 found</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Write the DM</button>
+        </div>
+      </div>
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid #232E27;"><span class="m" style="font-size:11px;color:#8A9C8E;">7 more</span></div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #D9A441;">
+        <span style="font-size:14px;font-weight:500;color:#D9A441;">Closing soon</span><span class="m" style="font-size:12px;color:#8A9C8E;">2</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#8A9C8E;">old postings get filled, not withdrawn</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #232E27;">
+        <i style="background:#D9A441;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#56C88A;">65</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Staff Solutions Engineer</div><div style="font-size:12px;color:#93A597;">Portkey &middot; Remote &middot; posted role</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">70 &middot; 61</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">posted</div><div class="m" style="font-size:13px;color:#D9A441;margin-top:3px;">24d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#93A597;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #56C88A;background:#56C88A;color:#0A1B0F;">Apply today</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #57AEC9;">
+        <span style="font-size:14px;font-weight:500;color:#57AEC9;">Awaiting them</span><span class="m" style="font-size:12px;color:#8A9C8E;">14</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#8A9C8E;">nothing to do here yet</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #232E27;">
+        <i style="background:#57AEC9;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#93A597;">63</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Platform Ops Manager</div><div style="font-size:12px;color:#93A597;">Zeta &middot; Bangalore &middot; applied</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">state</div><div style="font-size:13px;color:#57AEC9;margin-top:3px;">in review</div></div>
+        <div><div class="eb" style="color:#8A9C8E;">sent</div><div class="m" style="font-size:13px;color:#93A597;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #324237;background:#26332A;color:#EDF3EF;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #2C4F5C;background:rgba(87,174,201,.13);color:#57AEC9;">Chase 09-18</button>
+        </div>
+      </div>
+      <div style="text-align:center;padding:11px 0;"><span class="m" style="font-size:11px;color:#8A9C8E;">13 more awaiting</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div class="eb" style="color:#8A9C8E;margin:38px 0 12px;">Light &mdash; the same screen, ground inverted to <span class="m" style="letter-spacing:0;text-transform:none;color:#93A597;">#F1F5F2</span> with <span class="m" style="letter-spacing:0;text-transform:none;color:#93A597;">#18211C</span> as the ink</div>
+
+<div style="border-radius:4px;overflow:hidden;border:1px solid #D5DFD8;box-shadow:0 18px 50px rgba(24,33,28,.24);">
+<div style="background:#F1F5F2;color:#18211C;">
+
+  <div style="display:flex;align-items:center;gap:14px;padding:13px 22px;border-bottom:1px solid #D5DFD8;background:#FFFFFF;">
+    <span style="font-size:15px;font-weight:500;">Job Triage</span>
+    <span class="m" style="font-size:11px;color:#5C6B63;">AI Operations &middot; Bangalore + remote</span>
+    <div style="flex:1"></div>
+    <span class="pill" style="color:#C33B2E;background:#FBE4E1;border-color:#EEBAB4;">1 overdue</span>
+    <span class="pill" style="color:#8A6314;background:#F7EBD2;border-color:#E0C98F;">2 closing</span>
+    <span class="pill" style="color:#1E6C86;background:#DCEFF5;border-color:#A9D3E0;">14 awaiting</span>
+    <div class="m" style="width:28px;height:28px;border-radius:50%;background:#E9EFEB;border:1px solid #D5DFD8;display:flex;align-items:center;justify-content:center;font-size:11px;color:#157F42;">SB</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:232px minmax(0,1fr);">
+
+    <div style="border-right:1px solid #D5DFD8;padding:22px 20px;display:flex;flex-direction:column;gap:24px;">
+      <div>
+        <div class="eb" style="color:#5C6B63;margin-bottom:12px;">What the colours mean</div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #E6ECE8;"><i style="background:#157F42;height:20px;"></i><div><div style="font-size:12.5px;">Do this now</div><div style="font-size:11px;color:#5C6B63;margin-top:2px;">your move, nothing blocking</div></div><span class="m" style="font-size:13px;color:#157F42;text-align:right;">9</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #E6ECE8;"><i style="background:#C33B2E;height:20px;"></i><div><div style="font-size:12.5px;">Overdue</div><div style="font-size:11px;color:#5C6B63;margin-top:2px;">past the follow-up date</div></div><span class="m" style="font-size:13px;color:#C33B2E;text-align:right;">1</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #E6ECE8;"><i style="background:#8A6314;height:20px;"></i><div><div style="font-size:12.5px;">Closing</div><div style="font-size:11px;color:#5C6B63;margin-top:2px;">going off the board</div></div><span class="m" style="font-size:13px;color:#8A6314;text-align:right;">2</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;border-bottom:1px solid #E6ECE8;"><i style="background:#1E6C86;height:20px;"></i><div><div style="font-size:12.5px;">Awaiting</div><div style="font-size:11px;color:#5C6B63;margin-top:2px;">sent, their move</div></div><span class="m" style="font-size:13px;color:#1E6C86;text-align:right;">14</span></div>
+        <div style="display:grid;grid-template-columns:3px minmax(0,1fr) 26px;gap:0 11px;align-items:baseline;padding:9px 0;"><i style="background:#B6C4BC;height:20px;"></i><div><div style="font-size:12.5px;color:#4F5E56;">Closed</div><div style="font-size:11px;color:#5C6B63;margin-top:2px;">answered no, or ran out</div></div><span class="m" style="font-size:13px;color:#5C6B63;text-align:right;">62</span></div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#5C6B63;margin-bottom:12px;">Today</div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #E6ECE8;"><span style="font-size:12px;color:#4F5E56;">triaged</span><span class="m" style="font-size:13px;">12 / 20</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #E6ECE8;"><span style="font-size:12px;color:#4F5E56;">applied</span><span class="m" style="font-size:13px;color:#157F42;">4</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;border-bottom:1px solid #E6ECE8;"><span style="font-size:12px;color:#4F5E56;">chased</span><span class="m" style="font-size:13px;color:#1E6C86;">2</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:baseline;padding:7px 0;"><span style="font-size:12px;color:#4F5E56;">skipped</span><span class="m" style="font-size:13px;color:#4F5E56;">8</span></div>
+      </div>
+
+      <div>
+        <div class="eb" style="color:#5C6B63;margin-bottom:12px;">Filtered to</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;">
+          <span class="pill" style="color:#18211C;background:#E9EFEB;border-color:#D5DFD8;">rank &ge; 60</span>
+          <span class="pill" style="color:#18211C;background:#E9EFEB;border-color:#D5DFD8;">bangalore + remote</span>
+          <span class="pill" style="color:#5C6B63;border-color:#D5DFD8;">+ add</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:20px 24px 28px;">
+
+      <div style="display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid #C33B2E;">
+        <span style="font-size:14px;font-weight:500;color:#C33B2E;">Overdue</span><span class="m" style="font-size:12px;color:#5C6B63;">1</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#5C6B63;">a nudge beats starting somewhere new</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #E6ECE8;background:#FBECEA;padding:14px 12px;">
+        <i style="background:#C33B2E;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;">70</span>
+        <div style="min-width:0;"><div style="font-size:14px;">AI Operations Lead</div><div style="font-size:12px;color:#4F5E56;">Observe.AI &middot; Bangalore</div></div>
+        <div><div class="eb" style="color:#5C6B63;">silent for</div><div class="m" style="font-size:13px;color:#C33B2E;margin-top:3px;">11 days</div></div>
+        <div><div class="eb" style="color:#5C6B63;">sent</div><div class="m" style="font-size:13px;color:#4F5E56;margin-top:3px;">08-31</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #D5DFD8;background:#FFFFFF;color:#18211C;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #C33B2E;background:#C33B2E;color:#FFFFFF;">Write the chase</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #157F42;">
+        <span style="font-size:14px;font-weight:500;color:#157F42;">Do these first</span><span class="m" style="font-size:12px;color:#5C6B63;">9</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#5C6B63;">sorted by rank</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #E6ECE8;background:#E9F4ED;padding:14px 12px;">
+        <i style="background:#157F42;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#157F42;">72</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Forward Deployed Engineer</div><div style="font-size:12px;color:#4F5E56;">Sarvam AI &middot; Bangalore &middot; posted role</div></div>
+        <div><div class="eb" style="color:#5C6B63;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">82 &middot; 54</div></div>
+        <div><div class="eb" style="color:#5C6B63;">posted</div><div class="m" style="font-size:13px;color:#4F5E56;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #D5DFD8;background:#FFFFFF;color:#4F5E56;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Apply</button>
+        </div>
+      </div>
+      <div class="row" style="border-bottom:1px solid #E6ECE8;background:#E9F4ED;padding:14px 12px;">
+        <i style="background:#157F42;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#157F42;">68</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Cold approach &mdash; agritech ops</div><div style="font-size:12px;color:#4F5E56;">Cropin &middot; Bangalore &middot; cold approach</div></div>
+        <div><div class="eb" style="color:#5C6B63;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">71 &middot; 63</div></div>
+        <div><div class="eb" style="color:#5C6B63;">contacts</div><div class="m" style="font-size:13px;color:#4F5E56;margin-top:3px;">2 found</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #D5DFD8;background:#FFFFFF;color:#4F5E56;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Write the DM</button>
+        </div>
+      </div>
+      <div style="text-align:center;padding:11px 0;border-bottom:1px solid #E6ECE8;"><span class="m" style="font-size:11px;color:#5C6B63;">7 more</span></div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #8A6314;">
+        <span style="font-size:14px;font-weight:500;color:#8A6314;">Closing soon</span><span class="m" style="font-size:12px;color:#5C6B63;">2</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#5C6B63;">old postings get filled, not withdrawn</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #E6ECE8;background:#FAF1DF;padding:14px 12px;">
+        <i style="background:#8A6314;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#157F42;">65</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Staff Solutions Engineer</div><div style="font-size:12px;color:#4F5E56;">Portkey &middot; Remote &middot; posted role</div></div>
+        <div><div class="eb" style="color:#5C6B63;">fit / reach</div><div class="m" style="font-size:13px;margin-top:3px;">70 &middot; 61</div></div>
+        <div><div class="eb" style="color:#5C6B63;">posted</div><div class="m" style="font-size:13px;color:#8A6314;margin-top:3px;">24d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #D5DFD8;background:#FFFFFF;color:#4F5E56;">Skip</button>
+          <button style="font-family:inherit;font-size:12px;font-weight:700;padding:6px 12px;border-radius:5px;border:1px solid #157F42;background:#157F42;color:#FFFFFF;">Apply today</button>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:baseline;gap:10px;margin-top:26px;padding-bottom:9px;border-bottom:1px solid #1E6C86;">
+        <span style="font-size:14px;font-weight:500;color:#1E6C86;">Awaiting them</span><span class="m" style="font-size:12px;color:#5C6B63;">14</span>
+        <div style="flex:1"></div><span class="m" style="font-size:11px;color:#5C6B63;">nothing to do here yet</span>
+      </div>
+      <div class="row" style="border-bottom:1px solid #E6ECE8;background:#E6F2F7;padding:14px 12px;">
+        <i style="background:#1E6C86;align-self:stretch;min-height:40px;"></i>
+        <span class="m" style="font-size:17px;color:#4F5E56;">63</span>
+        <div style="min-width:0;"><div style="font-size:14px;">Platform Ops Manager</div><div style="font-size:12px;color:#4F5E56;">Zeta &middot; Bangalore &middot; applied</div></div>
+        <div><div class="eb" style="color:#5C6B63;">state</div><div style="font-size:13px;color:#1E6C86;margin-top:3px;">in review</div></div>
+        <div><div class="eb" style="color:#5C6B63;">sent</div><div class="m" style="font-size:13px;color:#4F5E56;margin-top:3px;">4d ago</div></div>
+        <div style="display:flex;gap:7px;justify-content:flex-end;">
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #D5DFD8;background:#FFFFFF;color:#18211C;">They replied</button>
+          <button style="font-family:inherit;font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid #A9D3E0;background:#DCEFF5;color:#1E6C86;">Chase 09-18</button>
+        </div>
+      </div>
+      <div style="text-align:center;padding:11px 0;"><span class="m" style="font-size:11px;color:#5C6B63;">13 more awaiting</span></div>
+    </div>
+  </div>
+</div>
+</div>
+
+</div>
+</x-dc>
+</body>
+</html>
