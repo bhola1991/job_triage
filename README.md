@@ -2,7 +2,7 @@
 
 A single-file web app that reads a CV, works out which career directions are realistically open to that person, then finds and ranks jobs against them.
 
-**[Try it →](https://jobtriage.pages.dev/)** · no signup, nothing leaves your browser
+**[Try it →](https://jobtriage.reachbhola.workers.dev/)** · no signup, nothing leaves your browser
 ---
 
 ## The problem
@@ -83,7 +83,7 @@ Running it with accounts on makes you a data controller for other people's CVs. 
 
 ## Installing it as an app
 
-`manifest.json` and `sw.js` make it installable — home-screen icon, no browser chrome, opens offline. Nothing to configure; it works as soon as the site is served over HTTPS, which GitHub Pages already does. The service worker is network-first, so a deploy reaches people immediately instead of being shadowed by a cached copy.
+`manifest.json` and `sw.js` make it installable — home-screen icon, no browser chrome, opens offline. Nothing to configure; it works as soon as the site is served over HTTPS, which the deployment already does. The service worker is network-first, so a deploy reaches people immediately instead of being shadowed by a cached copy.
 
 ## Architecture notes
 
