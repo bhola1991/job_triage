@@ -79,7 +79,7 @@ The `anon` key belongs in the browser — that is what it is for, and every tabl
 
 What syncs: profiles, CVs, jobs, scores, notes, contacts and history. What does not: **API keys**, which stay in the browser they were typed into. Uploading someone's DeepSeek and Apify credentials would add real liability and buy nothing.
 
-Running it with accounts on makes you a data controller for other people's CVs. [`PRIVACY.md`](PRIVACY.md) is a starting point, not legal advice — add a contact address before you invite anyone, and keep the in-app **Delete everything in my account** working.
+Running it with accounts on makes you a data controller for other people's CVs. [`privacy.html`](privacy.html), [`terms.html`](terms.html) and [`refund.html`](refund.html) are a starting point, not legal advice, and keep the in-app **Delete everything in my account** working.
 
 ## Installing it as an app
 
