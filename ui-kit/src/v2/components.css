@@ -56,9 +56,19 @@
 .qrow .fact .v.due { color: var(--due); } .qrow .fact .v.closing { color: var(--closing); }
 .qrow .fact .v.awaiting { color: var(--awaiting); } .qrow .fact .v.go { color: var(--go); }
 .qrow .acts { display: flex; gap: 7px; justify-content: flex-end; }
+.qrow.clickable { cursor: pointer; border-radius: 4px; padding-left: 10px; padding-right: 10px;
+  transition: transform .18s cubic-bezier(.16,1,.3,1), box-shadow .18s, background-color .18s; }
+/* Pointer devices only: on touch, hover sticks after a tap. */
+@media (hover: hover) {
+  .qrow.clickable:hover { transform: translateY(-2px) scale(1.012); background: var(--panel);
+    box-shadow: var(--shadow-md); position: relative; z-index: 1; }
+}
+/* Too narrow for the columns: facts and actions stack under the title rather than disappearing. */
 @media (max-width: 720px) {
-  .qrow { grid-template-columns: 3px 30px 1fr; }
-  .qrow .fact, .qrow .acts { display: none; }
+  .qrow { grid-template-columns: 3px 30px minmax(0,1fr); row-gap: 6px; }
+  .qrow .bar { grid-row: 1 / span 4; height: auto; align-self: stretch; }
+  .qrow .fact, .qrow .acts { grid-column: 3; }
+  .qrow .acts { justify-content: flex-start; flex-wrap: wrap; margin-top: 4px; }
 }
 
 /* detail header */
@@ -134,3 +144,20 @@
 .topbar2 .avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--panel2);
   border: 1px solid var(--line); display: flex; align-items: center; justify-content: center;
   font-family: var(--mono); font-size: 11px; color: var(--go); flex-shrink: 0; }
+
+/* posting link */
+.posting-link { font-family: var(--mono); font-size: 12px; color: var(--go); text-decoration: none; }
+.posting-link:hover { text-decoration: underline; }
+
+/* colour key: the law, with how many rows each rule holds */
+.lg { display: grid; grid-template-columns: 3px minmax(0,1fr) auto; gap: 0 11px; align-items: baseline;
+  padding: 8px 0; border-bottom: 1px solid var(--hair); }
+.lg:last-child { border-bottom: none; }
+.lg i { align-self: stretch; background: var(--closed); }
+.lg.go i { background: var(--go); } .lg.due i { background: var(--due); }
+.lg.closing i { background: var(--closing); } .lg.awaiting i { background: var(--awaiting); }
+.lg-h { font-size: 12.5px; } .lg.closed .lg-h { color: var(--muted); }
+.lg-s { font-size: 11px; color: var(--dim); margin-top: 1px; }
+.lg .num { font-family: var(--mono); font-size: 13px; color: var(--muted); }
+.lg.go .num { color: var(--go); } .lg.due .num { color: var(--due); }
+.lg.closing .num { color: var(--closing); } .lg.awaiting .num { color: var(--awaiting); }

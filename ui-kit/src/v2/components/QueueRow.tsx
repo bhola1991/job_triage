@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import type { MouseEvent, ReactNode } from 'react';
 
 export interface QueueRowFact {
   label: string;
@@ -17,12 +17,19 @@ export interface QueueRowProps {
   /** Up to 2 label/value fact columns (e.g. "fit / reach", "posted · 4d ago"). */
   facts?: QueueRowFact[];
   actions?: ReactNode;
+  /** Makes the whole row clickable: it lifts on hover and a click anywhere that isn't one of its own buttons or links calls this. */
+  onOpen?: () => void;
 }
 
 /** A ruled queue row: accent bar, rank, title/company, up to 2 facts, actions. Score is never the row's accent. */
-export function QueueRow({ accentTone, rank, rankTone = 'neutral', title, subtitle, facts, actions }: QueueRowProps) {
+export function QueueRow({ accentTone, rank, rankTone = 'neutral', title, subtitle, facts, actions, onOpen }: QueueRowProps) {
+  const click = onOpen
+    ? (e: MouseEvent<HTMLDivElement>) => {
+        if (!(e.target as HTMLElement).closest('button,a,input,select,textarea,label')) onOpen();
+      }
+    : undefined;
   return (
-    <div data-palette="v2" className="qrow">
+    <div data-palette="v2" className={`qrow${onOpen ? ' clickable' : ''}`} onClick={click}>
       <i className={`bar ${accentTone}`} />
       <span className={`rank ${rankTone}`}>{rank}</span>
       <div className="main">
