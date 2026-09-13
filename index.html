@@ -1005,29 +1005,124 @@ function parseAtsTarget(line){
    must not drift: the server has to outlive the browser's patience, or a run
    the tab is still polling gets killed underneath it. Giving up also aborts,
    since walking away from a run does not stop the bill. */
+const ownApify = () => !!(APIFY && APIFY.startsWith("apify_api_"));
 async function apifyRun(actor, payload, o){
   const every=o.every||6000, cap=o.cap||600;
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  if(!ownApify() && !cloudNow()) throw new Error("NEEDAPIFY");
+  // Same start/poll/read loop either way; only who holds the token differs.
+  // Their own token calls Apify directly; otherwise the server runs it on ours for credits.
   const H={"Authorization":"Bearer "+APIFY,"Content-Type":"application/json"};
-  let r;
-  try{ r=await fetch(runUrl(actor,cap+60),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
-  catch(e){ throw new Error("Couldn't reach Apify."); }
-  if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
-  if(!r.ok) throw new Error("Apify returned "+r.status);
-  const d=(await r.json()).data||{};
-  if(!d.id) throw new Error("Apify wouldn't start the run.");
+  let dataset='';
+  const api = ownApify() ? {
+    start: async()=>{
+      let r;
+      try{ r=await fetch(runUrl(actor,cap+60),{method:"POST",headers:H,body:JSON.stringify(payload)}); }
+      catch(e){ throw new Error("Couldn't reach Apify."); }
+      if(r.status===401||r.status===403) throw new Error("NEEDAPIFY");
+      if(!r.ok) throw new Error("Apify returned "+r.status);
+      const d=(await r.json()).data||{};
+      dataset=d.defaultDatasetId; return d.id;
+    },
+    status: async id=>((await (await fetch(APIFY_BASE+"/acts/"+actor+"/runs/"+id,{headers:H})).json()).data||{}).status,
+    items:  async ()=>(await (await fetch(APIFY_BASE+"/datasets/"+dataset+"/items?clean=true&format=json",{headers:H})).json()),
+    abort:  id=>abortRun(id,H)
+  } : {
+    // o.runId: the server already started (and charged for) this run, e.g. inside board_search.
+    start:  async()=>o.runId || (await hosted('apify_start',{payload,timeout:cap+60})).id,
+    status: async id=>(await hosted('apify_status',{id})).status,
+    items:  async id=>(await hosted('apify_items',{id})).items,
+    abort:  id=>hosted('apify_abort',{id}).catch(()=>{})
+  };
+  const id=await api.start();
+  if(!id) throw new Error("Apify wouldn't start the run.");
   // The loop condition already exits on SUCCEEDED; only a hard failure throws.
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,every)); waited+=every/1000;
-    if(waited>cap){ abortRun(d.id,H); throw new Error(`${o.label||'That run'} timed out after ${Math.round(cap/60)} minutes.`); }
-    const pr=await fetch(APIFY_BASE+"/acts/"+actor+"/runs/"+d.id,{headers:H});
-    status=((await pr.json()).data||{}).status||"UNKNOWN";
+    if(waited>cap){ api.abort(id); throw new Error(`${o.label||'That run'} timed out after ${Math.round(cap/60)} minutes.`); }
+    status=(await api.status(id))||"UNKNOWN";
     if(o.onStatus) o.onStatus(`${o.label||'working'} — ${status.toLowerCase()}, ${waited}s`);
     if(["FAILED","TIMED-OUT","ABORTED"].includes(status)) throw new Error("Apify run "+status);
   }
-  const dr=await fetch(APIFY_BASE+"/datasets/"+d.defaultDatasetId+"/items?clean=true&format=json",{headers:H});
-  return (await dr.json())||[];
+  return (await api.items(id))||[];
+}
+
+/* ═══ Credits ═══
+   Signed-in users without their own keys pay per call. The keys and the
+   balance both live server-side (supabase/functions/api); the browser only
+   ever sees the number. */
+/* The public pages, on the sign-in screens: anyone deciding whether to sign up
+   (and Razorpay's site review, which can't sign in) needs to reach them. */
+const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
+  [['pricing','Pricing'],['terms','Terms'],['refund','Refunds'],['privacy','Privacy'],['contact','Contact']]
+    .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
+let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true;
+const FREE_SEARCH_START = 5;    // must match free_search's default in billing.sql
+const creditsLabel = () => CREDITS==null ? '… credits'
+  : (FREE_SEARCH>0 ? `${FREE_SEARCH} free searches · ` : '') + CREDITS + ' credits';
+function showCredits(w){
+  if(typeof w.balance==='number') CREDITS=w.balance;
+  if(typeof w.free_search==='number') FREE_SEARCH=w.free_search;
+  if(typeof w.free_tier==='boolean') FREE_TIER=w.free_tier;
+  const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
+}
+async function loadCredits(){
+  if(!cloudNow()) return;
+  try{ const {data}=await SB.from('credits').select('balance,free_search,free_tier').eq('user_id',USER.id).maybeSingle();
+       // No row yet = a new account with the whole free tier still ahead of it.
+       showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true}); }catch(e){}
+}
+async function hosted(action, body){
+  const {data,error}=await SB.functions.invoke('api',{body:{action,...body}});
+  if(error){
+    let msg=error.message;
+    try{ msg=(await error.context.json()).error||msg; }catch(e){}
+    if(msg==='NEEDCREDITS'){ buyDialog(); throw new Error("You're out of credits."); }
+    throw new Error(msg);
+  }
+  if(data && typeof data.balance==='number') showCredits(data);
+  return data;
+}
+function loadScript(src){
+  return new Promise((ok,no)=>{ if(document.querySelector(`script[src="${src}"]`)) return ok();
+    const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("Couldn't load checkout.")); document.head.appendChild(s); });
+}
+async function buyDialog(){
+  if($('#buyModal')) return;
+  const d=modal(`<div id="buyModal"><div class="eyebrow">Credits</div>
+    <h2 style="margin:6px 0 10px">You have ${esc(creditsLabel())}</h2>
+    <p class="hint" style="margin:0 0 14px">${FREE_TIER
+      ? `Your first ${FREE_SEARCH_START} job board searches are free, and AI scoring is free alongside them. After that, both use credits.`
+      : `Your free searches are used up, so job board search and AI scoring now use credits.`}
+      Finding HR contacts always uses credits. Prefer your own keys? Add them under settings and nothing is charged.</p>
+    <div id="packs" class="btn-row" style="flex-wrap:wrap">Loading packs…</div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div></div>`);
+  try{
+    const {packs,costs}=await hosted('packs',{});
+    if(costs) d.querySelector('#packs').insertAdjacentHTML('beforebegin',
+      `<p class="hint" style="margin:0 0 12px">Job board search: ${costs.boardSearch} credits · AI scoring or a draft: ${costs.llm} credit · Finding HR contacts: ${costs.apifyQuery*3} credits</p>`);
+    d.querySelector('#packs').innerHTML=Object.entries(packs).map(([id,p])=>
+      `<button class="btn-go btn-sm" data-pack="${esc(id)}">${esc(p.label)} — ${p.credits} credits, ₹${(p.paise/100).toLocaleString('en-IN')}</button>`).join('')
+      || 'No packs for sale yet.';
+    d.querySelectorAll('[data-pack]').forEach(b=>b.onclick=()=>checkout(b.dataset.pack, d));
+  }catch(e){ d.querySelector('#packs').textContent=e.message; }
+}
+async function checkout(pack, dlg){
+  try{
+    await loadScript('https://checkout.razorpay.com/v1/checkout.js');
+    const o=await hosted('order',{pack});
+    new Razorpay({
+      key:o.key_id, order_id:o.order_id, amount:o.amount, currency:o.currency,
+      name:'Job Triage', description:'Credits', prefill:{email:(USER&&USER.email)||''},
+      theme:{color:getComputedStyle(document.documentElement).getPropertyValue('--go').trim()},
+      // The webhook credits the order too, so a closed tab here still gets paid for.
+      handler: async r=>{
+        try{ await hosted('verify',{order_id:r.razorpay_order_id,payment_id:r.razorpay_payment_id,signature:r.razorpay_signature});
+             dlg.remove(); alert('Payment received — you now have '+CREDITS+' credits.'); }
+        catch(e){ alert('Paid, but confirming it failed: '+e.message+'. Your credits will arrive within a few minutes.'); }
+      }
+    }).open();
+  }catch(e){ alert(e.message); }
 }
 
 async function findBoardsViaGoogle(names, onStatus){
@@ -1200,13 +1295,14 @@ function buildBoardQueries(titles, boards, where){
   return (boards||[]).slice(0,14).map(b=>`site:${b} ${any}` + (PORTALS.includes(b)?near:''));
 }
 
-async function apifyBoardSearch(queries, countryCode, onStatus){
+/* runId: poll a run the server started instead of starting one here. */
+async function apifyBoardSearch(queries, countryCode, onStatus, runId){
   // Schema confirmed against apify.com/apify/google-search-scraper:
   // queries is a newline-separated STRING, not an array.
   const items=await apifyRun(APIFY_GOOGLE,
     {queries:queries.join("\n"),countryCode:countryCode||"",languageCode:"en",
      maxPagesPerQuery:1,resultsPerPage:10,mobileResults:false},
-    {every:6000,cap:600,onStatus,label:`searching ${queries.length} board queries`});
+    {every:6000,cap:600,onStatus,runId,label:`searching ${queries.length} board queries`});
 
   const out=[];
   (items||[]).forEach(item=>{
@@ -1370,7 +1466,7 @@ function guessEmail(name, domain){
 }
 
 async function findHrContacts(company, ctx, onStatus){
-  if(!APIFY || !APIFY.startsWith("apify_api_")) throw new Error("NEEDAPIFY");
+  if(!ownApify() && !cloudNow()) throw new Error("NEEDAPIFY");
 
   let roster=null, domain='';
   const hit=await cachedRoster(company);
@@ -1509,6 +1605,8 @@ const LLM = {
 };
 
 async function claude(prompt, maxTok){
+  // No key of their own but signed in: the server calls DeepSeek with ours and takes a credit.
+  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||1400})).text;
   const cfg = LLM[PROV] || LLM.deepseek;
   // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
   if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
@@ -2174,7 +2272,8 @@ async function autoScore(){
   const n=p.jobs.filter(j=>!isScored(j)).length;
   if(!n) return;
   // Anthropic works with no key inside the Claude viewer; DeepSeek never does.
-  if(!KEY && PROV!=='anthropic'){
+  // Signed in, it runs on the server's key (free tier or credits) instead.
+  if(!KEY && PROV!=='anthropic' && !cloudNow()){
     setInfo(`${n} unscored \u2014 add a key and they will be scored automatically.`);
     return;
   }
@@ -2187,6 +2286,143 @@ async function autoScore(){
 
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
 function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
+
+/* ═══ board search: from ~140 Google hits to the 10 worth scoring ═══
+   Each job added gets scored, and scoring costs, so a search adds at most
+   MAX_PER_SEARCH. Three layers pick them, cheapest first:
+     1. boardFilter  - free: drop what is plainly not a new, recent, relevant posting
+     2. shortlist    - one AI call reads what's left and picks the best
+     3. fromAts      - free: Greenhouse/Lever/Ashby hits get their full description,
+                       and ones the company no longer lists are dropped as closed */
+const MAX_PER_SEARCH = 10;
+const MAX_AGE_DAYS = 30;
+
+/* A JSearch result (already trimmed server-side) as a job row. query is the
+   publisher, so pickSpread rotates LinkedIn / Indeed / Naukri / ... fairly. */
+function jsearchRow(x){
+  const j=blank();
+  j.title=String(x.title||'').slice(0,180)||'[No Title]';
+  j.company=String(x.company||'').slice(0,120)||'[from search — verify]';
+  j.url=String(x.url||''); j.location=String(x.location||'');
+  j.description=String(x.description||'');
+  setPosted(j, x.posted, 'feed');
+  j.source='Board search'; j.query=String(x.publisher||'JSearch'); j.status='New'; j.channel='posted';
+  j.notes='Found via '+j.query;
+  return j;
+}
+
+/* Round-robin across boards: each board's top hit, then each one's second...
+   Taking hits in arrival order would be ten from whichever board came first. */
+function pickSpread(jobs, max){
+  const byQuery=new Map();
+  jobs.forEach(j=>{ if(!byQuery.has(j.query)) byQuery.set(j.query,[]); byQuery.get(j.query).push(j); });
+  const lists=[...byQuery.values()], out=[];
+  for(let i=0; out.length<max && lists.some(l=>i<l.length); i++)
+    lists.forEach(l=>{ if(i<l.length && out.length<max) out.push(l[i]); });
+  return out;
+}
+
+/* A site: query returns search and category pages as well as postings, and
+   those have no job in them to score.
+   ponytail: URL shapes checked by eye, not against every board. A board whose
+   real postings match SEARCHY loses its results here; add its posting shape
+   to POSTING_SHAPE to let them through. */
+const SEARCHY = /[?&](q|keywords?|query)=|\/search\b|\/q-[^/]*-jobs|-jobs(-SRCH[^/]*)?(\.html?|\/?$)|\/jobs\/?$|\/(role|roles|location|locations|l)\/|\/browse\b|\/categor/i;
+const POSTING_SHAPE = {
+  'linkedin.com':  /\/jobs\/view\//i,
+  'glassdoor.':    /\/job-listing\//i,
+  'indeed.com':    /viewjob|\/rc\/clk|\/pagead\/|[?&]jk=/i,
+  'upwork.com':    /\/jobs\/|\/freelance-jobs\/apply\//i,
+};
+function isPostingUrl(u){
+  for(const host in POSTING_SHAPE) if(u.toLowerCase().includes(host)) return POSTING_SHAPE[host].test(u);
+  return !SEARCHY.test(u);
+}
+
+function boardFilter(jobs, trk){
+  const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
+  const want=roleWords({titles:trk.titles||[]});
+  const dropped={listing:0, offTopic:0, old:0, dupe:0};
+  const out=[];
+  jobs.forEach(j=>{
+    if(!isPostingUrl(j.url)){ dropped.listing++; return; }
+    // A title sharing no word with any target title is another role entirely.
+    // Skipped when the track's titles give no usable words to compare against.
+    const words=String(j.title).toLowerCase().split(/[^a-z+#]+/);
+    if(want.length && !want.some(w=>words.includes(w))){ dropped.offTopic++; return; }
+    const age=ageOf(j);                       // unknown age is kept: not the same as old
+    if(age!==null && age>MAX_AGE_DAYS){ dropped.old++; return; }
+    // The same role syndicated to several boards, or already in the list.
+    const tc=j.company.startsWith('[') ? '' : 'tc:'+[j.title,j.company].join('|').toLowerCase();
+    if(seen.has(keyOf(j)) || (tc && seen.has(tc))){ dropped.dupe++; return; }
+    seen.add(keyOf(j)); if(tc) seen.add(tc);
+    out.push(j);
+  });
+  return {jobs:out, dropped};
+}
+
+/* One cheap call over titles and snippets. Returns more than the final ten so
+   there is room for fromAts to drop closed postings. If the call fails, the
+   search has already been paid for, so fall back to the round-robin rather
+   than throw the results away. */
+async function shortlist(jobs, prof, trk, n){
+  if(jobs.length<=n) return jobs;
+  const pool=pickSpread(jobs, 60);            // ~60 short lines keeps one call small
+  const t=(prof.tracks||[]).find(x=>x.id===trk.id) || trk;
+  const list=pool.map((j,i)=>({id:String(i), title:j.title, company:j.company,
+    board:(j.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]), snippet:String(j.description||'').slice(0,220)}));
+  try{
+    const txt=await claude(`You shortlist job search results for one candidate before each is scored in detail. Most search results are noise.
+
+CANDIDATE: ${prof.headline||''}
+Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
+Based in: ${prof.location||'unspecified'}
+Targeting: ${t.label||'general roles'}; titles like ${(t.titles||[]).join(', ')}
+Rule out: ${(prof.wrong_shapes||[]).join('; ')||'nothing stated'}
+
+Pick up to ${n} results most likely to be a real, single, still-open posting this candidate could credibly go for, best first.
+Leave out: pages listing many jobs, role shapes ruled out above, clearly wrong seniority, roles tied to a location they can't work from with no remote option, recruiter spam and duplicates of one role.
+Judge only from what is given. Do not invent details.
+
+Return ONLY JSON, no fences: {"keep":["id", ...]}
+
+RESULTS:
+${JSON.stringify(list)}`, 300);
+    const keep=(grabJSON(txt).keep||[]).map(String).filter(id=>pool[id]);
+    return [...new Set(keep)].slice(0,n).map(id=>pool[id]);
+  }catch(e){
+    console.warn('shortlist failed, using round-robin:', e.message);
+    return pickSpread(jobs, n);
+  }
+}
+
+/* Board hits on an ATS carry only Google's snippet, but the company's feed has
+   the whole posting. One feed pull per company covers all its hits. A feed
+   that loads and doesn't list the posting means the posting is gone; a feed
+   that fails to load proves nothing, so that hit is kept as it was. */
+async function fromAts(jobs, onStatus){
+  const feeds=new Map(), out=[];
+  let closed=0;
+  for(const j of jobs){
+    const m=j.url.match(/(greenhouse\.io|lever\.co|ashbyhq\.com)\/([^/?#]+)\/(?:jobs\/)?([^/?#]+)/i);
+    if(!m){ out.push(j); continue; }
+    const platform={'greenhouse.io':'greenhouse','lever.co':'lever','ashbyhq.com':'ashby'}[m[1].toLowerCase()];
+    const key=platform+':'+m[2];
+    if(!feeds.has(key)){
+      if(onStatus) onStatus(`reading ${m[2]}'s full postings on ${ATS[platform].label}…`);
+      feeds.set(key, await atsPull(platform, m[2]).catch(()=>null));
+    }
+    const feed=feeds.get(key);
+    if(!feed){ out.push(j); continue; }
+    const row=feed.rows.find(r=>String(r.url).includes(m[3]));
+    if(!row){ closed++; continue; }
+    j.description=(row.desc||j.description).slice(0,4000);
+    if(row.location) j.location=row.location;
+    setPosted(j, row.posted, 'feed');        // the feed's date beats the snippet's
+    out.push(j);
+  }
+  return {jobs:out, closed};
+}
 
 async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
@@ -2203,12 +2439,35 @@ async function runBoards(trk, where){
     // this stops an Indian search coming back ordered for an American reader.
     // Empty on a profile extracted before country_code existed, which is the
     // old worldwide behaviour rather than a broken one.
-    const jobs=await apifyBoardSearch(qs,p.profile.country_code||"",setSearchInfo);
-    const n=addJobs(jobs);
+    const cc=p.profile.country_code||"";
+    let raw;
+    if(!ownApify() && cloudNow()){
+      // Our keys: JSearch covers the big portals with full descriptions, and
+      // Google covers only the specialist boards JSearch can't see. One charge.
+      const registries=boards.filter(b=>!PORTALS.includes(b));
+      const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
+      setSearchInfo('searching job boards…');
+      const r=await hosted('board_search',{titles:titles.slice(0,4), where, country:cc, queries:rq.join('\n')});
+      if(r.partial) console.warn('JSearch was down; only specialist boards were searched.');
+      raw=(r.jobs||[]).map(jsearchRow);
+      if(r.runId) raw=raw.concat(await apifyBoardSearch(rq,cc,setSearchInfo,r.runId).catch(e=>{ console.warn(e); return []; }));
+    } else {
+      raw=await apifyBoardSearch(qs,cc,setSearchInfo);
+    }
+    const f=boardFilter(raw, trk);
+    setSearchInfo(`${raw.length} found, ${f.jobs.length} look like new postings — shortlisting…`);
+    // A few spare, so closed ones dropped by fromAts don't leave the search short.
+    const picked=await shortlist(f.jobs, p.profile, trk, MAX_PER_SEARCH+4);
+    const ats=await fromAts(picked, setSearchInfo);
+    const n=addJobs(ats.jobs.slice(0, MAX_PER_SEARCH));
     await save(); busy=false; render();
-    setSearchInfo(n
-      ? `Added ${n} from ${qs.length} searches.`
-      : `Searched ${qs.length} boards, nothing new came back.`);
+    const d=f.dropped;
+    const why=[d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
+      d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
+      ats.closed&&`${ats.closed} closed`].filter(Boolean).join(', ');
+    setSearchInfo((n
+      ? `Added the best ${n} of ${raw.length} results.`
+      : `Searched ${qs.length} boards, nothing new worth adding.`) + (why?` Skipped: ${why}.`:''));
     await autoScore();
   }catch(e){
     busy=false; render();
@@ -3021,7 +3280,8 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
-    ${CLOUD&&USER?`<button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
+    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits" onclick="buyDialog()">${esc(creditsLabel())}</button>
+    <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
   <div class="wrap">
@@ -3897,7 +4157,8 @@ function renderAuth(){
       </div>
       ${up?'':`<p class="say" style="margin:12px 0 0;font-size:12.5px"><a href="#" class="lnk" id="auReset">Forgot your password?</a></p>`}
     </div>
-    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="PRIVACY.md" target="_blank" rel="noopener">privacy notice</a>. Your API keys are never uploaded \u2014 they stay in this browser.</p>
+    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="privacy.html" target="_blank" rel="noopener">privacy policy</a>. Your own API keys are never uploaded \u2014 they stay in this browser.</p>
+    ${LEGAL_LINKS}
   </div>`;
 
   // Swapping mode or hitting an error re-renders the form, which would throw
@@ -3994,7 +4255,8 @@ function renderReset(){
         <button class="btn-sm" id="rsBack">Back to sign in</button>
       </div>
     </div>
-    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="PRIVACY.md" target="_blank" rel="noopener">privacy notice</a>. Your API keys are never uploaded — they stay in this browser.</p>
+    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="privacy.html" target="_blank" rel="noopener">privacy policy</a>. Your own API keys are never uploaded — they stay in this browser.</p>
+    ${LEGAL_LINKS}
   </div>`;
 
   const go=async ()=>{
@@ -4148,6 +4410,7 @@ async function migrateLocal(){
 async function afterAuth(){
   DB={profiles:{},current:null}; VIEW='onb';
   if(cloudNow()) splash('Loading your account\u2026');
+  CREDITS=null; loadCredits();          // not awaited: a slow balance mustn't hold up the app
   try{
     await afterAuthInner();
   }catch(e){

@@ -19,3 +19,7 @@ __preview_local.html
 design/support.js
 .thumbnail
 Job triage app mockups/
+
+# Server secrets for `supabase secrets set --env-file`. Never commit.
+supabase/.env
+supabase/.temp/
