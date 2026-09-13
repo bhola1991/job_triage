@@ -69,6 +69,30 @@ export function Closing() {
   );
 }
 
+// With onOpen the whole row is clickable and lifts on hover; the hover itself
+// can't be captured statically, so this cell shows the clickable layout.
+export function Clickable() {
+  return (
+    <div data-palette="v2" style={ground}>
+      <QueueRow
+        accentTone="go"
+        rank={75}
+        rankTone="go"
+        title="Forward Deployed Engineer"
+        subtitle="Sarvam AI · Bangalore · posted role"
+        facts={[{ label: 'fit / reach', value: '82 · 64' }, { label: 'posted', value: '4d ago' }]}
+        actions={
+          <>
+            <ActionButton tone="neutral" size="sm">Details</ActionButton>
+            <ActionButton tone="go" emphasis="fill" size="sm">Draft outreach</ActionButton>
+          </>
+        }
+        onOpen={() => {}}
+      />
+    </div>
+  );
+}
+
 export function Awaiting() {
   return (
     <div data-palette="v2" style={ground}>
