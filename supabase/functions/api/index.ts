@@ -6,6 +6,7 @@
 //
 // Secrets (supabase secrets set ...):
 //   DEEPSEEK_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+//   optional job sources: ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
@@ -18,10 +19,13 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
 };
 // Credits per action. What each costs us, roughly:
 //   llm          1 DeepSeek call                                        ~₹0.10-0.30
-//   boardSearch  flat: up to 4 JSearch requests (₹0.44 each, pay-as-you-go)
-//                + up to 8 specialist-board Google queries (~₹0.30 each) up to ~₹4.20
+//   boardSearch  flat: up to 4 JSearch requests (₹0.44 each, pay-as-you-go),
+//                Adzuna/Jooble/Careerjet/Remotive/RemoteOK (free),
+//                up to 14 Google queries (~₹0.30 each, specialist boards + fallback),
+//                5 Apify scrapers at up to $0.05 each (SCRAPE_MAX_USD)
+//                typical ~₹12-15, worst case ~₹28
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
-const COST = { llm: 1, boardSearch: 10, apifyQuery: 3 };
+const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
 
 const secret = (k: string) => {
   const v = Deno.env.get(k);
@@ -61,15 +65,182 @@ async function jsearch(title: string, where: string, country: string) {
   });
   if (!r.ok) throw new Error(`JSearch ${r.status}: ${(await r.text()).slice(0, 120)}`);
   // deno-lint-ignore no-explicit-any
-  return ((await r.json()).data || []).map((x: any) => ({
+  return ((await r.json()).data || []).map((x: any): Job => ({
     title: x.job_title || "",
     company: x.employer_name || "",
     url: x.job_apply_link || x.job_google_link || "",
     location: [x.job_city, x.job_state, x.job_country].filter(Boolean).join(", ") + (x.job_is_remote ? " (remote)" : ""),
     description: String(x.job_description || "").slice(0, 4000),
-    posted: String(x.job_posted_at_datetime_utc || "").slice(0, 10),
+    posted: isoDay(x.job_posted_at_datetime_utc),
     publisher: x.job_publisher || "JSearch",
   }));
+}
+
+/* ═══ more job sources ═══
+   Every source returns the same Job shape, so the app treats them alike.
+   A source whose key isn't set is skipped, not an error: each one is optional.
+   All are free; none changes what a search costs the user. */
+type Job = { title: string; company: string; url: string; location: string; description: string; posted: string; publisher: string };
+// deno-lint-ignore no-explicit-any
+type Any = any;
+const PER_SOURCE = 10;
+const env = (k: string) => Deno.env.get(k) || "";
+// Dates arrive as ISO strings, RFC dates, or epoch seconds/milliseconds (as numbers or digit strings).
+const isoDay = (v: unknown) => {
+  const s = String(v ?? "").trim();
+  const d = /^\d{13}$/.test(s) ? new Date(+s) : /^\d{10}$/.test(s) ? new Date(+s * 1000) : new Date(s);
+  return s && !isNaN(+d) ? d.toISOString().slice(0, 10) : "";
+};
+const plain = (h: unknown) => String(h || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
+const getJson = async (url: string, init: RequestInit = {}) => {
+  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
+  if (!r.ok) throw new Error(`${new URL(url).hostname} ${r.status}: ${(await r.text()).slice(0, 100)}`);
+  return r.json();
+};
+const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
+
+async function adzuna(title: string, where: string, country: string): Promise<Job[]> {
+  const cc = country.toLowerCase();
+  if (!env("ADZUNA_APP_ID") || !ADZUNA_COUNTRIES.has(cc)) return [];
+  const q = new URLSearchParams({ app_id: env("ADZUNA_APP_ID"), app_key: env("ADZUNA_APP_KEY"), what: title,
+    results_per_page: String(PER_SOURCE), max_days_old: "30", "content-type": "application/json" });
+  if (where && !/^remote$/i.test(where)) q.set("where", where.split(",")[0]);
+  const d = await getJson(`https://api.adzuna.com/v1/api/jobs/${cc}/search/1?${q}`);
+  return (d.results || []).map((x: Any): Job => ({ title: plain(x.title), company: x.company?.display_name || "",
+    url: x.redirect_url || "", location: x.location?.display_name || "", description: plain(x.description),
+    posted: isoDay(x.created), publisher: "Adzuna" }));
+}
+
+async function jooble(title: string, where: string): Promise<Job[]> {
+  if (!env("JOOBLE_API_KEY")) return [];
+  const d = await getJson(`https://jooble.org/api/${env("JOOBLE_API_KEY")}`, { method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ keywords: title, location: /^remote$/i.test(where) ? "" : where, page: "1", ResultOnPage: String(PER_SOURCE) }) });
+  return (d.jobs || []).map((x: Any): Job => ({ title: plain(x.title), company: x.company || "", url: x.link || "",
+    location: x.location || "", description: plain(x.snippet), posted: isoDay(x.updated), publisher: x.source || "Jooble" }));
+}
+
+// Careerjet requires the end user's IP and user agent on every call.
+async function careerjet(title: string, where: string, country: string, req: Request): Promise<Job[]> {
+  if (!env("CAREERJET_API_KEY")) return [];
+  const q = new URLSearchParams({ keywords: title, locale_code: `en_${(country || "GB").toUpperCase()}`, page_size: String(PER_SOURCE), sort: "date",
+    user_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "0.0.0.0",
+    user_agent: req.headers.get("user-agent") || "JobTriage" });
+  if (where && !/^remote$/i.test(where)) q.set("location", where.split(",")[0]);
+  const d = await getJson(`https://search.api.careerjet.net/v4/query?${q}`, { headers: { Authorization: "Basic " + btoa(env("CAREERJET_API_KEY") + ":") } });
+  return (d.jobs || []).map((x: Any): Job => ({ title: plain(x.title), company: x.company || "", url: x.url || "",
+    location: x.locations || "", description: plain(x.description), posted: isoDay(x.date), publisher: "Careerjet" }));
+}
+
+/* Remotive and RemoteOK are free public feeds of remote jobs that ask callers
+   not to poll them often. So each feed is fetched whole at most once per
+   6 hours per server instance and matched against titles here.
+   ponytail: cache is per edge-function instance, not shared; move it to a DB
+   table if their rate limits are ever hit. */
+const feedCache = new Map<string, { at: number; jobs: Job[] }>();
+async function cachedFeed(key: string, load: () => Promise<Job[]>) {
+  const hit = feedCache.get(key);
+  if (hit && Date.now() - hit.at < 6 * 3600_000) return hit.jobs;
+  const jobs = await load();
+  feedCache.set(key, { at: Date.now(), jobs });
+  return jobs;
+}
+const remotive = () => cachedFeed("remotive", async () =>
+  ((await getJson("https://remotive.com/api/remote-jobs")).jobs || []).map((x: Any): Job => ({ title: plain(x.title),
+    company: x.company_name || "", url: x.url || "", location: `${x.candidate_required_location || "Anywhere"} (remote)`,
+    description: plain(x.description).slice(0, 4000), posted: isoDay(x.publication_date), publisher: "Remotive" })));
+// RemoteOK's terms: link back to them and name them as the source. url and publisher do both.
+const remoteok = () => cachedFeed("remoteok", async () =>
+  ((await getJson("https://remoteok.com/api", { headers: { "User-Agent": "JobTriage (jobtriage.reachbhola.workers.dev)" } })) as Any[])
+    .filter((x) => x && x.position).map((x: Any): Job => ({ title: plain(x.position), company: x.company || "",
+      url: x.url || "", location: `${x.location || "Anywhere"} (remote)`, description: plain(x.description).slice(0, 4000),
+      posted: isoDay(x.date), publisher: "Remote OK" })));
+function titleMatches(jobs: Job[], titles: string[]) {
+  const words = [...new Set(titles.join(" ").toLowerCase().split(/[^a-z+#]+/).filter((w) => w.length >= 4))];
+  return jobs.filter((j) => words.some((w) => j.title.toLowerCase().includes(w))).slice(0, PER_SOURCE * 2);
+}
+
+/* ═══ Apify scrapers for sites with no API ═══
+   LinkedIn, Indeed, Naukri, Instahyre/CutShort/Foundit and Upwork publish no
+   job API, so these run Apify Store actors on APIFY_TOKEN. Each is a
+   pay-per-result actor, capped twice: maxItems (how many rows) and
+   maxTotalChargeUsd (a hard dollar ceiling per run, whatever the actor charges).
+   Runs are started here and polled by the browser like the Google run.
+   Prices seen on the Apify Store, Sep 2026 (per 1,000 results): Indeed $3,
+   India tech boards $4, Naukri from $1 + start fee, Upwork $0.14, LinkedIn not
+   published. Actor ids and inputs were read from their Store pages. If one
+   changes its input, that source just returns nothing. */
+const SCRAPE_ROWS = 10;
+const SCRAPE_MAX_USD = 0.05;
+const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; input: (t: string[], city: string, cc: string) => object }> = {
+  linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
+    input: (t, city) => ({ titles: t.slice(0, 2), locations: city ? [city] : [], rows: SCRAPE_ROWS, companyProfile: false }) },
+  indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
+    input: (t, city, cc) => ({ position: t.slice(0, 2).join(" OR "), location: city, country: cc.toUpperCase(), maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
+  naukri: { actor: "memo23~naukri-scraper", label: "Naukri", india: true,
+    input: (t, city) => ({ platform: "naukri", searchQuery: t[0], location: city, maximumJobs: SCRAPE_ROWS, freshnessDays: 30, sortBy: "date" }) },
+  indiatech: { actor: "seemuapps~india-tech-jobs-scraper", label: "Instahyre / CutShort / Foundit", india: true,
+    input: (t, city) => ({ keywords: t[0], location: city, boards: ["instahyre", "cutshort", "foundit"], maxItems: SCRAPE_ROWS }) },
+  upwork: { actor: "valig~upwork-jobs-scraper", label: "Upwork",
+    input: (t) => ({ keywords: t[0], sort: "recency", limit: SCRAPE_ROWS }) },
+};
+
+async function startScrapers(user: string, titles: string[], where: string, country: string) {
+  const cc = country.toLowerCase() || "in";
+  const city = /^remote$/i.test(where) ? "" : where.split(",")[0].trim();
+  const started = await Promise.all(Object.entries(SCRAPERS)
+    .filter(([, s]) => !s.india || cc === "in")
+    .map(async ([source, s]) => {
+      const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${SCRAPE_ROWS}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
+        method: "POST", body: JSON.stringify(s.input(titles, city, cc)),
+      }).catch(() => null);
+      const run = r && r.ok ? (await r.json()).data : null;
+      if (!run?.id) { console.error("scraper start failed:", source, r?.status); return null; }
+      await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
+      return { id: run.id, source, label: s.label };
+    }));
+  return started.filter(Boolean);
+}
+
+/* Actors disagree on field names, so take the first one present. */
+const pick = (x: Any, ...keys: string[]) => { for (const k of keys) { const v = k.split(".").reduce((o, p) => o?.[p], x); if (v !== undefined && v !== null && v !== "") return v; } return ""; };
+function scrapedJob(x: Any, source: string): Job {
+  let url = String(pick(x, "jobUrl", "url", "link", "staticUrl", "JdURL", "applyUrl", "externalApplyLink"));
+  if (source === "naukri" && url && !/^https?:/.test(url)) url = "https://www.naukri.com/" + url.replace(/^\//, "");
+  const loc = pick(x, "location", "locations", "jobLocation", "city", "formattedLocation");
+  return {
+    title: plain(pick(x, "title", "positionName", "jobTitle", "Designation", "position", "name")),
+    company: plain(pick(x, "companyName", "company", "companyDetail.name", "Company.Name", "company_name", "employer")),
+    url,
+    location: (Array.isArray(loc) ? loc.map((l: Any) => l?.label || l?.name || l).join(", ") : String(loc)) + (source === "upwork" ? " (remote)" : ""),
+    description: plain(pick(x, "description", "descriptionText", "jobDescription", "snippet")).slice(0, 4000),
+    posted: isoDay(pick(x, "publishedAt", "postedAt", "datePosted", "createdDate", "createdOn", "publishedOn", "date")),
+    publisher: SCRAPERS[source].label,
+  };
+}
+
+/* Every source at once. Returns the jobs (deduped by link) and one error line
+   per source that failed, so the app can say which. */
+async function searchAll(titles: string[], where: string, country: string, req: Request) {
+  const named: [string, Promise<Job[]>][] = [
+    ...titles.map((t) => ["JSearch", jsearch(t, where, country)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["Adzuna", adzuna(t, where, country)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["Jooble", jooble(t, where)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["Careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[]>]),
+    ["Remotive", remotive().then((j) => titleMatches(j, titles))],
+    ["Remote OK", remoteok().then((j) => titleMatches(j, titles))],
+  ];
+  const settled = await Promise.allSettled(named.map(([, p]) => p));
+  const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>();
+  settled.forEach((s, i) => {
+    if (s.status === "rejected") { errors.set(named[i][0], String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    for (const j of s.value) {
+      const k = j.url.toLowerCase();
+      if (!j.title || !j.url || seen.has(k)) continue;
+      seen.add(k); jobs.push(j);
+    }
+  });
+  return { jobs, errors: [...errors].map(([src, msg]) => `${src}: ${msg}`) };
 }
 
 // What the browser gets back after any spend: enough to redraw the credits button.
@@ -132,10 +303,11 @@ Deno.serve(async (req) => {
         if (!titles.length) throw new Http(400, "no titles");
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
 
-        const found = await Promise.allSettled(titles.map((t) => jsearch(t, String(b.where || ""), String(b.country || ""))));
-        const jobs = found.flatMap((f) => (f.status === "fulfilled" ? f.value : []));
-        const errors = found.flatMap((f) => (f.status === "rejected" ? [String((f.reason as Error)?.message || f.reason)] : []));
-        if (errors.length) console.error("jsearch:", errors);
+        const [{ jobs, errors }, scrapers] = await Promise.all([
+          searchAll(titles, String(b.where || ""), String(b.country || ""), req),
+          startScrapers(user, titles, String(b.where || ""), String(b.country || "")),
+        ]);
+        if (errors.length) console.error("sources:", errors);
 
         const queries = [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
         const run = queries.length
@@ -145,12 +317,12 @@ Deno.serve(async (req) => {
             }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
           : null;
         // Nothing came back from anywhere: they got nothing, so they pay nothing.
-        if (!jobs.length && !run?.id) {
+        if (!jobs.length && !run?.id && !scrapers.length) {
           await refund(user, s, "search", COST.boardSearch);
           throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
         }
         if (run?.id) await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
-        return json({ jobs, runId: run?.id || null, queries, jsearchError: errors[0] || null, ...wallet(s) });
+        return json({ jobs, runId: run?.id || null, queries, scrapers, sourceErrors: errors, ...wallet(s) });
       }
 
       case "llm": {
@@ -208,7 +380,10 @@ Deno.serve(async (req) => {
       case "apify_items": {
         const ds = await ownRun(user, b.id);
         const r = await apify(`/datasets/${encodeURIComponent(ds)}/items?clean=true&format=json`);
-        return json({ items: r.ok ? await r.json() : [] });
+        const items = r.ok ? await r.json() : [];
+        // A scraper run comes back in the same Job shape as the API sources; a Google run raw.
+        if (Object.hasOwn(SCRAPERS, String(b.source))) return json({ items: (items as Any[]).map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url) });
+        return json({ items });
       }
 
       case "apify_abort": {

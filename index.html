@@ -948,6 +948,46 @@ const ATS = {
       // Ashby is the one feed with reliable pay data, so keep it when present.
       pay:x.compensation&&x.compensation.compensationTierSummary||""
     }))
+  },
+  /* The three below were added later and are less proven from a browser: if
+     one refuses the request (CORS), atsSearch treats it as a miss and moves
+     on rather than failing the whole lookup. */
+  workable:{
+    label:"Workable",
+    host:/apply\.workable\.com\/(?!api\/)([^/?#]+)/i,
+    url:s=>`https://apply.workable.com/api/v1/widget/accounts/${encodeURIComponent(s)}?details=true`,
+    parse:(d,slug)=>(d.jobs||[]).map(x=>({
+      title:x.title||"", location:[x.city,x.state,x.country].filter(Boolean).join(", ")+(x.telecommuting?" (remote)":""),
+      url:x.shortcode?`https://apply.workable.com/${slug}/j/${x.shortcode}/`:(x.url||""),
+      posted:(x.published_on||x.created_at||"").slice(0,10),
+      desc:stripTags(String(x.description||"")), dept:x.department||""
+    }))
+  },
+  smartrecruiters:{
+    label:"SmartRecruiters",
+    host:/(?:jobs|careers)\.smartrecruiters\.com\/([^/?#]+)/i,
+    url:s=>`https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(s)}/postings?limit=100`,
+    // ponytail: the list has no description; fromAts fetches it for the one
+    // posting it needs (detail). Rows imported by company name stay title-only.
+    parse:(d,slug)=>(d.content||[]).map(x=>({
+      title:x.name||"", location:[x.location&&x.location.city, x.location&&x.location.country].filter(Boolean).join(", ")+(x.location&&x.location.remote?" (remote)":""),
+      url:`https://jobs.smartrecruiters.com/${slug}/${x.id}`, posted:(x.releasedDate||"").slice(0,10),
+      desc:"", dept:(x.department&&x.department.label)||"", detail:x.ref||""
+    })),
+    detail:async row=>{
+      const d=await (await fetch(row.detail)).json();
+      return stripTags(Object.values((d.jobAd&&d.jobAd.sections)||{}).map(s=>s&&s.text||"").join(" "));
+    }
+  },
+  recruitee:{
+    label:"Recruitee",
+    host:/([a-z0-9-]+)\.recruitee\.com/i,
+    url:s=>`https://${encodeURIComponent(s)}.recruitee.com/api/offers/`,
+    parse:d=>(d.offers||[]).map(x=>({
+      title:x.title||"", location:x.location||[x.city,x.country].filter(Boolean).join(", "),
+      url:x.careers_url||"", posted:(x.published_at||x.created_at||"").slice(0,10),
+      desc:stripTags(String(x.description||"")+" "+String(x.requirements||"")), dept:x.department||""
+    }))
   }
 };
 
@@ -985,7 +1025,7 @@ function parseAtsTarget(line){
     const m=t.match(ATS[k].host);
     if(m) return [{platform:k,slug:m[1],exact:true}];
   }
-  const explicit=t.match(/^(greenhouse|lever|ashby)\s*[:/]\s*(.+)$/i);
+  const explicit=t.match(/^(greenhouse|lever|ashby|workable|smartrecruiters|recruitee)\s*[:/]\s*(.+)$/i);
   if(explicit) return [{platform:explicit[1].toLowerCase(),slug:explicit[2].trim(),exact:true}];
   if(/^https?:\/\//i.test(t)) return [];        // some other careers page; Google will have to find it
   const out=[];
@@ -1030,7 +1070,8 @@ async function apifyRun(actor, payload, o){
     // o.runId: the server already started (and charged for) this run, e.g. inside board_search.
     start:  async()=>o.runId || (await hosted('apify_start',{payload,timeout:cap+60})).id,
     status: async id=>(await hosted('apify_status',{id})).status,
-    items:  async id=>(await hosted('apify_items',{id})).items,
+    // o.source: a scraper run, which the server returns already in the Job shape.
+    items:  async id=>(await hosted('apify_items',{id, source:o.source})).items,
     abort:  id=>hosted('apify_abort',{id}).catch(()=>{})
   };
   const id=await api.start();
@@ -1127,7 +1168,7 @@ async function checkout(pack, dlg){
 
 async function findBoardsViaGoogle(names, onStatus){
   const qs=names.slice(0,10).map(n=>
-    `"${n}" (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com)`);
+    `"${n}" (site:boards.greenhouse.io OR site:job-boards.greenhouse.io OR site:jobs.lever.co OR site:jobs.ashbyhq.com OR site:apply.workable.com OR site:jobs.smartrecruiters.com OR site:recruitee.com)`);
   if(!qs.length) return {};
   const items=await apifyRun(APIFY_GOOGLE,
     {queries:qs.join("\n"),languageCode:"en",maxPagesPerQuery:1,resultsPerPage:5,mobileResults:false},
@@ -1169,7 +1210,9 @@ async function atsSearch(lines, onStatus){
         const res=await atsPull(c.platform,c.slug);
         if(res){ res.name=label||res.slug; return res; }
       }catch(e){
-        if(e.message==="network") throw new Error(
+        // Greenhouse/Lever/Ashby are known to allow browser calls, so a block there
+        // is a real problem. The newer feeds may simply not allow it: skip those.
+        if(e.message==="network" && ['greenhouse','lever','ashby'].includes(c.platform)) throw new Error(
           "The ATS feed was blocked by the browser. This normally works \u2014 try again, or add these by hand.");
       }
     }
@@ -2287,18 +2330,20 @@ async function autoScore(){
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
 function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
 
-/* ═══ board search: from ~140 Google hits to the 10 worth scoring ═══
-   Each job added gets scored, and scoring costs, so a search adds at most
-   MAX_PER_SEARCH. Three layers pick them, cheapest first:
+/* ═══ board search: from every source's results to the 10 worth scoring ═══
+   Each job added gets fully scored, and scoring costs, so a search adds at
+   most MAX_PER_SEARCH. As each source's results land (liveBoard):
      1. boardFilter  - free: drop what is plainly not a new, recent, relevant posting
-     2. shortlist    - one AI call reads what's left and picks the best
-     3. fromAts      - free: Greenhouse/Lever/Ashby hits get their full description,
-                       and ones the company no longer lists are dropped as closed */
+     2. judge        - one AI call per batch checks each against the CV: accept or
+                       reject, with a quick match score; accepted ones compete live
+   Then, for the leaders:
+     3. fromAts      - free: company-feed hits get their full description, and
+                       ones the company no longer lists are dropped as closed */
 const MAX_PER_SEARCH = 10;
 const MAX_AGE_DAYS = 30;
 
-/* A JSearch result (already trimmed server-side) as a job row. query is the
-   publisher, so pickSpread rotates LinkedIn / Indeed / Naukri / ... fairly. */
+/* A normalized server result (API source or site scraper) as a job row.
+   query holds the publisher (LinkedIn, Naukri, ...) for the live list. */
 function jsearchRow(x){
   const j=blank();
   j.title=String(x.title||'').slice(0,180)||'[No Title]';
@@ -2309,17 +2354,6 @@ function jsearchRow(x){
   j.source='Board search'; j.query=String(x.publisher||'JSearch'); j.status='New'; j.channel='posted';
   j.notes='Found via '+j.query;
   return j;
-}
-
-/* Round-robin across boards: each board's top hit, then each one's second...
-   Taking hits in arrival order would be ten from whichever board came first. */
-function pickSpread(jobs, max){
-  const byQuery=new Map();
-  jobs.forEach(j=>{ if(!byQuery.has(j.query)) byQuery.set(j.query,[]); byQuery.get(j.query).push(j); });
-  const lists=[...byQuery.values()], out=[];
-  for(let i=0; out.length<max && lists.some(l=>i<l.length); i++)
-    lists.forEach(l=>{ if(i<l.length && out.length<max) out.push(l[i]); });
-  return out;
 }
 
 /* A site: query returns search and category pages as well as postings, and
@@ -2346,8 +2380,10 @@ function isPostingUrl(u){
   return !SEARCHY.test(u);
 }
 
-function boardFilter(jobs, trk){
-  const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
+/* seen: shared across calls when one search feeds in several batches, so a
+   job found by two sources is only kept once. */
+function boardFilter(jobs, trk, seen){
+  const p=P(); seen=seen||new Set(p?p.jobs.map(keyOf):[]);
   const want=roleWords({titles:trk.titles||[]});
   const dropped={listing:0, offTopic:0, old:0, dupe:0};
   const out=[];
@@ -2368,63 +2404,124 @@ function boardFilter(jobs, trk){
   return {jobs:out, dropped};
 }
 
-/* One cheap call over titles and snippets. Returns more than the final ten so
-   there is room for fromAts to drop closed postings. Runs even when fewer than
-   n came back: it is also the check that each one is a real posting at all,
-   and a thin search is exactly when junk gets through. If the call fails, the
-   search has already been paid for, so fall back to the round-robin rather
-   than throw the results away. */
-async function shortlist(jobs, prof, trk, n){
-  if(!jobs.length) return jobs;
-  const pool=pickSpread(jobs, 60);            // ~60 short lines keeps one call small
+/* The CV check. Reads each result (title, company, location, the start of the
+   description) against the candidate and returns only the ones worth a place,
+   each with a quick 0-100 match. Called once per source as its results land,
+   so the best-10 list fills in while the slower scrapers are still running.
+   Batches of 40 keep each call small. If a call fails, that batch's results
+   were already paid for, so they are kept at a neutral 40 rather than lost:
+   the full scoring afterwards still judges them properly. */
+const JUDGE_BATCH = 40;
+async function judge(jobs, prof, trk){
   const t=(prof.tracks||[]).find(x=>x.id===trk.id) || trk;
-  const list=pool.map((j,i)=>({id:String(i), title:j.title, company:j.company,
-    board:(j.url.replace(/^https?:\/\/(www\.)?/,'').split('/')[0]), snippet:String(j.description||'').slice(0,220)}));
-  try{
-    const txt=await claude(`You shortlist job search results for one candidate before each is scored in detail. Most search results are noise.
+  const kept=[]; let rejected=0;
+  for(let i=0;i<jobs.length;i+=JUDGE_BATCH){
+    const part=jobs.slice(i,i+JUDGE_BATCH);
+    const list=part.map((j,k)=>({id:String(k), title:j.title, company:j.company, location:j.location||'',
+      board:j.query||'', text:String(j.description||'').slice(0,400)}));
+    try{
+      const txt=await claude(`You screen job search results against one candidate's CV. Most results are noise.
 
 CANDIDATE: ${prof.headline||''}
 Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
 Based in: ${prof.location||'unspecified'}
+Strengths: ${(prof.strengths||[]).join('; ')}
 Targeting: ${t.label||'general roles'}; titles like ${(t.titles||[]).join(', ')}
+Can't claim: ${(prof.gaps||[]).join('; ')||'nothing stated'}
 Rule out: ${(prof.wrong_shapes||[]).join('; ')||'nothing stated'}
 
-Pick up to ${n} results most likely to be a real, single, still-open posting this candidate could credibly go for, best first.
-Leave out: pages listing many jobs, role shapes ruled out above, clearly wrong seniority, roles tied to a location they can't work from with no remote option, recruiter spam and duplicates of one role.
+For EACH result decide:
+- "accept" only if it is a real, single job posting (not a list of jobs, forum post or article) that this candidate could credibly apply for: the work matches what they can do and are targeting, the seniority is within reach, and the location works for them or it is remote.
+- otherwise "reject".
+- match: 0-100, how well the work fits this candidate. Be strict; most accepted jobs are 40-75.
 Judge only from what is given. Do not invent details.
 
-Return ONLY JSON, no fences: {"keep":["id", ...]}
+Return ONLY JSON, no fences: {"r":[{"id":"0","v":"accept","match":62}, ...]}
 
 RESULTS:
-${JSON.stringify(list)}`, 300);
-    const keep=(grabJSON(txt).keep||[]).map(String).filter(id=>pool[id]);
-    return [...new Set(keep)].slice(0,n).map(id=>pool[id]);
-  }catch(e){
-    console.warn('shortlist failed, using round-robin:', e.message);
-    return pickSpread(jobs, n);
+${JSON.stringify(list)}`, 60+list.length*25);
+      const seen=new Set();
+      (grabJSON(txt).r||[]).forEach(x=>{
+        const j=part[String(x.id)]; if(!j || seen.has(j)) return; seen.add(j);
+        if(String(x.v).toLowerCase()==='accept') kept.push({j, match:Math.max(0,Math.min(100,parseInt(x.match,10)||0))});
+      });
+      rejected+=part.length-kept.filter(k=>part.includes(k.j)).length;
+    }catch(e){
+      console.warn('CV check failed for a batch, keeping it unjudged:', e.message);
+      part.forEach(j=>kept.push({j, match:40}));
+    }
   }
+  return {kept, rejected};
+}
+
+/* The live best-10 while a search runs. Each source's results go in through
+   add(): free filter, then the CV check, then they compete for a place. */
+function liveBoard(trk, prof){
+  const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
+  const st={found:0, checking:0, accepted:[], rejected:0, dropped:{listing:0, offTopic:0, old:0, dupe:0}};
+  const draw=(extra)=>{
+    setSearchInfo(`${st.found} found · ${st.accepted.length} match your CV · ${st.rejected} rejected`
+      + (st.checking?` · checking ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
+    const el=$('#searchLive'); if(!el) return;
+    el.innerHTML=st.accepted.slice(0,MAX_PER_SEARCH).map(a=>
+      `<li><b>${a.match}</b> ${esc(a.j.title)} <span style="color:var(--dim)">· ${esc(a.j.company.startsWith('[')?'':a.j.company)} · ${esc(a.j.query||'')}</span></li>`).join('');
+  };
+  return {
+    st, draw,
+    async add(jobs){
+      st.found+=jobs.length;
+      const f=boardFilter(jobs, trk, seen);
+      for(const k in f.dropped) st.dropped[k]+=f.dropped[k];
+      if(!f.jobs.length){ draw(); return; }
+      st.checking++; draw();
+      const r=await judge(f.jobs, prof, trk);
+      st.checking--;
+      st.accepted.push(...r.kept); st.rejected+=r.rejected;
+      st.accepted.sort((a,b)=>b.match-a.match);
+      draw();
+    },
+    top:n=>st.accepted.slice(0,n).map(a=>a.j),
+  };
 }
 
 /* Board hits on an ATS carry only Google's snippet, but the company's feed has
    the whole posting. One feed pull per company covers all its hits. A feed
    that loads and doesn't list the posting means the posting is gone; a feed
    that fails to load proves nothing, so that hit is kept as it was. */
+/* Which company feed a posting link belongs to, and the posting's own id: the
+   last path segment after the company slug that isn't boilerplate (jobs, j, o,
+   apply). Greenhouse's embedded boards carry it as ?gh_jid= instead. */
+function atsOfUrl(u){
+  for(const platform in ATS){
+    const m=String(u).match(ATS[platform].host);
+    if(!m) continue;
+    const gh=String(u).match(/[?&]gh_jid=(\d+)/);
+    const rest=String(u).slice(m.index+m[0].length).split(/[?#]/)[0].split('/')
+      .filter(s=>s && !/^(jobs|j|o|apply|application)$/i.test(s));
+    const id=gh ? gh[1] : rest[0];
+    return id ? {platform, slug:m[1], id} : null;
+  }
+  return null;
+}
 async function fromAts(jobs, onStatus){
   const feeds=new Map(), out=[];
   let closed=0;
   for(const j of jobs){
-    const m=j.url.match(/(greenhouse\.io|lever\.co|ashbyhq\.com)\/([^/?#]+)\/(?:jobs\/)?([^/?#]+)/i);
-    if(!m){ out.push(j); continue; }
-    const platform={'greenhouse.io':'greenhouse','lever.co':'lever','ashbyhq.com':'ashby'}[m[1].toLowerCase()];
-    const key=platform+':'+m[2];
+    const hit=atsOfUrl(j.url);
+    if(!hit){ out.push(j); continue; }
+    const {platform, slug, id}=hit, key=platform+':'+slug;
     if(!feeds.has(key)){
-      if(onStatus) onStatus(`reading ${m[2]}'s full postings on ${ATS[platform].label}…`);
-      feeds.set(key, await atsPull(platform, m[2]).catch(()=>null));
+      if(onStatus) onStatus(`reading ${slug}'s full postings on ${ATS[platform].label}…`);
+      feeds.set(key, await atsPull(platform, slug).catch(()=>null));
     }
     const feed=feeds.get(key);
     if(!feed){ out.push(j); continue; }
-    const row=feed.rows.find(r=>String(r.url).includes(m[3]));
+    // Either direction: a link can carry a title suffix after the id (SmartRecruiters)
+    // or the feed's url can wrap the id in a longer company-site link (Greenhouse).
+    const row=feed.rows.find(r=>{ const u=String(r.url), last=u.split(/[?#]/)[0].split('/').filter(Boolean).pop()||'\0';
+      return u.includes(id) || (last.length>=6 && id.startsWith(last)); });
     if(!row){ closed++; continue; }
+    if(!row.desc && ATS[platform].detail) row.desc=await ATS[platform].detail(row).catch(()=>'');
     j.description=(row.desc||j.description).slice(0,4000);
     if(row.location) j.location=row.location;
     setPosted(j, row.posted, 'feed');        // the feed's date beats the snippet's
@@ -2449,37 +2546,49 @@ async function runBoards(trk, where){
     // Empty on a profile extracted before country_code existed, which is the
     // old worldwide behaviour rather than a broken one.
     const cc=p.profile.country_code||"";
-    let raw, jsearchNote='';
+    const live=liveBoard(trk, p.profile), failed=[];
     if(!ownApify() && cloudNow()){
-      // Our keys: JSearch covers the big portals with full descriptions, and
-      // Google covers only the specialist boards JSearch can't see. One charge.
+      // Our keys: the API sources answer at once; the Google run and the site
+      // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
+      // Each batch is CV-checked the moment it arrives. One source failing
+      // loses only its own results. One charge for the lot.
       const registries=boards.filter(b=>!PORTALS.includes(b));
       const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
       setSearchInfo('searching job boards…');
-      // fallback: the portal queries the server runs on Google if JSearch comes back empty.
+      // fallback: portal queries the server runs on Google if every API source comes back empty.
       const r=await hosted('board_search',{titles:titles.slice(0,4), where, country:cc,
         queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
-      jsearchNote=r.jsearchError ? ` (JSearch failed: ${r.jsearchError})` : '';
-      if(r.jsearchError) console.warn('JSearch:', r.jsearchError);
-      raw=(r.jobs||[]).map(jsearchRow);
-      if(r.runId) raw=raw.concat(await apifyBoardSearch(r.queries||rq,cc,setSearchInfo,r.runId).catch(e=>{ console.warn(e); return []; }));
+      failed.push(...(r.sourceErrors||[]));
+      let left=(r.scrapers||[]).length+(r.runId?1:0);
+      const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
+      const land=(label, promise)=>promise
+        .then(jobs=>live.add(jobs||[]))
+        .catch(e=>{ failed.push(`${label}: ${e.message}`); })
+        .finally(()=>{ left--; live.draw(note()); });
+      const work=[live.add((r.jobs||[]).map(jsearchRow))];
+      (r.scrapers||[]).forEach(s=>work.push(land(s.label,
+        apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
+          .then(items=>(items||[]).map(jsearchRow)))));
+      if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
+      live.draw(note());
+      await Promise.all(work);
     } else {
-      raw=await apifyBoardSearch(qs,cc,setSearchInfo);
+      await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
     }
-    const f=boardFilter(raw, trk);
-    setSearchInfo(`${raw.length} found, ${f.jobs.length} look like new postings — shortlisting…`);
+    live.draw('reading full postings…');
     // A few spare, so closed ones dropped by fromAts don't leave the search short.
-    const picked=await shortlist(f.jobs, p.profile, trk, MAX_PER_SEARCH+4);
-    const ats=await fromAts(picked, setSearchInfo);
+    const ats=await fromAts(live.top(MAX_PER_SEARCH+4), setSearchInfo);
     const n=addJobs(ats.jobs.slice(0, MAX_PER_SEARCH));
     await save(); busy=false; render();
-    const d=f.dropped;
-    const why=[d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
+    const st=live.st, d=st.dropped;
+    const why=[st.rejected&&`${st.rejected} not a fit for your CV`, d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
       d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
       ats.closed&&`${ats.closed} closed`].filter(Boolean).join(', ');
+    if(failed.length) console.warn('sources failed:', failed);
     setSearchInfo((n
-      ? `Added the best ${n} of ${raw.length} results.`
-      : `Searched ${qs.length} boards, nothing new worth adding.`) + (why?` Skipped: ${why}.`:'') + jsearchNote);
+      ? `Added the best ${n} of ${st.found} results.`
+      : `Searched ${st.found} results, none new that match your CV.`) + (why?` Skipped: ${why}.`:'')
+      + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
     await autoScore();
   }catch(e){
     busy=false; render();
@@ -3331,6 +3440,7 @@ function renderApp(){
              <p class="hint">${PORTALS.length} general portals plus these registries, through Google in one run.</p>`
           : `<p class="hint">${PORTALS.length} general portals through Google. This track named no specialist registries.</p>`}
         <div id="searchInfo" class="hint"></div>
+        <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 
         <details class="fold" data-fold="add" ${FOLDS.add?'open':''}>
           <summary>Other ways to add</summary>
