@@ -59,7 +59,7 @@ async function jsearch(title: string, where: string, country: string) {
   const r = await fetch("https://jsearch.p.rapidapi.com/search?" + q, {
     headers: { "X-RapidAPI-Key": secret("JSEARCH_API_KEY"), "X-RapidAPI-Host": "jsearch.p.rapidapi.com" },
   });
-  if (!r.ok) throw new Error(`JSearch ${r.status}`);
+  if (!r.ok) throw new Error(`JSearch ${r.status}: ${(await r.text()).slice(0, 120)}`);
   // deno-lint-ignore no-explicit-any
   return ((await r.json()).data || []).map((x: any) => ({
     title: x.job_title || "",
@@ -121,34 +121,36 @@ Deno.serve(async (req) => {
       case "packs":
         return json({ packs: PACKS, costs: COST });
 
-      // One board search = JSearch for the big portals + a Google run over the
-      // track's specialist boards, charged once. The Google run is returned as
-      // a run id for the browser to poll with apify_status / apify_items.
+      // One board search, charged once: JSearch for the big portals, then a
+      // Google run over the track's specialist boards. If JSearch brings back
+      // nothing (down, bad key, or no matches), the Google run also covers the
+      // big portals (`fallback`), so a search never silently shrinks to niche
+      // boards alone. The run id is polled by the browser via apify_status/items.
       case "board_search": {
+        const lines = (v: unknown) => String(v || "").split("\n").map((q) => q.trim()).filter(Boolean);
         const titles = (Array.isArray(b.titles) ? b.titles : []).map(String).filter(Boolean).slice(0, MAX_TITLES);
         if (!titles.length) throw new Http(400, "no titles");
-        const queries = String(b.queries || "").split("\n").map((q) => q.trim()).filter(Boolean).slice(0, MAX_REGISTRY_QUERIES);
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
 
-        const [found, run] = await Promise.all([
-          Promise.allSettled(titles.map((t) => jsearch(t, String(b.where || ""), String(b.country || "")))),
-          queries.length
-            ? apify(`/acts/${ACTOR}/runs?timeout=660`, {
-                method: "POST",
-                body: JSON.stringify({ queries: queries.join("\n"), languageCode: "en", maxPagesPerQuery: 1, resultsPerPage: 10, mobileResults: false }),
-              }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
-            : Promise.resolve(null),
-        ]);
+        const found = await Promise.allSettled(titles.map((t) => jsearch(t, String(b.where || ""), String(b.country || ""))));
         const jobs = found.flatMap((f) => (f.status === "fulfilled" ? f.value : []));
-        const jsearchDown = found.every((f) => f.status === "rejected");
-        if (jsearchDown) console.error("jsearch:", found.map((f) => f.status === "rejected" && String(f.reason)));
+        const errors = found.flatMap((f) => (f.status === "rejected" ? [String((f.reason as Error)?.message || f.reason)] : []));
+        if (errors.length) console.error("jsearch:", errors);
+
+        const queries = [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
+        const run = queries.length
+          ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
+              method: "POST",
+              body: JSON.stringify({ queries: queries.join("\n"), countryCode: String(b.country || "").toLowerCase(), languageCode: "en", maxPagesPerQuery: 1, resultsPerPage: 10, mobileResults: false }),
+            }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
+          : null;
         // Nothing came back from anywhere: they got nothing, so they pay nothing.
-        if (jsearchDown && !run?.id) {
+        if (!jobs.length && !run?.id) {
           await refund(user, s, "search", COST.boardSearch);
-          throw new Http(502, "Job search is down right now. No credits were used — try again shortly.");
+          throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
         }
         if (run?.id) await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
-        return json({ jobs, runId: run?.id || null, partial: jsearchDown, ...wallet(s) });
+        return json({ jobs, runId: run?.id || null, queries, jsearchError: errors[0] || null, ...wallet(s) });
       }
 
       case "llm": {

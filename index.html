@@ -2333,9 +2333,16 @@ const POSTING_SHAPE = {
   'glassdoor.':    /\/job-listing\//i,
   'indeed.com':    /viewjob|\/rc\/clk|\/pagead\/|[?&]jk=/i,
   'upwork.com':    /\/jobs\/|\/freelance-jobs\/apply\//i,
+  // Covers news.ycombinator.com too: HN threads match site:ycombinator.com and are not jobs.
+  'ycombinator.com': /ycombinator\.com\/companies\/[^/]+\/jobs\/[^/?#]+/i,
 };
+/* Discussion and content sites: a site: query on a registry can land on them,
+   and they read like job talk without being a job. */
+const NOT_JOB_HOST = /(^|\.)(reddit|quora|medium|youtube|twitter|x|facebook|instagram|stackoverflow|stackexchange|github|dev|substack|hashnode)\.(com|to|io)$/i;
 function isPostingUrl(u){
-  for(const host in POSTING_SHAPE) if(u.toLowerCase().includes(host)) return POSTING_SHAPE[host].test(u);
+  let host=''; try{ host=new URL(u).hostname; }catch(e){ return false; }
+  if(NOT_JOB_HOST.test(host)) return false;
+  for(const h in POSTING_SHAPE) if(host.includes(h.replace(/\.$/,''))) return POSTING_SHAPE[h].test(u);
   return !SEARCHY.test(u);
 }
 
@@ -2362,11 +2369,13 @@ function boardFilter(jobs, trk){
 }
 
 /* One cheap call over titles and snippets. Returns more than the final ten so
-   there is room for fromAts to drop closed postings. If the call fails, the
+   there is room for fromAts to drop closed postings. Runs even when fewer than
+   n came back: it is also the check that each one is a real posting at all,
+   and a thin search is exactly when junk gets through. If the call fails, the
    search has already been paid for, so fall back to the round-robin rather
    than throw the results away. */
 async function shortlist(jobs, prof, trk, n){
-  if(jobs.length<=n) return jobs;
+  if(!jobs.length) return jobs;
   const pool=pickSpread(jobs, 60);            // ~60 short lines keeps one call small
   const t=(prof.tracks||[]).find(x=>x.id===trk.id) || trk;
   const list=pool.map((j,i)=>({id:String(i), title:j.title, company:j.company,
@@ -2440,17 +2449,20 @@ async function runBoards(trk, where){
     // Empty on a profile extracted before country_code existed, which is the
     // old worldwide behaviour rather than a broken one.
     const cc=p.profile.country_code||"";
-    let raw;
+    let raw, jsearchNote='';
     if(!ownApify() && cloudNow()){
       // Our keys: JSearch covers the big portals with full descriptions, and
       // Google covers only the specialist boards JSearch can't see. One charge.
       const registries=boards.filter(b=>!PORTALS.includes(b));
       const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
       setSearchInfo('searching job boards…');
-      const r=await hosted('board_search',{titles:titles.slice(0,4), where, country:cc, queries:rq.join('\n')});
-      if(r.partial) console.warn('JSearch was down; only specialist boards were searched.');
+      // fallback: the portal queries the server runs on Google if JSearch comes back empty.
+      const r=await hosted('board_search',{titles:titles.slice(0,4), where, country:cc,
+        queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
+      jsearchNote=r.jsearchError ? ` (JSearch failed: ${r.jsearchError})` : '';
+      if(r.jsearchError) console.warn('JSearch:', r.jsearchError);
       raw=(r.jobs||[]).map(jsearchRow);
-      if(r.runId) raw=raw.concat(await apifyBoardSearch(rq,cc,setSearchInfo,r.runId).catch(e=>{ console.warn(e); return []; }));
+      if(r.runId) raw=raw.concat(await apifyBoardSearch(r.queries||rq,cc,setSearchInfo,r.runId).catch(e=>{ console.warn(e); return []; }));
     } else {
       raw=await apifyBoardSearch(qs,cc,setSearchInfo);
     }
@@ -2467,7 +2479,7 @@ async function runBoards(trk, where){
       ats.closed&&`${ats.closed} closed`].filter(Boolean).join(', ');
     setSearchInfo((n
       ? `Added the best ${n} of ${raw.length} results.`
-      : `Searched ${qs.length} boards, nothing new worth adding.`) + (why?` Skipped: ${why}.`:''));
+      : `Searched ${qs.length} boards, nothing new worth adding.`) + (why?` Skipped: ${why}.`:'') + jsearchNote);
     await autoScore();
   }catch(e){
     busy=false; render();
