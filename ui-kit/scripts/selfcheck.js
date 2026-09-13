@@ -5,39 +5,6 @@ import { createElement as h } from 'react';
 import * as UI from '../dist/index.js';
 
 const cases = [
-  [UI.Button, { variant: 'primary', children: 'Draft outreach' }, 'Draft outreach'],
-  [UI.SegmentedControl, { options: [{ label: 'All', value: 'all', count: 214 }], value: 'all', onChange: () => {} }, 'All'],
-  [UI.ChannelTag, { tone: 'posted', children: 'posted role' }, 'chn posted'],
-  [UI.StageTag, { tone: 'due', children: 'due' }, 's-due'],
-  [UI.Chip, { tone: 'good', children: 'ran multi-state field ops' }, 'chip g'],
-  [UI.Flag, { tone: 'bad', children: 'credential gated' }, 'flag r'],
-  [UI.FormField, { label: 'Location', defaultValue: 'Bangalore' }, 'Location'],
-  [UI.Disclosure, { summary: 'Data & keys', children: h('div', null, 'x') }, 'Data &amp; keys'],
-  [UI.FitReachMeter, { score: 72, fit: 82, reach: 54 }, '72'],
-  [UI.EmptyState, { title: 'Nothing clears the bar', children: 'Pull in more roles.' }, 'Nothing clears the bar'],
-  [UI.Banner, { title: '3 follow-ups overdue', tone: 'urgent', children: 'A short nudge beats starting somewhere new.' }, '3 follow-ups overdue'],
-  [
-    UI.JobCard,
-    {
-      title: 'Forward Deployed Engineer', company: 'Sarvam AI', location: 'Bangalore, India',
-      channel: 'posted', stage: 'new', metaLabel: '4d ago', metaAgeModifier: 'hot',
-      score: 72, fit: 82, reach: 54, note: 'Ops-heavy deployment role.',
-      flags: [{ label: 'strong fit', tone: 'good' }],
-      primaryAction: { label: 'Draft outreach' },
-    },
-    'Forward Deployed Engineer',
-  ],
-  [
-    UI.JobCard,
-    {
-      title: 'Cold approach', company: 'Cropin', location: 'Bangalore, India',
-      channel: 'cold', stage: 'new', metaLabel: '2 contacts',
-      score: 68, fit: 71, reach: 63,
-    },
-    'Cropin',
-  ],
-
-  // v2 — go/due/closing/awaiting
   [UI.StatusPill, { tone: 'due', children: '1 overdue' }, 'pill2 due'],
   [UI.ActionButton, { tone: 'go', emphasis: 'fill', children: 'Apply' }, 'Apply'],
   [
@@ -75,6 +42,10 @@ const cases = [
     { title: 'Job Triage', subtitle: 'AI Operations · Bangalore + remote', badges: h(UI.StatusPill, { tone: 'due' }, '1 overdue'), avatarInitials: 'SB' },
     'Job Triage',
   ],
+  [UI.PostingLink, { url: 'https://example.com/job', title: 'Forward Deployed Engineer' }, 'open the original posting'],
+  [UI.PostingLink, { url: 'nan', title: 'Solutions Engineer', company: 'Hasura', location: 'Remote' }, 'google.com/search?q=Solutions%20Engineer%20Hasura%20Remote%20job'],
+  [UI.ColorKey, { counts: { go: 3, due: 1 } }, 'Do this now'],
+  [UI.QueueRow, { accentTone: 'go', rank: 72, title: 'Clickable row', subtitle: 'Sarvam AI', onOpen: () => {} }, 'qrow clickable'],
 ];
 
 let failures = 0;

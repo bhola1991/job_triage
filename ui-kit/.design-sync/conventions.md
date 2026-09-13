@@ -1,29 +1,35 @@
-## Two palettes, one package
+## One palette: the colour law
 
-This library ships **two design languages side by side** — pick one per screen, never mix them in the same composition:
+This library is the design the Job Triage app ships: a green near-black ground and four accents, each meaning exactly one thing — **go** = do this now, **due** = overdue, **closing** = the posting is about to be filled, **awaiting** = sent, their move. Grey (`--closed`) is only ever the absence of an instruction.
 
-- **v1** (12 components: `Button`, `SegmentedControl`, `ChannelTag`, `StageTag`, `Chip`, `Flag`, `FormField`, `Disclosure`, `FitReachMeter`, `EmptyState`, `Banner`, `JobCard`) — the currently-shipped app's palette. No wrapper needed; its tokens live at plain `:root`.
-- **v2** (12 components: `StatusPill`, `ActionButton`, `QueueSection`, `QueueRow`, `DetailHeader`, `StatGrid`, `ReasonPanel`, `FactRows`, `ContactRow`, `Timeline`, `Callout`, `TopBar`) — the newer go/due/closing/awaiting queue-and-detail design. **Every v2 component sets `data-palette="v2"` on its own root node**, so it's self-contained wherever you drop it — you never need to add that attribute yourself.
+Components (14): `TopBar`, `StatusPill`, `ColorKey`, `QueueSection`, `QueueRow`, `ActionButton`, `DetailHeader`, `StatGrid`, `ReasonPanel`, `FactRows`, `ContactRow`, `Timeline`, `Callout`, `PostingLink`.
 
-Default which one you compose with by matching the screen you're building: a triage queue or job-detail screen → v2; anything closer to the existing app shell (profile, onboarding, a generic list) → v1.
+**Every component sets `data-palette="v2"` on its own root node**, which is where the tokens live — so each is self-contained wherever you drop it. If you write your own layout wrapper that reads the tokens (e.g. `background: var(--ink)`), put `data-palette="v2"` on that wrapper too.
 
-## Load-bearing rule: components need a real dark ground
+Three rules the components enforce, and your own layout should respect:
+1. A row carries **at most one** accent. If a job is both closing and overdue, the nearer deadline wins.
+2. A **score is never an accent**. A rank or fit figure is a number, not an instruction.
+3. Dark states the accent on the row's edge; light (`data-theme="light"` alongside `data-palette="v2"`) tints the whole cell.
 
-Both palettes are **dark-by-default** (`color-scheme: dark` at their root). Most primitives own their background (`Chip`, `Flag`, pills, `.job`/`JobCard`, `TopBar`), but several are intentionally transparent and only ever meant to sit on the app's dark page — `StageTag`, `Banner`, `EmptyState` (v1); `QueueRow`, `QueueSection`, `DetailHeader`, `StatGrid`, `FactRows`, `ContactRow`, `Timeline`, `Callout` (v2). **Never place these directly on a white/light canvas** — wrap them (or the page) in a container with `background: var(--ink)` (or `var(--panel)` for a slightly raised surface). This isn't cosmetic: their text color is a near-white `var(--text)` with no fallback, so on a light ground it is close to invisible.
+## Load-bearing: give components a real dark ground
 
-Light mode exists for both palettes (`[data-theme="light"]` on an ancestor — combine with `data-palette="v2"` for the v2 set) and flips the same token names to readable values on a white ground instead.
+The palette is **dark by default**. `QueueSection`, `QueueRow`, `DetailHeader`, `StatGrid`, `FactRows`, `ContactRow`, `Timeline`, `Callout` and `ColorKey` are intentionally transparent — in the app they sit on the dark page. **Never place them directly on a white canvas**: wrap the page in `<div data-palette="v2" style={{ background: 'var(--ink)' }}>` (or `var(--panel)` for a raised surface). Their text is near-white `var(--text)`, so on a light ground it is close to invisible.
+
+## Behaviour worth knowing
+
+- `QueueRow` takes `onOpen`: the whole row then becomes clickable and lifts on hover; clicks on its own buttons and links are left alone. Put a `Details` `ActionButton` in `actions` too, for keyboard users.
+- `PostingLink` shows "open the original posting" when given a `url`, and a Google search for the title, company and location when the url is missing or the literal `"nan"`.
+- `ColorKey` takes `counts` for `go`, `due`, `closing`, `awaiting`, `closed`.
 
 ## Token vocabulary
 
-Compose with `var(--token)`, never a literal hex — both palettes are pure CSS custom properties, no utility classes, no styled-prop system.
+Compose with `var(--token)`, never a literal hex — there are no utility classes and no styled-prop system.
 
-v1 (default, unscoped): `--ink --panel --panel2 --line` (surfaces) · `--text --muted --dim` (text) · `--signal --signal-hi --on-signal --cool` (primary action) · `--warn --warn-line --good --good-line` (chip/flag verdicts) · `--posted --posted-dim --cold --cold-dim --neutral --neutral-line --live --live-line --stale-line` (channel/stage) · `--disp --mono` (fonts) · `--shadow --shadow-md --shadow-lg`.
-
-v2 (`[data-palette="v2"]`): `--ink --panel --panel2 --line --hair` (surfaces) · `--text --muted --dim` (text) · `--go --on-go --go-line --go-tint` / `--due --on-due --due-line --due-tint` / `--closing --closing-line --closing-tint` / `--awaiting --awaiting-line --awaiting-tint` (the four status accents — each means exactly one thing: go = do this now, due = overdue, closing = posting about to fill, awaiting = sent, their move) · `--closed` (grey, absence of instruction). Rule the components themselves enforce: a row/card carries at most one accent, and a score/rank figure is never styled with an accent colour — accent means status, not quality.
+`--ink --panel --panel2 --line --hair` (surfaces) · `--text --muted --dim` (text) · `--go --on-go --go-line --go-tint` · `--due --on-due --due-line --due-tint` · `--closing --closing-line --closing-tint` · `--awaiting --awaiting-line --awaiting-tint` · `--closed` · `--shadow --shadow-md --shadow-lg` · `--disp --mono` (fonts).
 
 ## Where the truth lives
 
-`styles.css` is the one stylesheet to import — it `@import`s `tokens.css` + `components.css` (v1) and `v2/tokens.css` + `v2/components.css` (v2), so every class and token above is reachable from it. Read it before inventing a new class name; every component's markup uses real, already-defined classes (e.g. `JobCard` renders `.job`/`.jrow`/`.jscore`, `QueueRow` renders `.qrow`/`.rank`/`.fact`) — compose with the exported components' props rather than hand-writing these classes directly.
+`styles.css` is the one stylesheet to import; it `@import`s `v2/tokens.css` and `v2/components.css`. Read it before inventing a class name — compose with the components' props rather than hand-writing their classes (`.qrow`, `.stat4`, `.pill2`…).
 
 ## Example
 
@@ -36,7 +42,8 @@ import { QueueSection, QueueRow, ActionButton } from 'job-triage-ui';
       accentTone="go" rank={72} rankTone="go"
       title="Forward Deployed Engineer" subtitle="Sarvam AI · Bangalore · posted role"
       facts={[{ label: 'fit / reach', value: '82 · 54' }, { label: 'posted', value: '4d ago' }]}
-      actions={<ActionButton tone="go" emphasis="fill">Apply</ActionButton>}
+      actions={<><ActionButton size="sm">Details</ActionButton><ActionButton tone="go" emphasis="fill" size="sm">Apply</ActionButton></>}
+      onOpen={() => {}}
     />
   </QueueSection>
 </div>

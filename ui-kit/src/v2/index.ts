@@ -10,3 +10,5 @@ export { ContactRow, type ContactRowProps } from './components/ContactRow.js';
 export { Timeline, type TimelineProps, type TimelineEntry } from './components/Timeline.js';
 export { Callout, type CalloutProps } from './components/Callout.js';
 export { TopBar, type TopBarProps } from './components/TopBar.js';
+export { PostingLink, type PostingLinkProps } from './components/PostingLink.js';
+export { ColorKey, type ColorKeyProps } from './components/ColorKey.js';
