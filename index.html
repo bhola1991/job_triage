@@ -1099,7 +1099,7 @@ const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
     .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
 let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true, UNLIMITED = false;
 let SEARCH_ID = null;   // the board search in progress, set by runBoards; null otherwise
-const FREE_SEARCH_START = 5;    // must match free_search's default in billing.sql
+const FREE_SEARCH_START = 2;    // must match free_search's default in billing.sql
 const creditsLabel = () => UNLIMITED ? 'Unlimited' : CREDITS==null ? '… credits'
   : (FREE_SEARCH>0 ? `${FREE_SEARCH} free searches · ` : '') + CREDITS + ' credits';
 function showCredits(w){
@@ -1135,7 +1135,7 @@ async function buyDialog(){
   const d=modal(`<div id="buyModal"><div class="eyebrow">Credits</div>
     <h2 style="margin:6px 0 10px">You have ${esc(creditsLabel())}</h2>
     <p class="hint" style="margin:0 0 14px">${FREE_TIER
-      ? `Your first ${FREE_SEARCH_START} job board searches are free, and AI scoring is free alongside them. After that, both use credits.`
+      ? `Your first ${FREE_SEARCH_START} job board searches are free (LinkedIn, Indeed and Naukri), and AI scoring is free alongside them. Paid searches add Instahyre, Foundit, Upwork, Google for Jobs and specialist boards.`
       : `Your free searches are used up, so job board search and AI scoring now use credits.`}
       Finding HR contacts always uses credits. Prefer your own keys? Add them under settings and nothing is charged.</p>
     <div id="packs" class="btn-row" style="flex-wrap:wrap">Loading packs…</div>

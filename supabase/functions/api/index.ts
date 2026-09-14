@@ -220,10 +220,16 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
 /* A scraper that fails to START (actor needs renting, input rejected, Apify
    out of credit) is reported back like any other failed source; before, it
    vanished silently and the search just looked thin. */
-async function startScrapers(user: string, c: Ctx) {
+/* A FREE search runs only these, the paid sources that matter most per rupee.
+   Paid and unlimited searches run every scraper. Sources that cost us nothing
+   (Adzuna, Jooble, Careerjet, Remotive, Remote OK, company feeds) run either way;
+   JSearch and the Google run cost per request, so free searches skip them. */
+const FREE_SCRAPERS = ["linkedin", "indeed", "naukri"];
+
+async function startScrapers(user: string, c: Ctx, only?: string[]) {
   const errors: string[] = [];
   const started = await Promise.all(Object.entries(SCRAPERS)
-    .filter(([, s]) => !s.india || c.cc === "in")
+    .filter(([source, s]) => (!s.india || c.cc === "in") && (!only || only.includes(source)))
     .map(async ([source, s]) => {
       const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${SCRAPE_ROWS}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
         method: "POST", body: JSON.stringify(s.input(c)),
@@ -285,10 +291,10 @@ function scrapedJob(x: Any, source: string): Job {
    with the origin that delivered it), one error line per source that failed,
    and how many requests each origin made, for the ledger. The remote feeds
    are cached, so they carry no date filter; the app's age filter covers them. */
-async function searchAll(titles: string[], where: string, country: string, since: number, req: Request) {
+async function searchAll(titles: string[], where: string, country: string, since: number, req: Request, free = false) {
   // A source whose key isn't set resolves to null: skipped, not a request, not logged.
   const named: [string, Promise<Job[] | null>][] = [
-    ...titles.map((t) => ["jsearch", jsearch(t, where, country, since)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["jsearch", free ? Promise.resolve(null) : jsearch(t, where, country, since)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[] | null>]),
@@ -381,10 +387,11 @@ Deno.serve(async (req) => {
           city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
         const searchId = crypto.randomUUID();
+        const free = s.used === "free";
 
         const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
-          searchAll(titles, where, country, since, req),
-          startScrapers(user, ctx),
+          searchAll(titles, where, country, since, req, free),
+          startScrapers(user, ctx, free ? FREE_SCRAPERS : undefined),
         ]);
         errors.push(...scrapeErrors);
         if (errors.length) console.error("sources:", errors);
@@ -392,7 +399,8 @@ Deno.serve(async (req) => {
         await logUsage(Object.entries(requests).map(([source, units]) =>
           ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
 
-        const queries = [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
+        // Free searches skip the Google run entirely (specialist boards and fallback): it costs per query.
+        const queries = free ? [] : [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
         const run = queries.length
           ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
               method: "POST",
@@ -408,7 +416,7 @@ Deno.serve(async (req) => {
           await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
           await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
         }
-        return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, sourceErrors: errors, ...wallet(s) });
+        return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, free, sourceErrors: errors, ...wallet(s) });
       }
 
       // The app's per-source yield for one search: found, new, scored 50+, and

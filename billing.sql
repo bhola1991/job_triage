@@ -8,8 +8,9 @@
 create table if not exists public.credits (
   user_id    uuid        primary key references auth.users(id) on delete cascade,
   balance    integer     not null default 0 check (balance >= 0),
-  -- Free tier: 5 job board searches, with AI scoring free while it lasts.
-  free_search integer    not null default 5 check (free_search >= 0),
+  -- Free tier: 2 job board searches (LinkedIn, Indeed, Naukri and the ₹0 sources),
+  -- with AI scoring free while it lasts.
+  free_search integer    not null default 2 check (free_search >= 0),
   free_tier  boolean     not null default true,     -- off once a board search is attempted with none left
   -- ponytail: ceiling on free AI calls. Each search = up to 7 CV-check calls
   -- (one per source batch) + 2 scoring calls, so 5 searches = ~45; the rest is
@@ -143,8 +144,9 @@ revoke all on function public.mark_order_paid(text, text)   from public, anon, a
 grant execute on function public.add_credits(uuid, integer)   to service_role;
 grant execute on function public.mark_order_paid(text, text)  to service_role;
 
--- For databases created before the default above changed (safe to re-run).
+-- For databases created before the defaults above changed (safe to re-run).
 alter table public.credits alter column free_llm set default 60;
+alter table public.credits alter column free_search set default 2;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Usage ledger: what every search actually costs, and what each source yields.
