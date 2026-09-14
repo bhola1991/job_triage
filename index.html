@@ -1097,20 +1097,21 @@ async function apifyRun(actor, payload, o){
 const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
   [['pricing','Pricing'],['terms','Terms'],['refund','Refunds'],['privacy','Privacy'],['contact','Contact']]
     .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
-let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true;
+let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true, UNLIMITED = false;
 let SEARCH_ID = null;   // the board search in progress, set by runBoards; null otherwise
 const FREE_SEARCH_START = 5;    // must match free_search's default in billing.sql
-const creditsLabel = () => CREDITS==null ? '… credits'
+const creditsLabel = () => UNLIMITED ? 'Unlimited' : CREDITS==null ? '… credits'
   : (FREE_SEARCH>0 ? `${FREE_SEARCH} free searches · ` : '') + CREDITS + ' credits';
 function showCredits(w){
   if(typeof w.balance==='number') CREDITS=w.balance;
   if(typeof w.free_search==='number') FREE_SEARCH=w.free_search;
   if(typeof w.free_tier==='boolean') FREE_TIER=w.free_tier;
+  if(typeof w.unlimited==='boolean') UNLIMITED=w.unlimited;
   const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
 }
 async function loadCredits(){
   if(!cloudNow()) return;
-  try{ const {data}=await SB.from('credits').select('balance,free_search,free_tier').eq('user_id',USER.id).maybeSingle();
+  try{ const {data}=await SB.from('credits').select('*').eq('user_id',USER.id).maybeSingle();
        // No row yet = a new account with the whole free tier still ahead of it.
        showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true}); }catch(e){}
 }

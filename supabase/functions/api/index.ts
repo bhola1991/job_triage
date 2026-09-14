@@ -308,8 +308,8 @@ async function searchAll(titles: string[], where: string, country: string, since
 }
 
 // What the browser gets back after any spend: enough to redraw the credits button.
-type Spent = { used: "free" | "paid"; balance: number; free_search: number; free_tier: boolean };
-const wallet = (s: Spent) => ({ balance: s.balance, free_search: s.free_search, free_tier: s.free_tier });
+type Spent = { used: "free" | "paid" | "unlimited"; balance: number; free_search: number; free_tier: boolean; unlimited?: boolean };
+const wallet = (s: Spent) => ({ balance: s.balance, free_search: s.free_search, free_tier: s.free_tier, unlimited: !!s.unlimited });
 
 // spend_llm / spend_search in billing.sql: free pot first, then paid credits.
 async function spend(fn: string, args: Record<string, unknown>) {
@@ -320,6 +320,7 @@ async function spend(fn: string, args: Record<string, unknown>) {
 }
 // Our upstream call failed, so it shouldn't cost them: put it back where it came from.
 async function refund(user: string, s: Spent, kind: "llm" | "search", n: number) {
+  if (s.used === "unlimited") return;          // nothing was taken
   if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind });
   else await admin.rpc("add_credits", { p_user: user, p_n: n });
 }
