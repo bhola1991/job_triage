@@ -2,7 +2,7 @@
 const h=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8').replace(/\r\n/g,'\n');
 const grab=(re)=>{const m=h.match(re); if(!m) throw new Error('missing '+re); return m[0];};
 const src=[
-  grab(/const MAX_PER_SEARCH[\s\S]*?\nasync function runBoards/).replace(/async function runBoards$/,''),
+  grab(/const MAX_AGE_DAYS[\s\S]*?\nasync function runBoards/).replace(/async function runBoards$/,''),
   grab(/const TITLE_NOISE[^\n]*\n/), grab(/function roleWords[\s\S]*?\n}\n/),
   grab(/const ATS = \{[\s\S]*?\n\};\n/), grab(/const stripTags[^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
@@ -11,9 +11,11 @@ let DBJOBS=[{url:'https://x/old'}], AGE={}, CLAUDE=null, FEEDS={};
 const P=()=>({jobs:DBJOBS}), ageOf=j=>AGE[j.url]??null, setPosted=(j,d)=>{j.posted=d;};
 const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Error('network'); return f||null; };
 const claude=async(t)=>CLAUDE(t);
-const esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
+let SCORES=null;
+const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); const o={}; batch.forEach(b=>{ const v=SCORES(b.j); if(v!=null) o[String(b.i)]={score:v,reach:50,conf:'high',reason:'r',flags:'',posted:null}; }); return o; };
+const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,judge,liveBoard,fromAts};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -36,20 +38,27 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
   J('https://a/4','Senior Data Analyst','[from search — verify]','B')],{titles:['Data Engineer','Data Analyst']});
  ok(f.jobs.map(j=>j.url).join()==='https://a/1,https://a/4', 'filter '+f.jobs.map(j=>j.url));
  ok(JSON.stringify(f.dropped)==='{"listing":1,"offTopic":1,"old":1,"dupe":2}','dropped '+JSON.stringify(f.dropped));
- const many=[...Array(50)].map((_,i)=>J('https://z/'+i,'T'+i,'C','Q'));
- let calls=0;
- CLAUDE=(t)=>{ calls++; const n=(t.match(/"id":"/g)||[]).length; return '```json\n{"r":['+[...Array(n)].map((_,k)=>'{"id":"'+k+'","v":"'+(k%2?'reject':'accept')+'","match":'+(k%7*10)+'}').join(',')+']}\n```'; };
- const jr1=await judge(many,{tracks:[]},{titles:[]});
- ok(calls===2 && jr1.kept.length===25 && jr1.rejected===25, 'judge batches '+calls+' '+jr1.kept.length+' '+jr1.rejected);
- CLAUDE=()=>{throw new Error('boom');};
- const jr2=await judge(many.slice(0,3),{tracks:[]},{titles:[]});
- ok(jr2.kept.length===3 && jr2.kept.every(k=>k.match===40) && jr2.rejected===0,'judge failure keeps batch');
- CLAUDE=(t)=>'{"r":[{"id":"0","v":"accept","match":90},{"id":"1","v":"accept","match":30},{"id":"2","v":"reject","match":99}]}';
- DBJOBS=[]; AGE={};
- const lb=liveBoard({titles:['Data Engineer']},{tracks:[]});
+ const many=[...Array(30)].map((_,i)=>J('https://z/'+i,'T'+i,'C','Q'));
+ SCORES=j=>{ const i=+j.url.split('/').pop(); return i===29?null:(i%3===0?80:40); };
+ const sc=await scoreAndCut(many,{},'t');
+ ok(sc.kept.length===10 && sc.below===19 && sc.unscored.length===1 && sc.kept[0].ai_score==='80','scoreAndCut '+sc.kept.length+'/'+sc.below+'/'+sc.unscored.length);
+ SCORES='fail';
+ const sf=await scoreAndCut(many.slice(0,3),{},'t');
+ ok(sf.kept.length===0 && sf.unscored.length===3,'scoring failure keeps batch unscored');
+ SCORES=j=>({'https://a/10':90,'https://a/11':30,'https://a/12':60})[j.url];
+ DBJOBS=[]; AGE={}; FEEDS={};
+ const lb=liveBoard({titles:['Data Engineer']},{},'t');
  await lb.add([J('https://a/10','Data Engineer I','Acme','LinkedIn'),J('https://a/11','Data Engineer II','Beta','Indeed'),J('https://a/12','Data Engineer III','Gamma','Naukri')]);
  await lb.add([J('https://a/10','Data Engineer I','Acme','Indeed')]);   // same link from another source
- ok(lb.top(10).map(j=>j.url).join()==='https://a/10,https://a/11' && lb.st.rejected===1 && lb.st.dropped.dupe===1 && lb.st.found===4,'liveBoard '+JSON.stringify(lb.st));
+ ok(lb.st.kept.map(j=>j.url).join()==='https://a/10,https://a/12' && lb.st.below===1 && lb.st.dropped.dupe===1 && lb.st.found===4,'liveBoard '+JSON.stringify({kept:lb.st.kept.map(j=>j.url),below:lb.st.below,d:lb.st.dropped}));
+ SCORES=j=>({'https://y/1':80,'https://y/2':70,'https://y/3':20})[j.url];
+ DBJOBS=[]; AGE={}; FEEDS={};
+ const yb=liveBoard({titles:['Data Engineer']},{},'t');
+ const JO=(url,title,company,origin)=>({...J(url,title,company,origin),origin});
+ await yb.add([JO('https://y/1','Data Engineer','Acme','naukri'),JO('https://y/2','Data Engineer Lead','Beta','naukri'),JO('https://y/3','Data Engineer Intern','Zeta','naukri')]);
+ await yb.add([JO('https://li/9','Data Engineer','Acme','linkedin')]);  // same role via another site: not exclusive
+ const rep=yb.report();
+ ok(JSON.stringify(rep)==='{"naukri":{"found":3,"unique_new":3,"kept_50":2,"exclusive_50":1},"linkedin":{"found":1,"unique_new":0,"kept_50":0,"exclusive_50":0}}','yield '+JSON.stringify(rep));
  FEEDS={'greenhouse:acme':{rows:[{url:'https://boards.greenhouse.io/acme/jobs/1?x',desc:'FULL',location:'Remote',posted:'2026-09-01'}]},'lever:beta':'fail'};
  const r=await fromAts([J('https://boards.greenhouse.io/acme/jobs/1','t','c','q'),J('https://boards.greenhouse.io/acme/jobs/2','t','c','q'),
    J('https://jobs.lever.co/beta/uuid-9','t','c','q'),J('https://www.linkedin.com/jobs/view/5','t','c','q')]);

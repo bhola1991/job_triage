@@ -1071,7 +1071,7 @@ async function apifyRun(actor, payload, o){
     start:  async()=>o.runId || (await hosted('apify_start',{payload,timeout:cap+60})).id,
     status: async id=>(await hosted('apify_status',{id})).status,
     // o.source: a scraper run, which the server returns already in the Job shape.
-    items:  async id=>(await hosted('apify_items',{id, source:o.source})).items,
+    items:  async id=>(await hosted('apify_items',{id, source:o.source, search_id:SEARCH_ID})).items,
     abort:  id=>hosted('apify_abort',{id}).catch(()=>{})
   };
   const id=await api.start();
@@ -1098,6 +1098,7 @@ const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
   [['pricing','Pricing'],['terms','Terms'],['refund','Refunds'],['privacy','Privacy'],['contact','Contact']]
     .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
 let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true;
+let SEARCH_ID = null;   // the board search in progress, set by runBoards; null otherwise
 const FREE_SEARCH_START = 5;    // must match free_search's default in billing.sql
 const creditsLabel = () => CREDITS==null ? '… credits'
   : (FREE_SEARCH>0 ? `${FREE_SEARCH} free searches · ` : '') + CREDITS + ' credits';
@@ -1367,7 +1368,7 @@ async function apifyBoardSearch(queries, countryCode, onStatus, runId){
       // plain date. It is free and more reliable than anything inferred from
       // the posting's own prose, so it is worth reading before the model is.
       setPosted(j, String(res.description||"").slice(0,40), 'page');
-      j.source = "Board search"; j.query = term; j.status="New"; j.channel="posted";
+      j.source = "Board search"; j.query = term; j.origin = "google"; j.status="New"; j.channel="posted";
       j.notes = "Found via "+ (u.replace(/^https?:\/\//,'').split('/')[0]);
       out.push(j);
     });
@@ -1649,7 +1650,8 @@ const LLM = {
 
 async function claude(prompt, maxTok){
   // No key of their own but signed in: the server calls DeepSeek with ours and takes a credit.
-  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||1400})).text;
+  // search_id ties the call to the board search it belongs to, for the usage ledger.
+  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||1400, search_id:SEARCH_ID})).text;
   const cfg = LLM[PROV] || LLM.deepseek;
   // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
   if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
@@ -2038,29 +2040,29 @@ ROLE SHAPES TO RULE OUT: ${(prof.wrong_shapes||[]).join('; ')||'none stated'}
 
 TODAY'S DATE IS ${today()}. Use it for any date reasoning below.
 
-Return ONLY a JSON object, no preamble, no markdown fences:
-{"results":[{"id":"...","score":0,"reachability":0,"confidence":"high","reason":"...","flags":["..."],"posted":null}]}
+Return ONLY a JSON object, no preamble, no markdown fences, using these short keys:
+{"r":[{"id":"...","s":0,"re":0,"c":"h","why":"...","f":["..."]}]}
 
 For EACH job:
 - id: exactly as given
-- score: 0-100 FIT ONLY. How well does the described WORK match what this candidate can do and is targeting? Judge the work, not the title, and NOT whether they would win the process.
-- reachability: 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here.
-- confidence: "high" (real job description) | "medium" (short snippet) | "low" (title and company only)
-- reason: ONE sentence, max 20 words, specific. If fit and reachability diverge sharply, say why.
-- flags: from this set only: ["strong_fit","seniority_too_high","seniority_too_low","credential_gated","wrong_role_shape","location_ineligible","thin_data","high_competition","non_traditional_friendly","rare_combination_fit"]
-- posted: when the text carries evidence of WHEN it was posted, the window that evidence allows, as {"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}. Otherwise null.
+- s (score): 0-100 FIT ONLY. How well does the described WORK match what this candidate can do and is targeting? Judge the work, not the title, and NOT whether they would win the process.
+- re (reachability): 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here.
+- c (confidence): "h" (real job description) | "m" (short snippet) | "l" (title and company only)
+- why: ONE sentence, max 12 words, specific. If fit and reachability diverge sharply, say why.
+- f (flags): codes from this set only, [] if none: fit=strong fit, sen_hi=seniority too high, sen_lo=seniority too low, cred=credential gated, shape=wrong role shape, loc=location ineligible, thin=thin data, comp=high competition, open=non-traditional friendly, rare=rare combination fit
+- p (posted): ONLY for a job given WITHOUT a "posted" value, and only when its text carries evidence of WHEN it was posted: the window that evidence allows, as {"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}. Otherwise leave the p key out entirely.
 
 Rules:
-- The candidate is based in ${prof.location||'their stated location'}. A role requiring presence somewhere else with no remote allowance scores below 20 on FIT and gets "location_ineligible".
+- The candidate is based in ${prof.location||'their stated location'}. A role requiring presence somewhere else with no remote allowance scores below 20 on FIT and gets "loc".
 - Do NOT lower the FIT score because of the gaps listed above. Gaps are a REACHABILITY consideration. Keep the two axes strictly separate.
-- Any job matching the ruled-out role shapes scores below 20 on FIT and gets "wrong_role_shape", however appealing its title.
-- A job that needs the candidate's rare combination of skills should score higher — flag "rare_combination_fit".
-- Do not invent details. Inferring from a title alone means confidence "low" and flag "thin_data".
+- Any job matching the ruled-out role shapes scores below 20 on FIT and gets "shape", however appealing its title.
+- A job that needs the candidate's rare combination of skills should score higher — flag "rare".
+- Do not invent details. Inferring from a title alone means confidence "l" and flag "thin".
 - Do not inflate. Most jobs are mediocre. The distribution should be wide on both axes.
-- A job given to you with a "posted" value already has a real date from its source. Return posted null for it; do not restate or revise it.
-- Evidence for posted means the text says something datable: an explicit date, "posted last week", an application deadline, an interview or start date, a named quarter or term. A window as wide as three months is a good answer when that is all the evidence supports. Widen the window rather than picking a date you cannot defend.
-- The subject matter of a job is NOT evidence of its age. No datable statement means posted null. Guessing here is worse than useless, because it sorts a stale job to the top of the freshest list.
-- posted "to" must never be later than today, and "from" never later than "to".
+- A job given to you with a "posted" value already has a real date from its source. Leave p out for it; do not restate or revise it.
+- Evidence for p means the text says something datable: an explicit date, "posted last week", an application deadline, an interview or start date, a named quarter or term. A window as wide as three months is a good answer when that is all the evidence supports. Widen the window rather than picking a date you cannot defend.
+- The subject matter of a job is NOT evidence of its age. No datable statement means no p. Guessing here is worse than useless, because it sorts a stale job to the top of the freshest list.
+- p "to" must never be later than today, and "from" never later than "to".
 - One entry per input job. JSON object only.`;
 }
 
@@ -2234,29 +2236,43 @@ function toCSV(rows,cols){
   return [cols.join(',')].concat(rows.map(r=>cols.map(c=>q(r[c])).join(','))).join('\n');
 }
 
-/* ═══ scoring run ═══ */
-async function scoreBatch(batch, prof, track){
+/* ═══ scoring run ═══
+   Token budget, because a search can score hundreds of jobs:
+   - sysPrompt is the identical first part of every call (same profile, same
+     day), so DeepSeek serves it from its prompt cache at a fraction of the
+     price. Nothing that varies may go before "JOBS TO SCORE".
+   - Replies use short keys and flag codes, a 12-word reason, and no posted
+     field for jobs already dated. Reply tokens cost ~4x prompt tokens.
+   - Descriptions are cut to 700 characters; the opening carries the role. */
+const FLAG_CODES = {fit:'strong_fit', sen_hi:'seniority_too_high', sen_lo:'seniority_too_low', cred:'credential_gated',
+  shape:'wrong_role_shape', loc:'location_ineligible', thin:'thin_data', comp:'high_competition',
+  open:'non_traditional_friendly', rare:'rare_combination_fit'};
+const CONF_CODES = {h:'high', m:'medium', l:'low'};
+async function scoreBatch(batch, prof, track, maxTok){
   const jobs = batch.map(b=>{
     const o={ id:String(b.i),
       title:String(b.j.title||''), company:String(b.j.company||''),
       location:String(b.j.location||''),
-      description:String(b.j.description||'').slice(0,1100)||'(no description available)' };
+      description:String(b.j.description||'').slice(0,700)||'(no description available)' };
     // Anything a feed already dated is stated, not asked about — the model is
     // the last and least reliable source here, never a second opinion.
     if(saneDate(b.j.posted)) o.posted=b.j.posted;
     return o;
   });
-  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), 1400);
+  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||1400);
   const parsed = grabJSON(txt);
-  const items = Array.isArray(parsed)?parsed:(parsed.results||[]);
+  // Short keys, with the old long names still read in case the model uses them.
+  const items = Array.isArray(parsed)?parsed:(parsed.r||parsed.results||[]);
+  const num = (v,dflt) => { const n=parseInt(v,10); return isNaN(n)?dflt:Math.max(0,Math.min(100,n)); };
   const out={};
-  items.forEach(it=>{ out[String(it.id)]={
-    score:Math.max(0,Math.min(100,parseInt(it.score,10)||0)),
-    reach:Math.max(0,Math.min(100,parseInt(it.reachability,10)||45)),
-    conf:String(it.confidence||'low').toLowerCase(),
-    reason:String(it.reason||'').slice(0,220),
-    flags:(it.flags||[]).join(','),
-    posted:it.posted&&typeof it.posted==='object'?it.posted:null }; });
+  items.forEach(it=>{ const c=String(it.c??it.confidence??'l').toLowerCase(), p=it.p??it.posted;
+    out[String(it.id)]={
+    score:num(it.s??it.score,0),
+    reach:num(it.re??it.reachability,45),
+    conf:CONF_CODES[c]||c,
+    reason:String(it.why??it.reason??'').slice(0,220),
+    flags:(it.f||it.flags||[]).map(x=>FLAG_CODES[x]||x).join(','),
+    posted:p&&typeof p==='object'?p:null }; });
   return out;
 }
 
@@ -2330,16 +2346,12 @@ async function autoScore(){
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
 function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
 
-/* ═══ board search: from every source's results to the 10 worth scoring ═══
-   Each job added gets fully scored, and scoring costs, so a search adds at
-   most MAX_PER_SEARCH. As each source's results land (liveBoard):
+/* ═══ board search: every source's results, scored, 50+ kept ═══
+   No cap on how many jobs a search adds. As each source's results land (liveBoard):
      1. boardFilter  - free: drop what is plainly not a new, recent, relevant posting
-     2. judge        - one AI call per batch checks each against the CV: accept or
-                       reject, with a quick match score; accepted ones compete live
-   Then, for the leaders:
-     3. fromAts      - free: company-feed hits get their full description, and
-                       ones the company no longer lists are dropped as closed */
-const MAX_PER_SEARCH = 10;
+     2. fromAts      - free: company-feed hits get their full description, and
+                       ones the company no longer lists are dropped as closed
+     3. scoreAndCut  - full scoring against the CV; below MIN_FIT is dropped */
 const MAX_AGE_DAYS = 30;
 
 /* A normalized server result (API source or site scraper) as a job row.
@@ -2351,7 +2363,7 @@ function jsearchRow(x){
   j.url=String(x.url||''); j.location=String(x.location||'');
   j.description=String(x.description||'');
   setPosted(j, x.posted, 'feed');
-  j.source='Board search'; j.query=String(x.publisher||'JSearch'); j.status='New'; j.channel='posted';
+  j.source='Board search'; j.query=String(x.publisher||'JSearch'); j.origin=String(x.origin||'jsearch'); j.status='New'; j.channel='posted';
   j.notes='Found via '+j.query;
   return j;
 }
@@ -2404,83 +2416,84 @@ function boardFilter(jobs, trk, seen){
   return {jobs:out, dropped};
 }
 
-/* The CV check. Reads each result (title, company, location, the start of the
-   description) against the candidate and returns only the ones worth a place,
-   each with a quick 0-100 match. Called once per source as its results land,
-   so the best-10 list fills in while the slower scrapers are still running.
-   Batches of 40 keep each call small. If a call fails, that batch's results
-   were already paid for, so they are kept at a neutral 40 rather than lost:
-   the full scoring afterwards still judges them properly. */
-const JUDGE_BATCH = 40;
-async function judge(jobs, prof, trk){
-  const t=(prof.tracks||[]).find(x=>x.id===trk.id) || trk;
-  const kept=[]; let rejected=0;
-  for(let i=0;i<jobs.length;i+=JUDGE_BATCH){
-    const part=jobs.slice(i,i+JUDGE_BATCH);
-    const list=part.map((j,k)=>({id:String(k), title:j.title, company:j.company, location:j.location||'',
-      board:j.query||'', text:String(j.description||'').slice(0,400)}));
+/* Full scoring against the CV, the same scoring every job card shows, run on
+   each source's results as they land. Jobs below MIN_FIT are dropped; the rest
+   come back already scored. Batches of 12 (vs 6 for rescoring) because a search
+   can return hundreds. If a batch's call fails, those results were already paid
+   for, so they are kept unscored rather than lost: "Score new jobs" picks them up. */
+const SCORE_BATCH = 12;
+const MIN_FIT = 50;
+async function scoreAndCut(jobs, prof, track){
+  const kept=[], unscored=[]; let below=0;
+  for(let i=0;i<jobs.length;i+=SCORE_BATCH){
+    const part=jobs.slice(i,i+SCORE_BATCH);
     try{
-      const txt=await claude(`You screen job search results against one candidate's CV. Most results are noise.
-
-CANDIDATE: ${prof.headline||''}
-Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
-Based in: ${prof.location||'unspecified'}
-Strengths: ${(prof.strengths||[]).join('; ')}
-Targeting: ${t.label||'general roles'}; titles like ${(t.titles||[]).join(', ')}
-Can't claim: ${(prof.gaps||[]).join('; ')||'nothing stated'}
-Rule out: ${(prof.wrong_shapes||[]).join('; ')||'nothing stated'}
-
-For EACH result decide:
-- "accept" only if it is a real, single job posting (not a list of jobs, forum post or article) that this candidate could credibly apply for: the work matches what they can do and are targeting, the seniority is within reach, and the location works for them or it is remote.
-- otherwise "reject".
-- match: 0-100, how well the work fits this candidate. Be strict; most accepted jobs are 40-75.
-Judge only from what is given. Do not invent details.
-
-Return ONLY JSON, no fences: {"r":[{"id":"0","v":"accept","match":62}, ...]}
-
-RESULTS:
-${JSON.stringify(list)}`, 60+list.length*25);
-      const seen=new Set();
-      (grabJSON(txt).r||[]).forEach(x=>{
-        const j=part[String(x.id)]; if(!j || seen.has(j)) return; seen.add(j);
-        if(String(x.v).toLowerCase()==='accept') kept.push({j, match:Math.max(0,Math.min(100,parseInt(x.match,10)||0))});
+      const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, 120+part.length*110);
+      part.forEach((j,k)=>{
+        const r=res[String(k)];
+        if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
+        j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
+        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags;
+        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
+        if(r.score>=MIN_FIT) kept.push(j); else below++;
       });
-      rejected+=part.length-kept.filter(k=>part.includes(k.j)).length;
     }catch(e){
-      console.warn('CV check failed for a batch, keeping it unjudged:', e.message);
-      part.forEach(j=>kept.push({j, match:40}));
+      console.warn('scoring failed for a batch, keeping it unscored:', e.message);
+      unscored.push(...part);
     }
   }
-  return {kept, rejected};
+  return {kept, unscored, below};
 }
 
-/* The live best-10 while a search runs. Each source's results go in through
-   add(): free filter, then the CV check, then they compete for a place. */
-function liveBoard(trk, prof){
+/* The live results while a search runs. Each source's jobs go in through
+   add(): free filter, then full postings from company feeds (dropping closed
+   ones), then scoring, and what scores MIN_FIT+ joins the list. */
+function liveBoard(trk, prof, track){
   const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
-  const st={found:0, checking:0, accepted:[], rejected:0, dropped:{listing:0, offTopic:0, old:0, dupe:0}};
+  const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, offTopic:0, old:0, dupe:0}};
+  /* Yield per origin (the source that delivered a job), for the usage ledger.
+     seenIn records every origin that returned each job, before any filtering,
+     so "exclusive" means no other source in this search had it at all. A job
+     returned by two sources counts as new for whichever arrived first. */
+  const by={}, O=o=>by[o]||(by[o]={found:0, unique_new:0, kept_50:0, exclusive_50:0});
+  const seenIn=new Map();
+  const idsOf=j=>[keyOf(j)].concat(j.company&&!j.company.startsWith('[')?['tc:'+(j.title+'|'+j.company).toLowerCase()]:[]);
   const draw=(extra)=>{
-    setSearchInfo(`${st.found} found · ${st.accepted.length} match your CV · ${st.rejected} rejected`
-      + (st.checking?` · checking ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
+    setSearchInfo(`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
+      + (st.checking?` · scoring ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
     const el=$('#searchLive'); if(!el) return;
-    el.innerHTML=st.accepted.slice(0,MAX_PER_SEARCH).map(a=>
-      `<li><b>${a.match}</b> ${esc(a.j.title)} <span style="color:var(--dim)">· ${esc(a.j.company.startsWith('[')?'':a.j.company)} · ${esc(a.j.query||'')}</span></li>`).join('');
+    el.innerHTML=st.kept.slice(0,10).map(j=>
+      `<li><b>${esc(j.ai_score)}</b> ${esc(j.title)} <span style="color:var(--dim)">· ${esc(j.company.startsWith('[')?'':j.company)} · ${esc(j.query||'')}</span></li>`).join('')
+      + (st.kept.length>10?`<li style="list-style:none;color:var(--dim)">+ ${st.kept.length-10} more</li>`:'');
   };
   return {
     st, draw,
     async add(jobs){
       st.found+=jobs.length;
+      jobs.forEach(j=>{ const o=j.origin||'google'; O(o).found++;
+        idsOf(j).forEach(k=>{ if(!seenIn.has(k)) seenIn.set(k,new Set()); seenIn.get(k).add(o); }); });
       const f=boardFilter(jobs, trk, seen);
       for(const k in f.dropped) st.dropped[k]+=f.dropped[k];
+      f.jobs.forEach(j=>O(j.origin||'google').unique_new++);
       if(!f.jobs.length){ draw(); return; }
       st.checking++; draw();
-      const r=await judge(f.jobs, prof, trk);
+      const ats=await fromAts(f.jobs);
+      st.closed+=ats.closed;
+      const r=await scoreAndCut(ats.jobs, prof, track);
       st.checking--;
-      st.accepted.push(...r.kept); st.rejected+=r.rejected;
-      st.accepted.sort((a,b)=>b.match-a.match);
+      r.kept.forEach(j=>O(j.origin||'google').kept_50++);
+      st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
+      st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
       draw();
     },
-    top:n=>st.accepted.slice(0,n).map(a=>a.j),
+    // Call once, after every source has landed.
+    report(){
+      st.kept.forEach(j=>{
+        const origins=new Set(); idsOf(j).forEach(k=>(seenIn.get(k)||[]).forEach(o=>origins.add(o)));
+        if(origins.size===1) O(j.origin||'google').exclusive_50++;
+      });
+      return by;
+    },
   };
 }
 
@@ -2546,7 +2559,7 @@ async function runBoards(trk, where){
     // Empty on a profile extracted before country_code existed, which is the
     // old worldwide behaviour rather than a broken one.
     const cc=p.profile.country_code||"";
-    const live=liveBoard(trk, p.profile), failed=[];
+    const live=liveBoard(trk, p.profile, p.track), failed=[];
     if(!ownApify() && cloudNow()){
       // Our keys: the API sources answer at once; the Google run and the site
       // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
@@ -2554,10 +2567,15 @@ async function runBoards(trk, where){
       // loses only its own results. One charge for the lot.
       const registries=boards.filter(b=>!PORTALS.includes(b));
       const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
-      setSearchInfo('searching job boards…');
+      // New jobs only: every site is asked for what was posted since this track
+      // was last searched (rounded up, plus a day of overlap), 30 days the first time.
+      const last=Date.parse((p.searchedAt||{})[trk.id]||'');
+      const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
+      setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
       // fallback: portal queries the server runs on Google if every API source comes back empty.
-      const r=await hosted('board_search',{titles:titles.slice(0,4), where, country:cc,
-        queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
+      const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+        where, country:cc, queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
+      SEARCH_ID=r.searchId||null;
       failed.push(...(r.sourceErrors||[]));
       let left=(r.scrapers||[]).length+(r.runId?1:0);
       const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
@@ -2575,23 +2593,26 @@ async function runBoards(trk, where){
     } else {
       await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
     }
-    live.draw('reading full postings…');
-    // A few spare, so closed ones dropped by fromAts don't leave the search short.
-    const ats=await fromAts(live.top(MAX_PER_SEARCH+4), setSearchInfo);
-    const n=addJobs(ats.jobs.slice(0, MAX_PER_SEARCH));
-    await save(); busy=false; render();
     const st=live.st, d=st.dropped;
-    const why=[st.rejected&&`${st.rejected} not a fit for your CV`, d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
+    const n=addJobs(st.kept.concat(st.unscored));
+    if(SEARCH_ID){
+      hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
+      // Only a search on our keys moves the "new since" point; it's what that window is for.
+      p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
+    }
+    SEARCH_ID=null;
+    await save(); busy=false; render();
+    const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
       d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
-      ats.closed&&`${ats.closed} closed`].filter(Boolean).join(', ');
+      st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
     if(failed.length) console.warn('sources failed:', failed);
     setSearchInfo((n
-      ? `Added the best ${n} of ${st.found} results.`
-      : `Searched ${st.found} results, none new that match your CV.`) + (why?` Skipped: ${why}.`:'')
+      ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
+        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
+      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`) + (why?` Skipped: ${why}.`:'')
       + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
-    await autoScore();
   }catch(e){
-    busy=false; render();
+    busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
     setSearchInfo(e.message);
   }

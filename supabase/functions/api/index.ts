@@ -22,8 +22,10 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
 //   boardSearch  flat: up to 4 JSearch requests (₹0.44 each, pay-as-you-go),
 //                Adzuna/Jooble/Careerjet/Remotive/RemoteOK (free),
 //                up to 14 Google queries (~₹0.30 each, specialist boards + fallback),
-//                5 Apify scrapers at up to $0.05 each (SCRAPE_MAX_USD)
-//                typical ~₹12-15, worst case ~₹28
+//                5 Apify scrapers, new-since-last-search only, 30 rows and $0.15 max each,
+//                plus scoring every new job (~₹0.2-0.4 per call of 12)
+//                estimated ~₹25-40 per search; the usage ledger has the real figure.
+//                ponytail: 25 credits undercharges that; set once the ledger has ~20 searches.
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
 const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
 
@@ -54,10 +56,11 @@ const MAX_REGISTRY_QUERIES = 8;   // the specialist boards a board search adds t
    Glassdoor, Naukri and company sites at once, with full descriptions. One
    request per target title, first page only (~10 jobs each). */
 const MAX_TITLES = 4;
-async function jsearch(title: string, where: string, country: string) {
+async function jsearch(title: string, where: string, country: string, since: number) {
   const q = new URLSearchParams({
     query: where ? `${title} in ${where}` : title,
-    page: "1", num_pages: "1", date_posted: "month",
+    page: "1", num_pages: "1",
+    date_posted: since <= 1 ? "today" : since <= 3 ? "3days" : since <= 7 ? "week" : "month",
   });
   if (/^[a-z]{2}$/i.test(country)) q.set("country", country.toLowerCase());
   const r = await fetch("https://jsearch.p.rapidapi.com/search?" + q, {
@@ -80,10 +83,12 @@ async function jsearch(title: string, where: string, country: string) {
    Every source returns the same Job shape, so the app treats them alike.
    A source whose key isn't set is skipped, not an error: each one is optional.
    All are free; none changes what a search costs the user. */
-type Job = { title: string; company: string; url: string; location: string; description: string; posted: string; publisher: string };
+// publisher: the site the posting is on (shown to the user). origin: which of
+// our sources delivered it (for the ledger), e.g. JSearch can deliver a LinkedIn posting.
+type Job = { title: string; company: string; url: string; location: string; description: string; posted: string; publisher: string; origin?: string };
 // deno-lint-ignore no-explicit-any
 type Any = any;
-const PER_SOURCE = 10;
+const PER_SOURCE = 50;   // free APIs: take a full page (Adzuna and Jooble cap a page at 50)
 const env = (k: string) => Deno.env.get(k) || "";
 // Dates arrive as ISO strings, RFC dates, or epoch seconds/milliseconds (as numbers or digit strings).
 const isoDay = (v: unknown) => {
@@ -99,11 +104,11 @@ const getJson = async (url: string, init: RequestInit = {}) => {
 };
 const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
 
-async function adzuna(title: string, where: string, country: string): Promise<Job[]> {
+async function adzuna(title: string, where: string, country: string, since: number): Promise<Job[]> {
   const cc = country.toLowerCase();
   if (!env("ADZUNA_APP_ID") || !ADZUNA_COUNTRIES.has(cc)) return [];
   const q = new URLSearchParams({ app_id: env("ADZUNA_APP_ID"), app_key: env("ADZUNA_APP_KEY"), what: title,
-    results_per_page: String(PER_SOURCE), max_days_old: "30", "content-type": "application/json" });
+    results_per_page: String(PER_SOURCE), max_days_old: String(since), sort_by: "date", "content-type": "application/json" });
   if (where && !/^remote$/i.test(where)) q.set("where", where.split(",")[0]);
   const d = await getJson(`https://api.adzuna.com/v1/api/jobs/${cc}/search/1?${q}`);
   return (d.results || []).map((x: Any): Job => ({ title: plain(x.title), company: x.company?.display_name || "",
@@ -157,7 +162,7 @@ const remoteok = () => cachedFeed("remoteok", async () =>
       posted: isoDay(x.date), publisher: "Remote OK" })));
 function titleMatches(jobs: Job[], titles: string[]) {
   const words = [...new Set(titles.join(" ").toLowerCase().split(/[^a-z+#]+/).filter((w) => w.length >= 4))];
-  return jobs.filter((j) => words.some((w) => j.title.toLowerCase().includes(w))).slice(0, PER_SOURCE * 2);
+  return jobs.filter((j) => words.some((w) => j.title.toLowerCase().includes(w)));
 }
 
 /* ═══ Apify scrapers for sites with no API ═══
@@ -170,29 +175,52 @@ function titleMatches(jobs: Job[], titles: string[]) {
    India tech boards $4, Naukri from $1 + start fee, Upwork $0.14, LinkedIn not
    published. Actor ids and inputs were read from their Store pages. If one
    changes its input, that source just returns nothing. */
-const SCRAPE_ROWS = 10;
-const SCRAPE_MAX_USD = 0.05;
-const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; input: (t: string[], city: string, cc: string) => object }> = {
+/* Every site runs on every search, so a job posted only on Naukri or Instahyre
+   is never missed. What keeps that affordable is asking each one only for what
+   is NEW since this user last searched this track (`since`, in days, 1-30),
+   newest first, and capping each at SCRAPE_ROWS. A daily searcher pays for a
+   day or two of postings per site, not a month. Queries use the track's titles
+   plus the CV's hard skills where the site's search supports it, so the rows
+   we pay for are relevant ones. */
+const SCRAPE_ROWS = 30;
+const SCRAPE_MAX_USD = 0.15;
+type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number };
+const orTerms = (xs: string[]) => xs.length > 1 ? `(${xs.map((x) => `"${x}"`).join(" OR ")})` : xs[0] ? `"${xs[0]}"` : "";
+// Round `since` up to the nearest value a site accepts.
+const bucket = (since: number, steps: number[]) => steps.find((s) => s >= since) ?? steps[steps.length - 1];
+const INDEED_HOST: Record<string, string> = { in: "in.indeed.com", us: "www.indeed.com", gb: "uk.indeed.com" };
+
+const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; input: (c: Ctx) => object }> = {
+  // publishedAt is LinkedIn's own r<seconds> filter (the Store page's example is "r604800").
   linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
-    input: (t, city) => ({ titles: t.slice(0, 2), locations: city ? [city] : [], rows: SCRAPE_ROWS, companyProfile: false }) },
+    input: (c) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows: SCRAPE_ROWS, companyProfile: false,
+      publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
+  // A search URL rather than position/location, because only the URL carries
+  // Indeed's fromage (days) and sort=date. Titles AND skills: Indeed searches full text.
+  // ponytail: startUrls with fromage is untested with this actor; if it returns
+  // nothing, switch back to position/location and let the age filter cut old rows.
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
-    input: (t, city, cc) => ({ position: t.slice(0, 2).join(" OR "), location: city, country: cc.toUpperCase(), maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
+    input: (c) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
+      q: [orTerms(c.titles), orTerms(c.skills.slice(0, 4))].filter(Boolean).join(" "), l: c.city, sort: "date",
+      fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
+  // Naukri treats comma-separated keywords as any-of.
   naukri: { actor: "memo23~naukri-scraper", label: "Naukri", india: true,
-    input: (t, city) => ({ platform: "naukri", searchQuery: t[0], location: city, maximumJobs: SCRAPE_ROWS, freshnessDays: 30, sortBy: "date" }) },
+    input: (c) => ({ platform: "naukri", searchQuery: c.titles.slice(0, 3).join(", "), location: c.city, maximumJobs: SCRAPE_ROWS,
+      freshnessDays: bucket(c.since, [1, 3, 7, 15, 30]), sortBy: "date" }) },
+  // No date filter on this actor: capped rows, and the app's 30-day age filter drops old ones.
   indiatech: { actor: "seemuapps~india-tech-jobs-scraper", label: "Instahyre / CutShort / Foundit", india: true,
-    input: (t, city) => ({ keywords: t[0], location: city, boards: ["instahyre", "cutshort", "foundit"], maxItems: SCRAPE_ROWS }) },
+    input: (c) => ({ keywords: c.titles[0], location: c.city, boards: ["instahyre", "cutshort", "foundit"], maxItems: SCRAPE_ROWS }) },
+  // Upwork gigs are found by tool/skill more than by job title.
   upwork: { actor: "valig~upwork-jobs-scraper", label: "Upwork",
-    input: (t) => ({ keywords: t[0], sort: "recency", limit: SCRAPE_ROWS }) },
+    input: (c) => ({ keywords: c.skills[0] || c.titles[0], sort: "recency", limit: SCRAPE_ROWS }) },
 };
 
-async function startScrapers(user: string, titles: string[], where: string, country: string) {
-  const cc = country.toLowerCase() || "in";
-  const city = /^remote$/i.test(where) ? "" : where.split(",")[0].trim();
+async function startScrapers(user: string, c: Ctx) {
   const started = await Promise.all(Object.entries(SCRAPERS)
-    .filter(([, s]) => !s.india || cc === "in")
+    .filter(([, s]) => !s.india || c.cc === "in")
     .map(async ([source, s]) => {
       const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${SCRAPE_ROWS}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
-        method: "POST", body: JSON.stringify(s.input(titles, city, cc)),
+        method: "POST", body: JSON.stringify(s.input(c)),
       }).catch(() => null);
       const run = r && r.ok ? (await r.json()).data : null;
       if (!run?.id) { console.error("scraper start failed:", source, r?.status); return null; }
@@ -200,6 +228,26 @@ async function startScrapers(user: string, titles: string[], where: string, coun
       return { id: run.id, source, label: s.label };
     }));
   return started.filter(Boolean);
+}
+
+/* ═══ usage ledger (usage_events in billing.sql) ═══
+   ₹ figures are ESTIMATES: units × list price. DeepSeek token counts are exact
+   (from its response); only the ₹ per token is a list price. Check these
+   against your real bills and update. Logging never fails a request. */
+const USD_INR = 88;
+const PRICE_USD: Record<string, number> = {
+  jsearch: 0.005,          // per request, RapidAPI pay-as-you-go
+  google: 0.0035,          // per Google query page (Apify google-search-scraper)
+  linkedin: 0.005,         // per row; bebity doesn't publish a price, so this is a cautious guess
+  indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
+  adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0,
+};
+const DEEPSEEK_USD_PER_M = { in: 0.27, in_cached: 0.07, out: 1.10 };   // deepseek-chat list price; verify
+const inr = (usd: number) => Math.round(usd * USD_INR * 1000) / 1000;
+async function logUsage(rows: Record<string, unknown>[]) {
+  if (!rows.length) return;
+  const { error } = await admin.from("usage_events").insert(rows);
+  if (error) console.error("usage log:", error.message);
 }
 
 /* Actors disagree on field names, so take the first one present. */
@@ -216,31 +264,36 @@ function scrapedJob(x: Any, source: string): Job {
     description: plain(pick(x, "description", "descriptionText", "jobDescription", "snippet")).slice(0, 4000),
     posted: isoDay(pick(x, "publishedAt", "postedAt", "datePosted", "createdDate", "createdOn", "publishedOn", "date")),
     publisher: SCRAPERS[source].label,
+    origin: source,
   };
 }
 
-/* Every source at once. Returns the jobs (deduped by link) and one error line
-   per source that failed, so the app can say which. */
-async function searchAll(titles: string[], where: string, country: string, req: Request) {
+/* Every API source at once. Returns the jobs (deduped by link, each tagged
+   with the origin that delivered it), one error line per source that failed,
+   and how many requests each origin made, for the ledger. The remote feeds
+   are cached, so they carry no date filter; the app's age filter covers them. */
+async function searchAll(titles: string[], where: string, country: string, since: number, req: Request) {
   const named: [string, Promise<Job[]>][] = [
-    ...titles.map((t) => ["JSearch", jsearch(t, where, country)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["Adzuna", adzuna(t, where, country)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["Jooble", jooble(t, where)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["Careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[]>]),
-    ["Remotive", remotive().then((j) => titleMatches(j, titles))],
-    ["Remote OK", remoteok().then((j) => titleMatches(j, titles))],
+    ...titles.map((t) => ["jsearch", jsearch(t, where, country, since)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[]>]),
+    ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[]>]),
+    ["remotive", remotive().then((j) => titleMatches(j, titles))],
+    ["remoteok", remoteok().then((j) => titleMatches(j, titles))],
   ];
   const settled = await Promise.allSettled(named.map(([, p]) => p));
-  const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>();
+  const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>(), requests: Record<string, number> = {};
   settled.forEach((s, i) => {
-    if (s.status === "rejected") { errors.set(named[i][0], String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    const origin = named[i][0];
+    if (s.status === "rejected") { errors.set(origin, String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    requests[origin] = (requests[origin] || 0) + 1;
     for (const j of s.value) {
       const k = j.url.toLowerCase();
       if (!j.title || !j.url || seen.has(k)) continue;
-      seen.add(k); jobs.push(j);
+      seen.add(k); jobs.push({ ...j, origin });
     }
   });
-  return { jobs, errors: [...errors].map(([src, msg]) => `${src}: ${msg}`) };
+  return { jobs, requests, errors: [...errors].map(([src, msg]) => `${src}: ${msg}`) };
 }
 
 // What the browser gets back after any spend: enough to redraw the credits button.
@@ -299,15 +352,25 @@ Deno.serve(async (req) => {
       // boards alone. The run id is polled by the browser via apify_status/items.
       case "board_search": {
         const lines = (v: unknown) => String(v || "").split("\n").map((q) => q.trim()).filter(Boolean);
-        const titles = (Array.isArray(b.titles) ? b.titles : []).map(String).filter(Boolean).slice(0, MAX_TITLES);
+        const list = (v: unknown, n: number) => (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean).slice(0, n);
+        const titles = list(b.titles, MAX_TITLES);
         if (!titles.length) throw new Http(400, "no titles");
+        const where = String(b.where || ""), country = String(b.country || "");
+        // Days since this user last searched this track (the app sends it); first search = 30.
+        const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), 30);
+        const ctx: Ctx = { titles, skills: list(b.skills, 6), since,
+          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
+        const searchId = crypto.randomUUID();
 
-        const [{ jobs, errors }, scrapers] = await Promise.all([
-          searchAll(titles, String(b.where || ""), String(b.country || ""), req),
-          startScrapers(user, titles, String(b.where || ""), String(b.country || "")),
+        const [{ jobs, errors, requests }, scrapers] = await Promise.all([
+          searchAll(titles, where, country, since, req),
+          startScrapers(user, ctx),
         ]);
         if (errors.length) console.error("sources:", errors);
+        // Scraper rows are logged when their results are fetched (apify_items), since only then is the count known.
+        await logUsage(Object.entries(requests).map(([source, units]) =>
+          ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
 
         const queries = [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
         const run = queries.length
@@ -321,8 +384,25 @@ Deno.serve(async (req) => {
           await refund(user, s, "search", COST.boardSearch);
           throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
         }
-        if (run?.id) await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
-        return json({ jobs, runId: run?.id || null, queries, scrapers, sourceErrors: errors, ...wallet(s) });
+        if (run?.id) {
+          await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
+          await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
+        }
+        return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, sourceErrors: errors, ...wallet(s) });
+      }
+
+      // The app's per-source yield for one search: found, new, scored 50+, and
+      // 50+ that no other source had. Analytics only, so it's taken as reported.
+      case "search_report": {
+        const sid = String(b.search_id || "");
+        if (!/^[0-9a-f-]{36}$/i.test(sid)) throw new Http(400, "bad search id");
+        const n = (v: unknown) => Math.min(Math.max(Math.round(Number(v) || 0), 0), 100000);
+        const known = new Set([...Object.keys(PRICE_USD)]);
+        await logUsage(Object.entries(b.sources || {}).filter(([k]) => known.has(k)).slice(0, 30).map(([source, v]: [string, Any]) => ({
+          user_id: user, search_id: sid, kind: "yield", source,
+          found: n(v.found), unique_new: n(v.unique_new), kept_50: n(v.kept_50), exclusive_50: n(v.exclusive_50),
+        })));
+        return json({ ok: true });
       }
 
       case "llm": {
@@ -338,11 +418,17 @@ Deno.serve(async (req) => {
             messages: [{ role: "user", content: prompt }],
           }),
         }).catch(() => null);
-        const text = r && r.ok ? ((await r.json()).choices?.[0]?.message?.content || "").trim() : "";
+        const d = r && r.ok ? await r.json() : null;
+        const text = (d?.choices?.[0]?.message?.content || "").trim();
         if (!text) {                       // their call failed, so it shouldn't cost them
           await refund(user, s, "llm", COST.llm);
           throw new Http(502, "The model didn't answer. No credit was used — try again.");
         }
+        // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
+        const u = d.usage || {}, cached = u.prompt_cache_hit_tokens || 0, tin = u.prompt_tokens || 0, tout = u.completion_tokens || 0;
+        await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
+          kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout,
+          cost_inr: inr(((tin - cached) * DEEPSEEK_USD_PER_M.in + cached * DEEPSEEK_USD_PER_M.in_cached + tout * DEEPSEEK_USD_PER_M.out) / 1e6) }]);
         return json({ text, ...wallet(s) });
       }
 
@@ -382,7 +468,12 @@ Deno.serve(async (req) => {
         const r = await apify(`/datasets/${encodeURIComponent(ds)}/items?clean=true&format=json`);
         const items = r.ok ? await r.json() : [];
         // A scraper run comes back in the same Job shape as the API sources; a Google run raw.
-        if (Object.hasOwn(SCRAPERS, String(b.source))) return json({ items: (items as Any[]).map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url) });
+        if (Object.hasOwn(SCRAPERS, String(b.source))) {
+          const rows = items as Any[];
+          await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
+            kind: "scrape", source: b.source, units: rows.length, cost_inr: inr(rows.length * (PRICE_USD[b.source] || 0)) }]);
+          return json({ items: rows.map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url) });
+        }
         return json({ items });
       }
 
