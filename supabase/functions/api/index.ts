@@ -60,7 +60,9 @@ async function jsearch(title: string, where: string, country: string, since: num
   const q = new URLSearchParams({
     query: where ? `${title} in ${where}` : title,
     page: "1", num_pages: "1",
-    date_posted: since <= 1 ? "today" : since <= 3 ? "3days" : since <= 7 ? "week" : "month",
+    // JSearch offers today/3days/week/month; `since` is floored at
+    // MIN_WINDOW_DAYS, so the two narrow ones are unreachable and not listed.
+    date_posted: since <= 7 ? "week" : "month",
   });
   if (/^[a-z]{2}$/i.test(country)) q.set("country", country.toLowerCase());
   const r = await fetch("https://jsearch.p.rapidapi.com/search?" + q, {
@@ -177,17 +179,23 @@ function titleMatches(jobs: Job[], titles: string[]) {
    changes its input, that source just returns nothing. */
 /* Every site runs on every search, so a job posted only on Naukri or Instahyre
    is never missed. What keeps that affordable is asking each one only for what
-   is NEW since this user last searched this track (`since`, in days, 1-30),
-   newest first, and capping each at SCRAPE_ROWS. A daily searcher pays for a
-   day or two of postings per site, not a month. Queries use the track's titles
-   plus the CV's hard skills where the site's search supports it, so the rows
-   we pay for are relevant ones. */
+   is NEW since this user last searched this track (`since`, in days, never
+   narrower than MIN_WINDOW_DAYS nor wider than 30), newest first, and capping
+   each at SCRAPE_ROWS. Because every site sorts by date, a busy search returns
+   the same newest SCRAPE_ROWS however wide the window is; the width only buys
+   rows on a niche search that has fewer than that in a day. Queries use the
+   track's titles, and the CV's hard skills only where a site's search takes
+   them without coming back empty (Upwork does; Indeed did not). */
 const SCRAPE_ROWS = 30;
 const MIN_WINDOW_DAYS = 7;
 const SCRAPE_MAX_USD = 0.15;
 type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number };
 const orTerms = (xs: string[]) => xs.length > 1 ? `(${xs.map((x) => `"${x}"`).join(" OR ")})` : xs[0] ? `"${xs[0]}"` : "";
-// Round `since` up to the nearest value a site accepts.
+// Round `since` up to the nearest value a site accepts. No step below
+// MIN_WINDOW_DAYS is listed: `since` is floored there, so they were dead.
+// A `since` past a site's longest step falls back to that step rather than
+// failing -- Indeed's own maximum is 14, so a 30-day first search asks it for
+// 14 days and takes the newest rows inside that.
 const bucket = (since: number, steps: number[]) => steps.find((s) => s >= since) ?? steps[steps.length - 1];
 const INDEED_HOST: Record<string, string> = { in: "in.indeed.com", us: "www.indeed.com", gb: "uk.indeed.com" };
 
@@ -195,7 +203,7 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
   // publishedAt is LinkedIn's own r<seconds> filter (the Store page's example is "r604800").
   linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
     input: (c) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows: SCRAPE_ROWS, companyProfile: false,
-      publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
+      publishedAt: `r${bucket(c.since, [7, 30]) * 86400}` }) },
   // A search URL rather than position/location, because only the URL carries
   // Indeed's fromage (days) and sort=date. Titles only: adding skills as a second
   // required term returned nothing for a real niche search.
@@ -204,11 +212,11 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
     input: (c) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
       q: orTerms(c.titles), l: c.city, sort: "date",
-      fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
+      fromage: String(bucket(c.since, [7, 14])) }) }], maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
   // Naukri treats comma-separated keywords as any-of.
   naukri: { actor: "memo23~naukri-scraper", label: "Naukri", india: true,
     input: (c) => ({ platform: "naukri", searchQuery: c.titles.slice(0, 3).join(", "), location: c.city, maximumJobs: SCRAPE_ROWS,
-      freshnessDays: bucket(c.since, [1, 3, 7, 15, 30]), sortBy: "date" }) },
+      freshnessDays: bucket(c.since, [7, 15, 30]), sortBy: "date" }) },
   // No date filter on this actor: capped rows, and the app's 30-day age filter drops old ones.
   indiatech: { actor: "seemuapps~india-tech-jobs-scraper", label: "Instahyre / CutShort / Foundit", india: true,
     input: (c) => ({ keywords: c.titles[0], location: c.city, boards: ["instahyre", "cutshort", "foundit"], maxItems: SCRAPE_ROWS }) },
@@ -375,7 +383,10 @@ Deno.serve(async (req) => {
         // Days since this user last searched this track (the app sends it); first search = 30.
         // Never narrower than MIN_WINDOW_DAYS: each site is capped at SCRAPE_ROWS
         // anyway, so a 1-day window saved almost nothing and returned almost
-        // nothing for niche roles. Jobs already in the list are dropped as seen.
+        // nothing for niche roles. Re-fetching a week of postings is only cheap
+        // because the app remembers what it has already judged -- both what is
+        // in the list and what it scored below its threshold and dropped -- so
+        // a posting is paid to be scored once, not once per day for a week.
         const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), MIN_WINDOW_DAYS), 30);
         const ctx: Ctx = { titles, skills: list(b.skills, 6), since,
           city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };

@@ -2355,6 +2355,61 @@ function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
      3. scoreAndCut  - full scoring against the CV; below MIN_FIT is dropped */
 const MAX_AGE_DAYS = 30;
 
+/* ═══ postings already judged and rejected ═══
+   p.jobs is the tracker, not a log: anything scoring below MIN_FIT is dropped
+   and leaves no trace. That cost nothing while each search asked the boards
+   only for the day since the last one. It costs real money now that the server
+   floors the window at a week (MIN_WINDOW_DAYS): the same rejected postings
+   come back every day for seven days, and each return was re-filtered, pulled
+   from its ATS feed again and re-scored -- a verdict paid for seven times.
+
+   So a rejection is remembered, and boardFilter drops the posting for free the
+   next time. What is stored is a hash of the job key, not the key: the whole
+   DB is one JSON blob written and synced on every save, and a month of full
+   URLs would come to dominate it. cyrb53 is the hash because 53 bits is wide
+   enough that a collision -- which would silently cost one genuinely new job
+   -- will not happen at this volume.
+
+   Entries expire at MAX_AGE_DAYS, because past that boardFilter drops the
+   posting for age anyway and remembering it buys nothing. */
+function hashKey(s){                                     // cyrb53
+  let h1=0xdeadbeef, h2=0x41c6ce57;
+  for(let i=0;i<s.length;i++){ const c=s.charCodeAt(i);
+    h1=Math.imul(h1^c,2654435761); h2=Math.imul(h2^c,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507)^Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507)^Math.imul(h1^(h1>>>13),3266489909);
+  return (4294967296*(2097151&h2)+(h1>>>0)).toString(36);
+}
+const dayNo = () => Math.floor(Date.now()/864e5);
+/* Both identities a posting is matched on: its link, and title+company for the
+   same role syndicated to another board under a different URL. A blank company
+   yields no second key -- "tc:data analyst|" would match every unattributed
+   posting with that title, which is a different job, not the same one. */
+const idKeys = j => [keyOf(j)].concat(
+  j.company && !String(j.company).startsWith('[')
+    ? ['tc:'+[j.title,j.company].join('|').toLowerCase()] : []);
+const rejectedOf = p => {
+  if(!p) return {};
+  if(!p.rejected || typeof p.rejected!=='object') p.rejected={};
+  return p.rejected;
+};
+function pruneRejected(p){
+  const r=rejectedOf(p), cut=dayNo()-MAX_AGE_DAYS; let n=0;
+  for(const k in r) if(!(r[k]>cut)){ delete r[k]; n++; }
+  return n;
+}
+function rememberRejected(p, jobs){
+  const r=rejectedOf(p), d=dayNo();
+  jobs.forEach(j=>idKeys(j).forEach(k=>{ r[hashKey(k)]=d; }));
+}
+/* Everything this profile has already judged: what is in the list, and what was
+   scored below MIN_FIT and dropped. Hashed so the two mix in one set. */
+function seenKeys(p){
+  const s=new Set(Object.keys(rejectedOf(p)));
+  ((p&&p.jobs)||[]).forEach(j=>idKeys(j).forEach(k=>s.add(hashKey(k))));
+  return s;
+}
+
 /* A normalized server result (API source or site scraper) as a job row.
    query holds the publisher (LinkedIn, Naukri, ...) for the live list. */
 function jsearchRow(x){
@@ -2396,7 +2451,7 @@ function isPostingUrl(u){
 /* seen: shared across calls when one search feeds in several batches, so a
    job found by two sources is only kept once. */
 function boardFilter(jobs, trk, seen){
-  const p=P(); seen=seen||new Set(p?p.jobs.map(keyOf):[]);
+  seen=seen||seenKeys(P());
   const dropped={listing:0, old:0, dupe:0};
   const out=[];
   jobs.forEach(j=>{
@@ -2406,10 +2461,11 @@ function boardFilter(jobs, trk, seen){
     // job is scored against the CV now, and that decides relevance.
     const age=ageOf(j);                       // unknown age is kept: not the same as old
     if(age!==null && age>MAX_AGE_DAYS){ dropped.old++; return; }
-    // The same role syndicated to several boards, or already in the list.
-    const tc=j.company.startsWith('[') ? '' : 'tc:'+[j.title,j.company].join('|').toLowerCase();
-    if(seen.has(keyOf(j)) || (tc && seen.has(tc))){ dropped.dupe++; return; }
-    seen.add(keyOf(j)); if(tc) seen.add(tc);
+    // The same role syndicated to several boards, already in the list, or
+    // already scored below MIN_FIT in an earlier search and dropped.
+    const ks=idKeys(j).map(hashKey);
+    if(ks.some(k=>seen.has(k))){ dropped.dupe++; return; }
+    ks.forEach(k=>seen.add(k));
     out.push(j);
   });
   return {jobs:out, dropped};
@@ -2423,7 +2479,7 @@ function boardFilter(jobs, trk, seen){
 const SCORE_BATCH = 12;
 const MIN_FIT = 50;
 async function scoreAndCut(jobs, prof, track){
-  const kept=[], unscored=[]; let below=0;
+  const kept=[], unscored=[], rejected=[];
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
@@ -2434,21 +2490,22 @@ async function scoreAndCut(jobs, prof, track){
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
         j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags;
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
-        if(r.score>=MIN_FIT) kept.push(j); else below++;
+        if(r.score>=MIN_FIT) kept.push(j); else rejected.push(j);
       });
     }catch(e){
       console.warn('scoring failed for a batch, keeping it unscored:', e.message);
       unscored.push(...part);
     }
   }
-  return {kept, unscored, below};
+  // unscored is not rejected: the model never judged it, so nothing is known.
+  return {kept, unscored, rejected, below:rejected.length};
 }
 
 /* The live results while a search runs. Each source's jobs go in through
    add(): free filter, then full postings from company feeds (dropping closed
    ones), then scoring, and what scores MIN_FIT+ joins the list. */
 function liveBoard(trk, prof, track){
-  const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
+  const p=P(), seen=seenKeys(p);
   const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, old:0, dupe:0}};
   /* Yield per origin (the source that delivered a job), for the usage ledger.
      seenIn records every origin that returned each job, before any filtering,
@@ -2456,7 +2513,6 @@ function liveBoard(trk, prof, track){
      returned by two sources counts as new for whichever arrived first. */
   const by={}, O=o=>by[o]||(by[o]={found:0, unique_new:0, kept_50:0, exclusive_50:0});
   const seenIn=new Map();
-  const idsOf=j=>[keyOf(j)].concat(j.company&&!j.company.startsWith('[')?['tc:'+(j.title+'|'+j.company).toLowerCase()]:[]);
   const draw=(extra)=>{
     setSearchInfo(`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
       + (st.checking?` · scoring ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
@@ -2470,7 +2526,7 @@ function liveBoard(trk, prof, track){
     async add(jobs){
       st.found+=jobs.length;
       jobs.forEach(j=>{ const o=j.origin||'google'; O(o).found++;
-        idsOf(j).forEach(k=>{ if(!seenIn.has(k)) seenIn.set(k,new Set()); seenIn.get(k).add(o); }); });
+        idKeys(j).forEach(k=>{ if(!seenIn.has(k)) seenIn.set(k,new Set()); seenIn.get(k).add(o); }); });
       const f=boardFilter(jobs, trk, seen);
       for(const k in f.dropped) st.dropped[k]+=f.dropped[k];
       f.jobs.forEach(j=>O(j.origin||'google').unique_new++);
@@ -2480,6 +2536,7 @@ function liveBoard(trk, prof, track){
       st.closed+=ats.closed;
       const r=await scoreAndCut(ats.jobs, prof, track);
       st.checking--;
+      rememberRejected(p, r.rejected);   // saved with the rest of the search
       r.kept.forEach(j=>O(j.origin||'google').kept_50++);
       st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
       st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
@@ -2488,7 +2545,7 @@ function liveBoard(trk, prof, track){
     // Call once, after every source has landed.
     report(){
       st.kept.forEach(j=>{
-        const origins=new Set(); idsOf(j).forEach(k=>(seenIn.get(k)||[]).forEach(o=>origins.add(o)));
+        const origins=new Set(); idKeys(j).forEach(k=>(seenIn.get(k)||[]).forEach(o=>origins.add(o)));
         if(origins.size===1) O(j.origin||'google').exclusive_50++;
       });
       return by;
@@ -2544,6 +2601,7 @@ async function fromAts(jobs, onStatus){
 
 async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
+  pruneRejected(p);
   // Portals first, then any specialist registry the track named that is not
   // already one of them. A track with no registries of its own still searches.
   const boards=PORTALS.concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
@@ -2559,6 +2617,7 @@ async function runBoards(trk, where){
     // old worldwide behaviour rather than a broken one.
     const cc=p.profile.country_code||"";
     const live=liveBoard(trk, p.profile, p.track), failed=[];
+    let win=0;                        // the window the server actually searched
     if(!ownApify() && cloudNow()){
       // Our keys: the API sources answer at once; the Google run and the site
       // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
@@ -2570,11 +2629,16 @@ async function runBoards(trk, where){
       // was last searched (rounded up, plus a day of overlap), 30 days the first time.
       const last=Date.parse((p.searchedAt||{})[trk.id]||'');
       const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
-      setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
+      // How far back was actually searched is the server's decision: it widens
+      // anything narrower than its own floor. Naming this number here was wrong
+      // every time a search ran within a week of the last one, so the window is
+      // reported at the end instead, from what the server sends back.
+      setSearchInfo('searching job boards…');
       // fallback: portal queries the server runs on Google if every API source comes back empty.
       const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
         where, country:cc, queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
       SEARCH_ID=r.searchId||null;
+      win=Math.round(Number(r.since))||since_days;
       failed.push(...(r.sourceErrors||[]));
       let left=(r.scrapers||[]).length+(r.runId?1:0);
       const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
@@ -2608,7 +2672,8 @@ async function runBoards(trk, where){
     setSearchInfo((n
       ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
         + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
-      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`) + (why?` Skipped: ${why}.`:'')
+      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`)
+      + (win?` Covered jobs posted in the last ${win} days.`:'') + (why?` Skipped: ${why}.`:'')
       + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
   }catch(e){
     busy=false; SEARCH_ID=null; render();
