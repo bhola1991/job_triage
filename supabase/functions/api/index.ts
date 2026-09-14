@@ -104,9 +104,9 @@ const getJson = async (url: string, init: RequestInit = {}) => {
 };
 const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
 
-async function adzuna(title: string, where: string, country: string, since: number): Promise<Job[]> {
+async function adzuna(title: string, where: string, country: string, since: number): Promise<Job[] | null> {
   const cc = country.toLowerCase();
-  if (!env("ADZUNA_APP_ID") || !ADZUNA_COUNTRIES.has(cc)) return [];
+  if (!env("ADZUNA_APP_ID") || !ADZUNA_COUNTRIES.has(cc)) return null;
   const q = new URLSearchParams({ app_id: env("ADZUNA_APP_ID"), app_key: env("ADZUNA_APP_KEY"), what: title,
     results_per_page: String(PER_SOURCE), max_days_old: String(since), sort_by: "date", "content-type": "application/json" });
   if (where && !/^remote$/i.test(where)) q.set("where", where.split(",")[0]);
@@ -116,8 +116,8 @@ async function adzuna(title: string, where: string, country: string, since: numb
     posted: isoDay(x.created), publisher: "Adzuna" }));
 }
 
-async function jooble(title: string, where: string): Promise<Job[]> {
-  if (!env("JOOBLE_API_KEY")) return [];
+async function jooble(title: string, where: string): Promise<Job[] | null> {
+  if (!env("JOOBLE_API_KEY")) return null;
   const d = await getJson(`https://jooble.org/api/${env("JOOBLE_API_KEY")}`, { method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ keywords: title, location: /^remote$/i.test(where) ? "" : where, page: "1", ResultOnPage: String(PER_SOURCE) }) });
@@ -126,8 +126,8 @@ async function jooble(title: string, where: string): Promise<Job[]> {
 }
 
 // Careerjet requires the end user's IP and user agent on every call.
-async function careerjet(title: string, where: string, country: string, req: Request): Promise<Job[]> {
-  if (!env("CAREERJET_API_KEY")) return [];
+async function careerjet(title: string, where: string, country: string, req: Request): Promise<Job[] | null> {
+  if (!env("CAREERJET_API_KEY")) return null;
   const q = new URLSearchParams({ keywords: title, locale_code: `en_${(country || "GB").toUpperCase()}`, page_size: String(PER_SOURCE), sort: "date",
     user_ip: (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "0.0.0.0",
     user_agent: req.headers.get("user-agent") || "JobTriage" });
@@ -183,6 +183,7 @@ function titleMatches(jobs: Job[], titles: string[]) {
    plus the CV's hard skills where the site's search supports it, so the rows
    we pay for are relevant ones. */
 const SCRAPE_ROWS = 30;
+const MIN_WINDOW_DAYS = 7;
 const SCRAPE_MAX_USD = 0.15;
 type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number };
 const orTerms = (xs: string[]) => xs.length > 1 ? `(${xs.map((x) => `"${x}"`).join(" OR ")})` : xs[0] ? `"${xs[0]}"` : "";
@@ -196,12 +197,13 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
     input: (c) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows: SCRAPE_ROWS, companyProfile: false,
       publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
   // A search URL rather than position/location, because only the URL carries
-  // Indeed's fromage (days) and sort=date. Titles AND skills: Indeed searches full text.
+  // Indeed's fromage (days) and sort=date. Titles only: adding skills as a second
+  // required term returned nothing for a real niche search.
   // ponytail: startUrls with fromage is untested with this actor; if it returns
   // nothing, switch back to position/location and let the age filter cut old rows.
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
     input: (c) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
-      q: [orTerms(c.titles), orTerms(c.skills.slice(0, 4))].filter(Boolean).join(" "), l: c.city, sort: "date",
+      q: orTerms(c.titles), l: c.city, sort: "date",
       fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
   // Naukri treats comma-separated keywords as any-of.
   naukri: { actor: "memo23~naukri-scraper", label: "Naukri", india: true,
@@ -284,11 +286,12 @@ function scrapedJob(x: Any, source: string): Job {
    and how many requests each origin made, for the ledger. The remote feeds
    are cached, so they carry no date filter; the app's age filter covers them. */
 async function searchAll(titles: string[], where: string, country: string, since: number, req: Request) {
-  const named: [string, Promise<Job[]>][] = [
-    ...titles.map((t) => ["jsearch", jsearch(t, where, country, since)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[]>]),
-    ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[]>]),
+  // A source whose key isn't set resolves to null: skipped, not a request, not logged.
+  const named: [string, Promise<Job[] | null>][] = [
+    ...titles.map((t) => ["jsearch", jsearch(t, where, country, since)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[] | null>]),
     ["remotive", remotive().then((j) => titleMatches(j, titles))],
     ["remoteok", remoteok().then((j) => titleMatches(j, titles))],
   ];
@@ -297,6 +300,7 @@ async function searchAll(titles: string[], where: string, country: string, since
   settled.forEach((s, i) => {
     const origin = named[i][0];
     if (s.status === "rejected") { errors.set(origin, String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    if (s.value === null) return;
     requests[origin] = (requests[origin] || 0) + 1;
     for (const j of s.value) {
       const k = j.url.toLowerCase();
@@ -369,7 +373,10 @@ Deno.serve(async (req) => {
         if (!titles.length) throw new Http(400, "no titles");
         const where = String(b.where || ""), country = String(b.country || "");
         // Days since this user last searched this track (the app sends it); first search = 30.
-        const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), 30);
+        // Never narrower than MIN_WINDOW_DAYS: each site is capped at SCRAPE_ROWS
+        // anyway, so a 1-day window saved almost nothing and returned almost
+        // nothing for niche roles. Jobs already in the list are dropped as seen.
+        const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), MIN_WINDOW_DAYS), 30);
         const ctx: Ctx = { titles, skills: list(b.skills, 6), since,
           city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
