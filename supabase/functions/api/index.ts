@@ -215,19 +215,30 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
     input: (c) => ({ keywords: c.skills[0] || c.titles[0], sort: "recency", limit: SCRAPE_ROWS }) },
 };
 
+/* A scraper that fails to START (actor needs renting, input rejected, Apify
+   out of credit) is reported back like any other failed source; before, it
+   vanished silently and the search just looked thin. */
 async function startScrapers(user: string, c: Ctx) {
+  const errors: string[] = [];
   const started = await Promise.all(Object.entries(SCRAPERS)
     .filter(([, s]) => !s.india || c.cc === "in")
     .map(async ([source, s]) => {
       const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${SCRAPE_ROWS}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
         method: "POST", body: JSON.stringify(s.input(c)),
-      }).catch(() => null);
-      const run = r && r.ok ? (await r.json()).data : null;
-      if (!run?.id) { console.error("scraper start failed:", source, r?.status); return null; }
+      }).catch((e) => { errors.push(`${source}: ${(e as Error).message}`); return null; });
+      if (!r) return null;
+      if (!r.ok) {
+        const body = await r.text().catch(() => "");
+        const msg = (() => { try { return JSON.parse(body).error?.message; } catch { return ""; } })() || body.slice(0, 140);
+        errors.push(`${source}: Apify ${r.status} ${msg}`);
+        return null;
+      }
+      const run = (await r.json()).data;
       await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId });
       return { id: run.id, source, label: s.label };
     }));
-  return started.filter(Boolean);
+  if (errors.length) console.error("scraper start failed:", errors);
+  return { scrapers: started.filter(Boolean), errors };
 }
 
 /* ═══ usage ledger (usage_events in billing.sql) ═══
@@ -363,10 +374,11 @@ Deno.serve(async (req) => {
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
         const searchId = crypto.randomUUID();
 
-        const [{ jobs, errors, requests }, scrapers] = await Promise.all([
+        const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
           searchAll(titles, where, country, since, req),
           startScrapers(user, ctx),
         ]);
+        errors.push(...scrapeErrors);
         if (errors.length) console.error("sources:", errors);
         // Scraper rows are logged when their results are fetched (apify_items), since only then is the count known.
         await logUsage(Object.entries(requests).map(([source, units]) =>
