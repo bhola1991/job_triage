@@ -11,10 +11,10 @@ create table if not exists public.credits (
   -- Free tier: 5 job board searches, with AI scoring free while it lasts.
   free_search integer    not null default 5 check (free_search >= 0),
   free_tier  boolean     not null default true,     -- off once a board search is attempted with none left
-  -- ponytail: ceiling on free AI calls. Each search = 1 shortlist call + 2
-  -- scoring calls (10 jobs, 6 per call), so 5 searches = 15; the rest is room
-  -- for drafts. Without it, CSV imports would score free forever.
-  free_llm   integer     not null default 25 check (free_llm >= 0),
+  -- ponytail: ceiling on free AI calls. Each search = up to 7 CV-check calls
+  -- (one per source batch) + 2 scoring calls, so 5 searches = ~45; the rest is
+  -- room for drafts. Without it, CSV imports would score free forever.
+  free_llm   integer     not null default 60 check (free_llm >= 0),
   updated_at timestamptz not null default now()
 );
 alter table public.credits enable row level security;
@@ -131,3 +131,69 @@ revoke all on function public.add_credits(uuid, integer)    from public, anon, a
 revoke all on function public.mark_order_paid(text, text)   from public, anon, authenticated;
 grant execute on function public.add_credits(uuid, integer)   to service_role;
 grant execute on function public.mark_order_paid(text, text)  to service_role;
+
+-- For databases created before the default above changed (safe to re-run).
+alter table public.credits alter column free_llm set default 60;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Usage ledger: what every search actually costs, and what each source yields.
+--
+-- The server writes one row per paid call (kind llm/api/scrape) and one 'yield'
+-- row per source per search, reported by the app: how many jobs it found, how
+-- many were new, how many scored 50+, and how many of those no other source in
+-- that search had (exclusive_50). Costs are ESTIMATES from list prices in the
+-- api function (DeepSeek tokens are exact; ₹ is tokens × list price).
+--
+-- Nobody reads this from the browser: RLS on, no policies. Read it in the SQL
+-- editor:   select * from source_yield order by inr_per_exclusive_50 desc nulls last;
+-- ─────────────────────────────────────────────────────────────────────────────
+create table if not exists public.usage_events (
+  id            bigserial   primary key,
+  user_id       uuid        references auth.users(id) on delete set null,
+  search_id     uuid,
+  kind          text        not null check (kind in ('llm','api','scrape','yield')),
+  source        text        not null,
+  units         integer     not null default 0,     -- requests, rows billed, or calls
+  tokens_in     integer,
+  tokens_cached integer,                            -- DeepSeek prompt cache hits
+  tokens_out    integer,
+  cost_inr      numeric(10,3),
+  found         integer,
+  unique_new    integer,
+  kept_50       integer,
+  exclusive_50  integer,
+  created_at    timestamptz not null default now()
+);
+alter table public.usage_events enable row level security;
+create index if not exists usage_events_source_time on public.usage_events (source, created_at);
+create index if not exists usage_events_search on public.usage_events (search_id);
+
+-- Per source, all time. security_invoker keeps the table's RLS in force for
+-- anyone who isn't the owner, and the revoke keeps the view out of the API.
+create or replace view public.source_yield with (security_invoker = on) as
+select source,
+       count(distinct search_id) filter (where kind = 'yield')              as searches,
+       sum(found)                                                           as found,
+       sum(unique_new)                                                      as unique_new,
+       sum(kept_50)                                                         as kept_50,
+       sum(exclusive_50)                                                    as exclusive_50,
+       round(sum(cost_inr) filter (where kind in ('api','scrape')), 2)      as cost_inr,
+       round(sum(cost_inr) filter (where kind in ('api','scrape'))
+             / nullif(sum(exclusive_50), 0), 2)                             as inr_per_exclusive_50
+  from public.usage_events
+ group by source;
+
+-- Per search: total cost and where it went.
+create or replace view public.search_cost with (security_invoker = on) as
+select search_id, min(created_at) as at,
+       round(sum(cost_inr) filter (where kind = 'scrape'), 2) as scrape_inr,
+       round(sum(cost_inr) filter (where kind = 'api'), 2)    as api_inr,
+       round(sum(cost_inr) filter (where kind = 'llm'), 2)    as llm_inr,
+       round(sum(cost_inr), 2)                                as total_inr,
+       sum(tokens_in) as tokens_in, sum(tokens_cached) as tokens_cached, sum(tokens_out) as tokens_out,
+       sum(kept_50) as kept_50
+  from public.usage_events
+ where search_id is not null
+ group by search_id;
+
+revoke all on public.usage_events, public.source_yield, public.search_cost from anon, authenticated;
