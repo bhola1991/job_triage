@@ -1128,7 +1128,7 @@ async function hosted(action, body){
 }
 function loadScript(src){
   return new Promise((ok,no)=>{ if(document.querySelector(`script[src="${src}"]`)) return ok();
-    const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("Couldn't load checkout.")); document.head.appendChild(s); });
+    const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("Couldn't load "+(/pdf/.test(src)?'the PDF reader':'checkout')+". Check your connection and try again.")); document.head.appendChild(s); });
 }
 async function buyDialog(){
   if($('#buyModal')) return;
@@ -2696,11 +2696,11 @@ function renderOnb(){
 
   if(ONB.step===0){
     body=`<p class="lede">Drop in your profile. We'll work out what you should be applying for.</p>
-      <p class="say">A CV, a résumé, a career summary — any markdown or text file describing your background. It never leaves your browser except to be read once.</p>
+      <p class="say">A CV, a résumé, a career summary — a PDF, markdown or text file describing your background. It never leaves your browser except to be read once.</p>
       <div class="drop" id="dropProf" style="padding:38px 18px">
-        <div style="font-size:15px;color:var(--text);margin-bottom:6px">Drop your profile file here</div>
-        <div>or click to choose · .md or .txt</div></div>
-      <input type="file" id="fileProf" accept=".md,.txt,.markdown" style="display:none">
+        <div style="font-size:15px;color:var(--text);margin-bottom:6px">Drop your CV here</div>
+        <div>or click to choose · .pdf, .md or .txt</div></div>
+      <input type="file" id="fileProf" accept=".pdf,application/pdf,.md,.txt,.markdown" style="display:none">
       <p class="say" style="margin:14px 0 0">No file? <a href="#" id="pasteProf" class="lnk">Paste your background instead</a></p>
       ${ONB.error?`<p class="err">${esc(ONB.error)}</p>`:''}
       <div style="margin-top:34px;padding-top:20px;border-top:1px solid var(--line)">
@@ -2841,8 +2841,8 @@ function renderOnb(){
   }
 }
 
-async function onProfileFile(text,name){
-  if(!String(text||'').trim()){ ONB.step=0; ONB.error="That file came through empty."; render(); return; }
+async function onProfileFile(text,name,readErr){
+  if(!String(text||'').trim()){ ONB.step=0; ONB.error=readErr ? readErr.message : "That file came through empty."; render(); return; }
   ONB.raw=text; ONB.fileName=name||'profile.md'; ONB.step=1; ONB.parsed=null; ONB.error='';
   render();
   try{ ONB.parsed=await extractProfile(text); render(); }
@@ -3875,7 +3875,33 @@ function hookDrop(dropEl,inputEl,handler){
   ['dragleave','drop'].forEach(ev=>dropEl.addEventListener(ev,e=>{e.preventDefault();dropEl.classList.remove('over');}));
   dropEl.addEventListener('drop',e=>{ const f=e.dataTransfer.files[0]; if(f) readFile(f,handler); });
 }
-function readFile(file,cb){ const r=new FileReader(); r.onload=()=>cb(String(r.result),file.name); r.readAsText(file); }
+function readFile(file,cb){
+  if(/\.pdf$/i.test(file.name) || file.type==='application/pdf'){
+    pdfText(file).then(t=>cb(t,file.name), e=>cb('',file.name,
+      /scan|connection/.test(e.message) ? e : new Error(`Couldn't read that PDF (${e.message}). Try exporting it again, or paste your CV instead.`)));
+    return;
+  }
+  const r=new FileReader(); r.onload=()=>cb(String(r.result),file.name); r.readAsText(file);
+}
+
+/* A PDF CV, read to plain text in the browser: nothing is uploaded to read it.
+   pdf.js is fetched only the first time someone picks a PDF. A scanned CV is
+   an image with no text layer, so it comes back empty and says so. */
+const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+async function pdfText(file){
+  await loadScript(PDFJS+'pdf.min.js');
+  const lib=window.pdfjsLib;
+  lib.GlobalWorkerOptions.workerSrc=PDFJS+'pdf.worker.min.js';
+  const doc=await lib.getDocument({data:await file.arrayBuffer()}).promise;
+  const pages=[];
+  for(let i=1;i<=doc.numPages;i++){
+    const {items}=await (await doc.getPage(i)).getTextContent();
+    pages.push(items.map(it=>it.str+(it.hasEOL?'\n':' ')).join('').replace(/[ \t]+\n/g,'\n'));
+  }
+  const text=pages.join('\n\n').trim();
+  if(!text) throw new Error("That PDF has no selectable text — it's probably a scan. Paste your CV instead.");
+  return text;
+}
 
 async function onCsv(text){
   const rows=parseCSV(text);
