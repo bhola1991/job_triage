@@ -2396,15 +2396,13 @@ function isPostingUrl(u){
    job found by two sources is only kept once. */
 function boardFilter(jobs, trk, seen){
   const p=P(); seen=seen||new Set(p?p.jobs.map(keyOf):[]);
-  const want=roleWords({titles:trk.titles||[]});
-  const dropped={listing:0, offTopic:0, old:0, dupe:0};
+  const dropped={listing:0, old:0, dupe:0};
   const out=[];
   jobs.forEach(j=>{
     if(!isPostingUrl(j.url)){ dropped.listing++; return; }
-    // A title sharing no word with any target title is another role entirely.
-    // Skipped when the track's titles give no usable words to compare against.
-    const words=String(j.title).toLowerCase().split(/[^a-z+#]+/);
-    if(want.length && !want.some(w=>words.includes(w))){ dropped.offTopic++; return; }
+    // No title-word filter: it threw away half of real searches (a "Workflow
+    // Automation Specialist" shares no word with "No-Code Developer"). Every
+    // job is scored against the CV now, and that decides relevance.
     const age=ageOf(j);                       // unknown age is kept: not the same as old
     if(age!==null && age>MAX_AGE_DAYS){ dropped.old++; return; }
     // The same role syndicated to several boards, or already in the list.
@@ -2450,7 +2448,7 @@ async function scoreAndCut(jobs, prof, track){
    ones), then scoring, and what scores MIN_FIT+ joins the list. */
 function liveBoard(trk, prof, track){
   const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
-  const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, offTopic:0, old:0, dupe:0}};
+  const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, old:0, dupe:0}};
   /* Yield per origin (the source that delivered a job), for the usage ledger.
      seenIn records every origin that returned each job, before any filtering,
      so "exclusive" means no other source in this search had it at all. A job
@@ -2602,7 +2600,7 @@ async function runBoards(trk, where){
     }
     SEARCH_ID=null;
     await save(); busy=false; render();
-    const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`, d.offTopic&&`${d.offTopic} off-topic`,
+    const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`,
       d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
       st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
     if(failed.length) console.warn('sources failed:', failed);
@@ -3458,8 +3456,8 @@ function renderApp(){
           ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
         ${(trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
-             <p class="hint">${PORTALS.length} general portals plus these registries, through Google in one run.</p>`
-          : `<p class="hint">${PORTALS.length} general portals through Google. This track named no specialist registries.</p>`}
+             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
+          : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
         <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 

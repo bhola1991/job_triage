@@ -33,11 +33,11 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  AGE={'https://a/3':45};
  const f=boardFilter([
   J('https://a/1','Data Engineer','Acme','A'), J('https://www.linkedin.com/jobs/search?q=x','Data Engineer','Acme','A'),
-  J('https://a/2','Chef','Food','A'), J('https://a/3','Data Engineer','Beta','B'),
+  J('https://a/3','Data Engineer','Beta','B'),
   J('https://b/1','Data Engineer','Acme','B'), J('https://x/old','Data Engineer','Gamma','B'),
   J('https://a/4','Senior Data Analyst','[from search — verify]','B')],{titles:['Data Engineer','Data Analyst']});
  ok(f.jobs.map(j=>j.url).join()==='https://a/1,https://a/4', 'filter '+f.jobs.map(j=>j.url));
- ok(JSON.stringify(f.dropped)==='{"listing":1,"offTopic":1,"old":1,"dupe":2}','dropped '+JSON.stringify(f.dropped));
+ ok(JSON.stringify(f.dropped)==='{"listing":1,"old":1,"dupe":2}','dropped '+JSON.stringify(f.dropped));
  const many=[...Array(30)].map((_,i)=>J('https://z/'+i,'T'+i,'C','Q'));
  SCORES=j=>{ const i=+j.url.split('/').pop(); return i===29?null:(i%3===0?80:40); };
  const sc=await scoreAndCut(many,{},'t');
