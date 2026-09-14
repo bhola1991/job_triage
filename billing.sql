@@ -54,12 +54,21 @@ alter table public.apify_runs enable row level security;
 -- failed call can be refunded to the pot it came from, or null when neither
 -- pot covers it. A first-time user has no row yet; the insert gives them one.
 
+-- Unlimited accounts (the owner, testers): never charged, nothing counted down.
+-- There is no policy that lets a user write this column, so it can only be
+-- switched on here in the SQL editor:
+--   update public.credits set unlimited = true
+--    where user_id = (select user_id from public.usernames where username = 'soumyadip1991');
+alter table public.credits add column if not exists unlimited boolean not null default false;
+
 -- AI call: free while the free tier is on, then paid credits.
 create or replace function public.spend_llm(p_user uuid, p_n integer)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare r public.credits;
 begin
   insert into public.credits (user_id) values (p_user) on conflict (user_id) do nothing;
+  select * into r from public.credits where user_id = p_user and unlimited;
+  if found then return jsonb_build_object('used','unlimited','balance',r.balance,'free_search',r.free_search,'free_tier',r.free_tier,'unlimited',true); end if;
   update public.credits set free_llm = free_llm - 1, updated_at = now()
    where user_id = p_user and free_tier and free_llm > 0 returning * into r;
   if found then return jsonb_build_object('used','free','balance',r.balance,'free_search',r.free_search,'free_tier',r.free_tier); end if;
@@ -76,6 +85,8 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare r public.credits;
 begin
   insert into public.credits (user_id) values (p_user) on conflict (user_id) do nothing;
+  select * into r from public.credits where user_id = p_user and unlimited;
+  if found then return jsonb_build_object('used','unlimited','balance',r.balance,'free_search',r.free_search,'free_tier',r.free_tier,'unlimited',true); end if;
   if p_board then
     update public.credits set free_search = free_search - 1, updated_at = now()
      where user_id = p_user and free_search > 0 returning * into r;
