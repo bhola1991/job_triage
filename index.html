@@ -1315,6 +1315,24 @@ const APIFY_GOOGLE = "apify~google-search-scraper";
    and posts, and a job search should come back with jobs. */
 const PORTALS = ["linkedin.com/jobs","upwork.com","indeed.com","glassdoor.com",
                  "wellfound.com","ziprecruiter.com"];
+/* Which of those a track actually queries, by the shape of work it is after.
+   Every portal carries every kind of work in theory; in practice Upwork has no
+   salaried posts and ZipRecruiter has no project briefs, so querying the wrong
+   one spends a Google query to return nothing usable AND takes one of the
+   fourteen slots the right boards were sharing. The cost is the smaller half:
+   a freelancer reading salaried listings is the part that wastes their day.
+
+   `mode` belongs to the TRACK, not the person. Someone with a day job and a
+   side practice has one track of each, and each searches its own list -- which
+   is why this is not a property of the profile. A track with no mode (every
+   profile extracted before this existed) gets the full list, i.e. exactly the
+   old behaviour. */
+const PORTALS_BY_MODE = {
+  permanent: ["linkedin.com/jobs","indeed.com","glassdoor.com","wellfound.com","ziprecruiter.com"],
+  freelance: ["upwork.com","linkedin.com/jobs","wellfound.com"],
+  gig:       ["indeed.com","ziprecruiter.com"],
+};
+const portalsFor = m => PORTALS_BY_MODE[m] || PORTALS;
 /* Fourteen: the six portals above plus eight of the track's own registries. The
    specialist boards are what make a niche search work at all, so they are added
    to the portals rather than made to compete with them for slots. */
@@ -1745,6 +1763,7 @@ Return ONLY a JSON object, no preamble, no markdown fences:
  "tracks":[
    {"id":"slug","label":"Job family name","difficulty":"easy|moderate|moonshot",
     "why":"one sentence: why this fits them specifically",
+    "mode":"permanent|freelance|gig",
     "titles":["5-8 real job titles to search for"],
     "boards":["4-8 domains where THIS KIND of job is actually posted"]}
  ]
@@ -1755,6 +1774,12 @@ Rules for tracks: give 3 or 4. Order them from most obvious to most ambitious.
 "moderate" = a real but winnable step across.
 "moonshot" = plausible but they'd be an unusual hire, and would need to be argued for.
 Base every track on evidence in the profile. Do not invent a direction the profile doesn't support.
+
+Rules for mode: what SHAPE of work this track is, which decides which portals are searched.
+- "permanent": a salaried post with one employer. Default when unsure.
+- "freelance": project or contract work, several clients, paid per engagement - consultants, contractors, creative and technical freelancers.
+- "gig": platform task work paid per task or trip, with no employment relationship at all.
+A person can have tracks of different modes at once, and often should: someone in a salaried job who also takes projects gets one track of each. Judge each track on its own, not on the person.
 
 Rules for gaps: be honest and specific. These stop the tool from recommending roles the person cannot win. If the profile states its own limitations, use them.
 
@@ -1786,6 +1811,7 @@ async function extractProfile(raw){
   p.tracks.forEach(t=>{
     if(!Array.isArray(t.titles)) t.titles=[];
     if(!Array.isArray(t.boards)) t.boards=[];
+    t.mode = PORTALS_BY_MODE[t.mode] ? t.mode : '';
     // Strip protocol/path if the model returned a URL rather than a bare domain.
     t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim())
                        .filter(Boolean);
@@ -1978,6 +2004,7 @@ Return ONLY a JSON object, no preamble, no markdown fences:
  "transfers":["3-6 things from their background that genuinely count toward this, stated concretely"],
  "missing":["2-5 things they would have to acquire, show, or work around - be specific about which, and say if any is a hard blocker"],
  "bridge":"one sentence: the shortest realistic path from where they are to this, or empty string if they are already there",
+ "mode":"permanent|freelance|gig",
  "titles":["5-8 real job titles to search for"],
  "boards":["4-8 bare domains where this kind of job is actually posted"]
 }
@@ -1990,10 +2017,12 @@ Difficulty means:
 Be honest rather than encouraging. If this is a bad idea for them, say so in the verdict and mark it moonshot - an inflated assessment wastes months of someone's life. If it is genuinely easy, say that too and do not manufacture obstacles.
 If the request is vague, interpret it as the nearest real job family and name that in the label.
 For boards: give the registries where this specific field posts, not general job sites. Bare domains, no protocol.
+For mode: "permanent" for a salaried post (use this when unsure), "freelance" for project or contract work with several clients, "gig" for platform task work paid per task.
 Use ONLY what is in the profile. Do not invent experience.`, 1600);
   const t = grabJSON(txt);
   t.id = (t.id||'custom')+'_'+Math.random().toString(36).slice(2,5);
   ['transfers','missing','titles','boards'].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; });
+  t.mode = PORTALS_BY_MODE[t.mode] ? t.mode : '';
   t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim()).filter(Boolean);
   t.custom = true;
   return t;
@@ -2546,7 +2575,10 @@ async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
   // Portals first, then any specialist registry the track named that is not
   // already one of them. A track with no registries of its own still searches.
-  const boards=PORTALS.concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
+  // Only the portals that suit this track's mode are queried; PORTALS stays the
+  // full set below, because "is this a portal" is what decides whether a query
+  // gets the location term, and that is true of all six however this track searches.
+  const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   const qs=buildBoardQueries(titles,boards,where);
@@ -2573,7 +2605,8 @@ async function runBoards(trk, where){
       setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
       // fallback: portal queries the server runs on Google if every API source comes back empty.
       const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-        where, country:cc, queries:rq.join('\n'), fallback:buildBoardQueries(titles,PORTALS,where).join('\n')});
+        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
+        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
       SEARCH_ID=r.searchId||null;
       failed.push(...(r.sourceErrors||[]));
       let left=(r.scrapers||[]).length+(r.runId?1:0);
