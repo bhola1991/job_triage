@@ -23,3 +23,7 @@ Job triage app mockups/
 # Server secrets for `supabase secrets set --env-file`. Never commit.
 supabase/.env
 supabase/.temp/
+
+# Index build output: crawl it, do not commit it (37 MB per 5k jobs).
+scripts/index/index.jsonl
+scripts/index/candidates.jsonl
