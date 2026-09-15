@@ -8,15 +8,17 @@ Figma MCP server. Every claim below was checked against the files on
 
 ## 0. Read this before importing anything from Figma
 
-**Three palettes exist in this repository. Only one is shipped.** Picking the
+**Two palettes exist in this repository. Only one is shipped.** Picking the
 wrong one is the single most likely way to break this codebase, because the
 stale file has the more obvious name and sits at the repository root.
 
 | Palette | Ground | Where it lives | Status |
 | --- | --- | --- | --- |
-| **v2 "go/due/closing/awaiting"** | `#18211C` | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css` | **SHIPPED — use this** |
+| **v2 "go/due/closing/awaiting"** | `#18211C` | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css`, `icon.svg`, `manifest.json` | **SHIPPED — use this** |
 | v1 "signal/good/live/warn" | `#0E1411` | `job-triage.tokens.json` (repo root), `*.dc.html` at repo root | Superseded |
-| Pre-v1 blue-grey | `#131A21` | `icon.svg`, `manifest.json` | Orphaned |
+
+(A third, pre-v1 blue-grey ground `#131A21` survived in `icon.svg` and
+`manifest.json` until 2026-09-15, when both were brought onto v2.)
 
 Verified: `index.html:30` sets `--ink:#18211C`, matching `design/jobtriage.tokens.json`.
 The root `job-triage.tokens.json` says `#0E1411`. They disagree on **17 of the 41
@@ -269,7 +271,8 @@ them, and whether the single-file property survives.
 There is **no icon library, no sprite sheet, and no naming convention** — because
 there are almost no icons.
 
-- `icon.svg` — the PWA app icon (a fit × reachability scatter plot). Note it uses the **orphaned blue-grey palette** (`#131A21`), not the shipped green.
+- `icon.svg` — the PWA app icon (a fit × reachability scatter plot). On the v2 palette, using the same colours as the plot it depicts: ground `--ink`, axes `--line`, an open role `--go`, a cold target `--cold`, an unopened one `--dim`. Values are hard-coded because an icon loads outside the document, so `var()` never resolves there — **so it is a fourth place a token change must reach.**
+  Its comment must not contain a `--` sequence: XML forbids a double hyphen inside a comment, and it silently makes the whole file an unparseable broken image. Write token names without their leading dashes there.
 - Four inline `<svg>` in `index.html`: three 13×13 theme-toggle glyphs (`index.html:3451-3454`) and one `viewBox="0 0 640 420"` data plot (`index.html:3587`).
 
 The convention for the glyphs, if you add one:

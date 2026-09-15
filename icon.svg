@@ -1,9 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="96" fill="#131A21"/>
+  <!-- v2 palette, taken from the plot this icon depicts (plotSVG in
+       index.html): ground is the ink token, axes the line token, an open and
+       actionable role the go token, a cold target the cold token, an unopened
+       one the dim token. Hard-coded rather than var(): an icon is loaded
+       outside the document, so custom properties never resolve here. Keep the
+       five values in step with the :root block.
+       (No token is written with its leading dashes above: a double hyphen is
+       illegal inside an XML comment and makes the whole file unparseable.) -->
+  <rect width="512" height="512" rx="96" fill="#18211C"/>
   <!-- The two axes the whole app is built on: fit up, reachability across. -->
-  <path d="M104 408 L104 120" stroke="#2B3945" stroke-width="14" stroke-linecap="round"/>
-  <path d="M104 408 L408 408" stroke="#2B3945" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="336" cy="168" r="34" fill="#E8B04B"/>
-  <circle cx="232" cy="256" r="22" fill="#4FB3A5"/>
-  <circle cx="168" cy="330" r="16" fill="#6B7A87"/>
+  <path d="M104 408 L104 120" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
+  <path d="M104 408 L408 408" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
+  <circle cx="336" cy="168" r="34" fill="#56C88A"/>
+  <circle cx="232" cy="256" r="22" fill="#A9BCB1"/>
+  <circle cx="168" cy="330" r="16" fill="#8A9C8E"/>
 </svg>
