@@ -1,17 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <!-- v2 palette, taken from the plot this icon depicts (plotSVG in
-       index.html): ground is the ink token, axes the line token, an open and
-       actionable role the go token, a cold target the cold token, an unopened
-       one the dim token. Hard-coded rather than var(): an icon is loaded
-       outside the document, so custom properties never resolve here. Keep the
-       five values in step with the :root block.
+       index.html): ground is the ink token, the rim and axes the line token,
+       an open and actionable role the go token, a cold target the cold token,
+       an unopened one the dim token. Hard-coded rather than var(): an icon is
+       loaded outside the document, so custom properties never resolve here.
+       Keep the five values in step with the :root block.
        (No token is written with its leading dashes above: a double hyphen is
        illegal inside an XML comment and makes the whole file unparseable.) -->
+
+  <!-- The rim is what stops the tile dissolving into a black home screen: on
+       its own the ground is 1.1:1 against #000. It is the same line token the
+       app uses to separate a surface from what is behind it. Android crops it
+       away when it applies its own mask, which is fine - there the platform
+       draws the edge instead. -->
   <rect width="512" height="512" rx="96" fill="#18211C"/>
-  <!-- The two axes the whole app is built on: fit up, reachability across. -->
-  <path d="M104 408 L104 120" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
-  <path d="M104 408 L408 408" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
-  <circle cx="336" cy="168" r="34" fill="#56C88A"/>
-  <circle cx="232" cy="256" r="22" fill="#A9BCB1"/>
-  <circle cx="168" cy="330" r="16" fill="#8A9C8E"/>
+  <rect x="3" y="3" width="506" height="506" rx="93" fill="none" stroke="#324237" stroke-width="6"/>
+
+  <!-- The two axes the whole app is built on: fit up, reachability across.
+       Scaled to 0.92 about the centre so every mark sits inside the maskable
+       safe zone - the centred circle of 80% width that a platform may crop to.
+       At full size the axis elbow and both ends reach 222px from the centre,
+       past the 204.8px the safe zone allows, and get sliced off on Android. -->
+  <g transform="translate(256,256) scale(0.92) translate(-256,-256)">
+    <path d="M104 408 L104 120" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
+    <path d="M104 408 L408 408" stroke="#324237" stroke-width="14" stroke-linecap="round"/>
+    <circle cx="336" cy="168" r="34" fill="#56C88A"/>
+    <circle cx="232" cy="256" r="22" fill="#A9BCB1"/>
+    <circle cx="168" cy="330" r="16" fill="#8A9C8E"/>
+  </g>
 </svg>
