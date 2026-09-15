@@ -60,6 +60,30 @@ what finds the roles named something else. Recall on that set goes 47% → 100%
 at the same 200 candidates, and BM25 still supplies 138 of the 200 — including
 roles a title match would miss.
 
+## Measured against a real profile's already-scored jobs
+
+`validate.js` takes a Backup & transfer export, mixes its scored jobs into the
+index, and retrieves as production would. Run on a real 4-track profile whose
+63 jobs the scorer had already rated 5-88:
+
+| candidates per track | pool | kept of the 40 rated 65+ | let in of the 4 rated <=20 | cost |
+| --- | --- | --- | --- | --- |
+| 60 | 230 | **28 (70%)** | **0** | ₹3.83 |
+| 150 | 535 | 29 (73%) | 0 | ₹8.92 |
+| 400 | 1322 | 31 (78%) | 2 | ₹22.03 |
+
+60 per track is the knee. Widening six-fold buys three more good jobs and
+starts letting noise back in; scoring the whole index would be ₹81.68 a head.
+
+**Retrieve per track, then union.** Merging all four tracks' titles into one
+query collapsed recall to 1/40 — "Operations Manager" and "Video Editor" and
+"Founder" in one bag match nothing well. This mirrors how the app already
+searches, one track at a time.
+
+The 12 good jobs that stay outside are not reachable by widening the net: their
+wording does not overlap the track titles at all. That residue is the argument
+for embeddings as a third retrieval channel, and it is worth roughly 30% recall.
+
 ## What is NOT proven
 
 The recall figure uses "the title literally contains a target title" as ground
