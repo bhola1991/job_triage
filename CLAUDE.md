@@ -86,9 +86,21 @@ generator. The same values are transcribed into three places:
 | Library | `ui-kit/src/v2/tokens.css` | `[data-palette="v2"]` |
 | Public pages | `legal.css:3-6` | `:root` + `prefers-color-scheme` |
 
-**Changing a token means editing all three by hand, in the same commit.** There is
+**Changing a token means editing all three by hand, in the same commit** — four,
+counting `icon.svg`, whose rim and axes are the `--line` value (§5). There is
 no check that catches drift — `legal.css` already differs on light `--ink`
-(`#F6F8F6` vs the app's `#F1F5F2`).
+(`#F6F8F6` vs the app's `#F1F5F2`). After any token edit, diff the `:root`
+block, `ui-kit/src/v2/tokens.css`, `legal.css` and `icon.svg` against
+`design/jobtriage.tokens.json` before committing.
+
+### The dark surface ramp is tuned, not arbitrary
+
+`--ink → --panel → --panel2 → --line` are spaced to be visibly distinct while
+keeping `--muted` (`#93A597`) at AA body contrast on every surface that carries
+text. `--panel2` sits exactly on that ceiling at **4.55:1** — lighten it and
+muted text fails; darken the set and the app flattens back into one plane, which
+is what it did before 2026-09-15 (every surface was then within a 1.55:1 band).
+If you need more separation than this, lighten `--muted` first, then re-solve.
 
 ### Token vocabulary
 
@@ -113,7 +125,7 @@ Three rules a Figma import must not violate:
 
 1. **A row carries at most one accent.** Both closing and overdue → nearer deadline wins, the other becomes plain text.
 2. **A score is never an accent.** Colour says what to do; the number says how good it is. Reachability stays grey — a second axis, not a verdict.
-3. **Dark states the accent on the row's edge; light tints the whole cell.** In dark, `--*-row` is `transparent` (`index.html:39`).
+3. **Both themes tint the cell; dark states the edge as well.** Light washes the row at full weight (`--go-row: #E9F4ED`); dark washes it at roughly a quarter of that (`--go-row: rgba(86,200,138,.075)`, `index.html:39`), because the same tint reads far louder on a near-black ground than on paper. Dark additionally carries the accent as a 5px edge. Until 2026-09-15 dark set every `--*-row` to `transparent` and relied on the edge alone; if you see that in an older artboard, the artboard is out of date, not the code.
 
 If a Figma frame colours a score, or stacks two accents on one row, **flag it
 rather than implementing it.**

@@ -1,6 +1,6 @@
 /* Shared by the public pages (pricing, terms, refunds, privacy, contact).
    Same ground and accent as the app so they read as one product. */
-:root{ color-scheme:dark; --ink:#18211C; --panel:#1F2A23; --line:#324237; --text:#EDF3EF; --muted:#93A597; --go:#56C88A; }
+:root{ color-scheme:dark; --ink:#18211C; --panel:#25332C; --line:#3D5448; --text:#EDF3EF; --muted:#93A597; --go:#56C88A; }
 @media (prefers-color-scheme: light){
   :root{ color-scheme:light; --ink:#F6F8F6; --panel:#FFFFFF; --line:#D5DED8; --text:#18211C; --muted:#56655A; --go:#157F42; }
 }

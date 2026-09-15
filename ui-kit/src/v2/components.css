@@ -41,7 +41,7 @@
 .qsec-head.awaiting, .qsec-head.awaiting .title { border-bottom-color: var(--awaiting); } .qsec-head.awaiting .title { color: var(--awaiting); }
 
 /* queue row */
-.qrow { display: grid; grid-template-columns: 3px 36px 1fr 150px 118px 196px; gap: 0 14px;
+.qrow { display: grid; grid-template-columns: 5px 36px 1fr 150px 118px 196px; gap: 0 14px;
   align-items: center; padding: 14px 0; border-bottom: 1px solid var(--hair); }
 .qrow .bar { height: 40px; }
 .qrow .bar.go { background: var(--go); } .qrow .bar.due { background: var(--due); }
@@ -65,7 +65,7 @@
 }
 /* Too narrow for the columns: facts and actions stack under the title rather than disappearing. */
 @media (max-width: 720px) {
-  .qrow { grid-template-columns: 3px 30px minmax(0,1fr); row-gap: 6px; }
+  .qrow { grid-template-columns: 5px 30px minmax(0,1fr); row-gap: 6px; }
   .qrow .bar { grid-row: 1 / span 4; height: auto; align-self: stretch; }
   .qrow .fact, .qrow .acts { grid-column: 3; }
   .qrow .acts { justify-content: flex-start; flex-wrap: wrap; margin-top: 4px; }
@@ -150,7 +150,7 @@
 .posting-link:hover { text-decoration: underline; }
 
 /* colour key: the law, with how many rows each rule holds */
-.lg { display: grid; grid-template-columns: 3px minmax(0,1fr) auto; gap: 0 11px; align-items: baseline;
+.lg { display: grid; grid-template-columns: 5px minmax(0,1fr) auto; gap: 0 11px; align-items: baseline;
   padding: 8px 0; border-bottom: 1px solid var(--hair); }
 .lg:last-child { border-bottom: none; }
 .lg i { align-self: stretch; background: var(--closed); }

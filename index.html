@@ -27,7 +27,7 @@
      the file still goes through this block. */
   :root{
     color-scheme:dark;
-    --ink:#18211C; --panel:#1F2A23; --panel2:#26332A; --line:#324237; --hair:#232E27;
+    --ink:#18211C; --panel:#25332C; --panel2:#2B3B32; --line:#3D5448; --hair:#232E27;
     --text:#EDF3EF; --muted:#93A597; --dim:#8A9C8E;
 
     --go:#56C88A;       --on-go:#0A1B0F;  --go-line:#2C5540;       --go-tint:rgba(86,200,138,.12);
@@ -35,8 +35,13 @@
     --closing:#D9A441;  --closing-line:#5A4620;  --closing-tint:rgba(217,164,65,.13);
     --awaiting:#57AEC9; --awaiting-line:#2C4F5C; --awaiting-tint:rgba(87,174,201,.13);
     --closed:#3E4F44;
-    /* Whole-cell tints are the light theme's statement; dark keeps the edge. */
-    --go-row:transparent; --due-row:transparent; --closing-row:transparent; --awaiting-row:transparent;
+    /* Dark states the accent on the row's edge AND washes the cell behind it.
+       The wash is a quarter the weight of the light theme's, because a tint on
+       a near-black ground reads far louder than the same tint on paper: enough
+       to tell four sections apart down the page, not enough to compete with
+       the edge or to make the text sit on colour. */
+    --go-row:rgba(86,200,138,.075); --due-row:rgba(226,104,92,.085);
+    --closing-row:rgba(217,164,65,.075); --awaiting-row:rgba(87,174,201,.075);
     --row-pad:10px;
 
     --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#0A1B0F;
@@ -342,7 +347,7 @@
   .qitem.closed{opacity:.55}
   /* Fixed widths on the fact and action columns, so the columns line up across
      rows even though every row is its own grid. */
-  .qrow{display:grid;grid-template-columns:3px 38px minmax(0,1fr) 128px 104px 290px;
+  .qrow{display:grid;grid-template-columns:5px 38px minmax(0,1fr) 128px 104px 290px;
     gap:0 16px;align-items:center;padding:13px var(--row-pad);border-radius:4px;cursor:pointer;
     transition:transform .18s cubic-bezier(.16,1,.3,1),box-shadow .18s,background-color .18s}
   .qfacts{display:contents}
@@ -374,13 +379,13 @@
   /* Too narrow for five columns: the facts drop under the title, then the
      actions under both. Same row, same order, stacked rather than squeezed. */
   @media(max-width:1240px){
-    .qrow{grid-template-columns:3px 38px minmax(0,1fr) auto}
+    .qrow{grid-template-columns:5px 38px minmax(0,1fr) auto}
     .qbar{grid-row:1 / span 2}
     .qfacts{display:flex;gap:26px;grid-column:3;grid-row:2;margin-top:8px}
     .qacts{grid-column:4;grid-row:1 / span 2}
   }
   @media(max-width:640px){
-    .qrow{grid-template-columns:3px 32px minmax(0,1fr);gap:0 12px}
+    .qrow{grid-template-columns:5px 32px minmax(0,1fr);gap:0 12px}
     .qbar{grid-row:1 / span 3}
     .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
   }
@@ -448,7 +453,7 @@
   }
 
   /* The colour key in the sidebar: the law, with how many rows each rule holds. */
-  .lg{display:grid;grid-template-columns:3px minmax(0,1fr) auto;gap:0 11px;align-items:baseline;
+  .lg{display:grid;grid-template-columns:5px minmax(0,1fr) auto;gap:0 11px;align-items:baseline;
     padding:8px 0;border-bottom:1px solid var(--hair)}
   .lg:last-child{border-bottom:none}
   .lg i{align-self:stretch;background:var(--closed)}

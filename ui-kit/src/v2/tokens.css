@@ -5,7 +5,7 @@
 
 [data-palette="v2"] {
   color-scheme: dark;
-  --ink: #18211C; --panel: #1F2A23; --panel2: #26332A; --line: #324237; --hair: #232E27;
+  --ink: #18211C; --panel: #25332C; --panel2: #2B3B32; --line: #3D5448; --hair: #232E27;
   --text: #EDF3EF; --muted: #93A597; --dim: #8A9C8E;
 
   --go: #56C88A; --on-go: #0A1B0F; --go-line: #2C5540; --go-tint: rgba(86,200,138,.12);
