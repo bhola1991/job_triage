@@ -127,17 +127,17 @@
         "description": "Page ground"
       },
       "panel": {
-        "value": "#1F2A23",
+        "value": "#25332C",
         "type": "color",
         "description": "Chrome: header, sidebar, sheets"
       },
       "panel2": {
-        "value": "#26332A",
+        "value": "#2B3B32",
         "type": "color",
         "description": "Inset surfaces, secondary buttons"
       },
       "line": {
-        "value": "#324237",
+        "value": "#3D5448",
         "type": "color",
         "description": "Structural rule"
       },

@@ -183,38 +183,75 @@ function titleMatches(jobs: Job[], titles: string[]) {
    plus the CV's hard skills where the site's search supports it, so the rows
    we pay for are relevant ones. */
 const SCRAPE_ROWS = 30;
+/* A source the track's mode does not centre on still runs, at a quarter of the
+   rows. That keeps the property the comment above defends -- a job posted only
+   on one site is never missed -- while paying a quarter of the price for the
+   sites this track was unlikely to want. Cutting them to zero would buy a
+   little more, and would be the first time this app silently stopped looking
+   somewhere; a thin read is recoverable, a blind spot is not. */
+const PROBE_ROWS = 8;
 const MIN_WINDOW_DAYS = 7;
 const SCRAPE_MAX_USD = 0.15;
-type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number };
+/* mode: the shape of work the TRACK is after (see PORTALS_BY_MODE in the app).
+   A track with no mode -- every profile extracted before the field existed --
+   runs every scraper at full rows, which is what all of them did before. */
+type Mode = "permanent" | "freelance" | "gig";
+type Tier = "core" | "probe" | "off";
+type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number; mode: string };
+const rowsFor = (modes: Partial<Record<Mode, Tier>> | undefined, mode: string) => {
+  const t = modes?.[mode as Mode];
+  if (!modes || !(mode in (modes as object))) return SCRAPE_ROWS;   // unknown mode: behave as before
+  return t === "core" ? SCRAPE_ROWS : t === "probe" ? PROBE_ROWS : 0;
+};
 const orTerms = (xs: string[]) => xs.length > 1 ? `(${xs.map((x) => `"${x}"`).join(" OR ")})` : xs[0] ? `"${xs[0]}"` : "";
 // Round `since` up to the nearest value a site accepts.
 const bucket = (since: number, steps: number[]) => steps.find((s) => s >= since) ?? steps[steps.length - 1];
 const INDEED_HOST: Record<string, string> = { in: "in.indeed.com", us: "www.indeed.com", gb: "uk.indeed.com" };
 
-const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; input: (c: Ctx) => object }> = {
+/* `modes` is the routing table, and it is meant to be edited from the ledger
+   rather than from taste: source_yield reports inr_per_exclusive_50 per source
+   per mode, so a probe that keeps returning jobs nothing else found is asking
+   to be promoted, and a core that does not is asking to be demoted. */
+const SCRAPERS: Record<string, {
+  actor: string; label: string; india?: boolean;
+  modes: Record<Mode, Tier>;
+  input: (c: Ctx, rows: number) => object;
+}> = {
   // publishedAt is LinkedIn's own r<seconds> filter (the Store page's example is "r604800").
+  // Salaried work's first stop. It carries contract roles too, so freelance
+  // probes it rather than skipping it; gig work is not advertised here at all.
   linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
-    input: (c) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows: SCRAPE_ROWS, companyProfile: false,
+    modes: { permanent: "core", freelance: "probe", gig: "off" },
+    input: (c, rows) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows, companyProfile: false,
       publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
   // A search URL rather than position/location, because only the URL carries
   // Indeed's fromage (days) and sort=date. Titles only: adding skills as a second
   // required term returned nothing for a real niche search.
   // ponytail: startUrls with fromage is untested with this actor; if it returns
   // nothing, switch back to position/location and let the age filter cut old rows.
+  // The one portal that carries both ends: salaried posts and the driver,
+  // delivery and warehouse listings that are the only advertised gig work.
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
-    input: (c) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
+    modes: { permanent: "core", freelance: "probe", gig: "core" },
+    input: (c, rows) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
       q: orTerms(c.titles), l: c.city, sort: "date",
-      fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: SCRAPE_ROWS, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
+      fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: rows, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
   // Naukri treats comma-separated keywords as any-of.
   naukri: { actor: "memo23~naukri-scraper", label: "Naukri", india: true,
-    input: (c) => ({ platform: "naukri", searchQuery: c.titles.slice(0, 3).join(", "), location: c.city, maximumJobs: SCRAPE_ROWS,
+    modes: { permanent: "core", freelance: "probe", gig: "probe" },
+    input: (c, rows) => ({ platform: "naukri", searchQuery: c.titles.slice(0, 3).join(", "), location: c.city, maximumJobs: rows,
       freshnessDays: bucket(c.since, [1, 3, 7, 15, 30]), sortBy: "date" }) },
   // No date filter on this actor: capped rows, and the app's 30-day age filter drops old ones.
+  // Salaried tech hiring only: none of the three lists project or task work.
   indiatech: { actor: "seemuapps~india-tech-jobs-scraper", label: "Instahyre / CutShort / Foundit", india: true,
-    input: (c) => ({ keywords: c.titles[0], location: c.city, boards: ["instahyre", "cutshort", "foundit"], maxItems: SCRAPE_ROWS }) },
+    modes: { permanent: "core", freelance: "off", gig: "off" },
+    input: (c, rows) => ({ keywords: c.titles[0], location: c.city, boards: ["instahyre", "cutshort", "foundit"], maxItems: rows }) },
   // Upwork gigs are found by tool/skill more than by job title.
+  // Nothing salaried is posted here, and platform gig work is signed up for
+  // rather than applied to, so only a freelance track has anything to gain.
   upwork: { actor: "valig~upwork-jobs-scraper", label: "Upwork",
-    input: (c) => ({ keywords: c.skills[0] || c.titles[0], sort: "recency", limit: SCRAPE_ROWS }) },
+    modes: { permanent: "off", freelance: "core", gig: "off" },
+    input: (c, rows) => ({ keywords: c.skills[0] || c.titles[0], sort: "recency", limit: rows }) },
 };
 
 /* A scraper that fails to START (actor needs renting, input rejected, Apify
@@ -223,10 +260,13 @@ const SCRAPERS: Record<string, { actor: string; label: string; india?: boolean; 
 async function startScrapers(user: string, c: Ctx) {
   const errors: string[] = [];
   const started = await Promise.all(Object.entries(SCRAPERS)
-    .filter(([, s]) => !s.india || c.cc === "in")
-    .map(async ([source, s]) => {
-      const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${SCRAPE_ROWS}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
-        method: "POST", body: JSON.stringify(s.input(c)),
+    .map(([source, s]) => [source, s, (!s.india || c.cc === "in") ? rowsFor(s.modes, c.mode) : 0] as const)
+    // rows 0 = wrong country, or a site this track's mode has nothing to find on.
+    // Not an error and not reported as a failed source: it was never asked.
+    .filter(([, , rows]) => rows > 0)
+    .map(async ([source, s, rows]) => {
+      const r = await apify(`/acts/${s.actor}/runs?timeout=300&maxItems=${rows}&maxTotalChargeUsd=${SCRAPE_MAX_USD}`, {
+        method: "POST", body: JSON.stringify(s.input(c, rows)),
       }).catch((e) => { errors.push(`${source}: ${(e as Error).message}`); return null; });
       if (!r) return null;
       if (!r.ok) {
@@ -377,7 +417,7 @@ Deno.serve(async (req) => {
         // anyway, so a 1-day window saved almost nothing and returned almost
         // nothing for niche roles. Jobs already in the list are dropped as seen.
         const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), MIN_WINDOW_DAYS), 30);
-        const ctx: Ctx = { titles, skills: list(b.skills, 6), since,
+        const ctx: Ctx = { titles, skills: list(b.skills, 6), since, mode: String(b.mode || ""),
           city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
         const searchId = crypto.randomUUID();
