@@ -1,0 +1,15 @@
+{
+  "_note": "Seed crawl list for the shared job index. Every source here is free and keyless — ATS feeds are the same data a company's careers page loads, which is the point README makes about reading feeds rather than scraping. Paid scrapers (LinkedIn, Indeed, Naukri) are deliberately absent: they are the only part of the index that costs money, so prove the funnel without them first.",
+  "greenhouse": ["anthropic", "stripe", "databricks", "figma", "airbnb", "robinhood", "discord",
+                 "benchling", "cockroachlabs", "gitlab", "doordash", "instacart", "reddit",
+                 "flexport", "samsara", "asana", "affirm", "chime", "brex", "plaid"],
+  "lever": ["netflix", "spotify", "palantir", "leverdemo", "voiceflow", "kraken", "mistral",
+            "attentive", "matchgroup", "biconomy"],
+  "ashby": ["openai", "ramp", "linear", "vanta", "clerk", "deel", "posthog", "replit",
+            "supabase", "runwayml", "hex", "modal", "cohere", "together"],
+  "feeds": {
+    "remoteok":  "https://remoteok.com/api",
+    "arbeitnow": "https://www.arbeitnow.com/api/job-board-api",
+    "remotive":  "https://remotive.com/api/remote-jobs?limit=1500"
+  }
+}

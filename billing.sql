@@ -43,8 +43,14 @@ create table if not exists public.apify_runs (
   run_id     text        primary key,
   user_id    uuid        not null references auth.users(id) on delete cascade,
   dataset_id text        not null,
+  -- Which scraper this run belongs to. A run only writes its cost row when the
+  -- browser fetches its results, so one that fails or outlives the 5-minute poll
+  -- leaves no trace at all; without this column such a run cannot even be named.
+  -- Seen live: 23 runs started, 16 returned results, and nothing said which 7 went.
+  source     text,
   created_at timestamptz not null default now()
 );
+alter table public.apify_runs add column if not exists source text;
 alter table public.apify_runs enable row level security;
 
 -- Every pot check sits in an UPDATE's WHERE clause, so two parallel calls can't
@@ -162,7 +168,11 @@ create table if not exists public.usage_events (
   id            bigserial   primary key,
   user_id       uuid        references auth.users(id) on delete set null,
   search_id     uuid,
-  kind          text        not null check (kind in ('llm','api','scrape','yield')),
+  -- 'error': a source that failed. Cost rows are only written on success, so a
+  -- source that throws every time is indistinguishable from one that was never
+  -- called -- which is exactly how JSearch ran 0 of 20 expected requests without
+  -- leaving a single row. A zero-unit row per failure makes silence visible.
+  kind          text        not null check (kind in ('llm','api','scrape','yield','error')),
   source        text        not null,
   units         integer     not null default 0,     -- requests, rows billed, or calls
   tokens_in     integer,
@@ -173,8 +183,14 @@ create table if not exists public.usage_events (
   unique_new    integer,
   kept_50       integer,
   exclusive_50  integer,
+  note          text,                                -- error rows: what failed
   created_at    timestamptz not null default now()
 );
+-- Safe to re-run on a database created before these existed.
+alter table public.usage_events add column if not exists note text;
+alter table public.usage_events drop constraint if exists usage_events_kind_check;
+alter table public.usage_events add constraint usage_events_kind_check
+  check (kind in ('llm','api','scrape','yield','error'));
 alter table public.usage_events enable row level security;
 create index if not exists usage_events_source_time on public.usage_events (source, created_at);
 create index if not exists usage_events_search on public.usage_events (search_id);
@@ -194,6 +210,14 @@ select source,
   from public.usage_events
  group by source;
 
+-- Which sources are failing, and how often. Empty is the healthy state; a row
+-- here is a source that cost a search something and returned nothing.
+create or replace view public.source_errors with (security_invoker = on) as
+select source, count(*) as failures, max(created_at) as last_seen,
+       (array_agg(note order by created_at desc))[1] as latest
+  from public.usage_events where kind = 'error'
+ group by source order by failures desc;
+
 -- Per search: total cost and where it went.
 create or replace view public.search_cost with (security_invoker = on) as
 select search_id, min(created_at) as at,
@@ -207,4 +231,4 @@ select search_id, min(created_at) as at,
  where search_id is not null
  group by search_id;
 
-revoke all on public.usage_events, public.source_yield, public.search_cost from anon, authenticated;
+revoke all on public.usage_events, public.source_yield, public.search_cost, public.source_errors from anon, authenticated;
