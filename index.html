@@ -108,9 +108,11 @@
     --live-tint:rgba(11,61,34,.07);
     --plot-fade:#B4C4BA;
     --veil:rgba(19,28,23,.42); --veil-lite:rgba(19,28,23,.3);
-    --shadow:0 1px 2px rgba(19,28,23,.06);
-    --shadow-md:0 8px 24px rgba(19,28,23,.12);
-    --shadow-lg:0 18px 50px rgba(19,28,23,.18);
+    /* The shadow colour is --text/--ink (24,33,28), per the tokens file. These
+       three had drifted to (19,28,23) with a lighter shadow-lg. */
+    --shadow:0 1px 2px rgba(24,33,28,.07);
+    --shadow-md:0 8px 24px rgba(24,33,28,.12);
+    --shadow-lg:0 18px 50px rgba(24,33,28,.24);
   }
   *{box-sizing:border-box}
   #app{background:

@@ -87,11 +87,27 @@ generator. The same values are transcribed into three places:
 | Public pages | `legal.css:3-6` | `:root` + `prefers-color-scheme` |
 
 **Changing a token means editing all three by hand, in the same commit** — four,
-counting `icon.svg`, whose rim and axes are the `--line` value (§5). There is
-no check that catches drift — `legal.css` already differs on light `--ink`
-(`#F6F8F6` vs the app's `#F1F5F2`). After any token edit, diff the `:root`
-block, `ui-kit/src/v2/tokens.css`, `legal.css` and `icon.svg` against
-`design/jobtriage.tokens.json` before committing.
+counting `icon.svg`, whose rim and axes are the `--line` value (§5).
+
+`scripts/selfcheck-tokens.js` now catches the drift that used to go unnoticed:
+
+```bash
+node scripts/selfcheck-tokens.js     # must print ALL PASS
+```
+
+It diffs `index.html`, `ui-kit/src/v2/tokens.css` and `legal.css` against
+`design/jobtriage.tokens.json`, and separately asserts that every token
+`ui-kit/src/v2/components.css` reads is defined in **both** theme blocks — a
+token defined in only one silently falls through to the other theme's value.
+It does not cover `icon.svg`, whose values are hard-coded for a reason (§5), so
+still check that one by eye.
+
+It was written because all four copies had drifted: `legal.css` was off on
+three of the seven tokens it carries, `index.html`'s light shadows used a
+different shadow colour, this file was missing `shadow-md` and the four dark
+`--*-row` washes outright, and `ui-kit`'s light block never overrode the four
+`--*-tint` names its own `components.css` reads — so every light-theme pill,
+outline button and callout rendered a dark translucent wash on white.
 
 ### The dark surface ramp is tuned, not arbitrary
 
@@ -105,9 +121,18 @@ If you need more separation than this, lighten `--muted` first, then re-solve.
 ### Token vocabulary
 
 Surfaces `--ink --panel --panel2 --line --hair` · text `--text --muted --dim` ·
-accents `--go --due --closing --awaiting` each with `-line` and `-tint` (dark) or
-`-chip` and `-row` (light), plus `--on-go`/`--on-due` for text on a filled accent ·
+accents `--go --due --closing --awaiting` each with `-line`, `-tint` and `-row`
+in **both** themes, plus `--on-go`/`--on-due` for text on a filled accent ·
 `--closed` (grey) · `--shadow --shadow-md --shadow-lg` · fonts `--disp --mono`.
+
+One naming wrinkle worth knowing before you go looking for a bug: the tokens
+file calls the light wash behind a chip **`-chip`**, while `index.html` carries
+that same value under the **`-tint`** name (what its dark theme calls the same
+role). `ui-kit/src/v2/tokens.css` defines both, because its `components.css`
+reads `-tint`. Same colour, two names — not two colours. Leaving the `-tint`
+override out of the light block is what made every light pill, outline button
+and callout render a dark translucent wash on white, so `selfcheck-tokens.js`
+now asserts that both names resolve in both themes.
 
 ### The colour law — enforce this in any generated code
 
@@ -206,7 +231,7 @@ Verified working:
 
 ```bash
 cd ui-kit && npm ci && npm run build && npm run selfcheck
-# → 16/16 components rendered as expected.
+# → 17/17 components rendered as expected.
 ```
 
 Run this after any component change. `npm run selfcheck` reads `dist/`, so
@@ -360,6 +385,7 @@ sw.js  manifest.json  icon.svg      PWA shell.
 schema.sql  billing.sql             Supabase tables, RLS, credit functions, usage ledger.
 supabase/functions/api/index.ts     Deno edge function: search, scoring, payments.
 scripts/selfcheck-boards.js         Board-source check.
+scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 job-triage.tokens.json              ⚠ STALE v1 tokens. Not the source of truth.
 *.dc.html  canvas.json              ⚠ Superseded v1 artboards (ground #0E1411).
 design/
@@ -403,6 +429,6 @@ format, loading `./support.js`.
 3. **Emit `var(--token)`, never hex.** A generated literal hex is a defect even when the value is correct — it breaks the light theme, which redefines the same names.
 4. **Set `data-palette="v2"` on the root of anything generated**, or its accent tokens resolve to nothing.
 5. **Check the generated frame against the three colour rules** (§1). An accent on a score, or two accents on a row, is a design error to raise, not to implement.
-6. **A token change is three edits**: `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root` (both themes) — plus `legal.css` if it is one of the seven tokens that file carries. Nothing verifies this; do it in one commit.
+6. **A token change is three edits**: `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root` (both themes) — plus `legal.css` if it is one of the six tokens that file carries. Do it in one commit, then run `node scripts/selfcheck-tokens.js` (§1), which verifies exactly this.
 7. **Match the runtime you are in.** React + TS in `ui-kit/`; vanilla ES2020 with no dependencies in `index.html`. Never convert one into the other.
-8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `16/16`.
+8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and `node scripts/selfcheck-tokens.js` must print `ALL PASS`.

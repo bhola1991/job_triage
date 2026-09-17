@@ -2,7 +2,11 @@
    Same ground and accent as the app so they read as one product. */
 :root{ color-scheme:dark; --ink:#18211C; --panel:#25332C; --line:#3D5448; --text:#EDF3EF; --muted:#93A597; --go:#56C88A; }
 @media (prefers-color-scheme: light){
-  :root{ color-scheme:light; --ink:#F6F8F6; --panel:#FFFFFF; --line:#D5DED8; --text:#18211C; --muted:#56655A; --go:#157F42; }
+  /* These are the light values from design/jobtriage.tokens.json verbatim. They
+     had drifted on three of the seven: --ink #F6F8F6, --line #D5DED8 and
+     --muted #56655A, so the public pages read slightly off-palette beside the
+     app. Nothing checks this file against the tokens -- diff it by hand. */
+  :root{ color-scheme:light; --ink:#F1F5F2; --panel:#FFFFFF; --line:#D5DFD8; --text:#18211C; --muted:#4F5E56; --go:#157F42; }
 }
 *{ box-sizing:border-box; }
 body{ margin:0; background:var(--ink); color:var(--text); font:15px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }

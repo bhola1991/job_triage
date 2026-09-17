@@ -14,6 +14,12 @@
   --awaiting: #57AEC9; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
   --closed: #3E4F44;
 
+  /* The whole-row wash, at roughly a quarter of the light theme's weight: the
+     same tint reads far louder on a near-black ground. It sits behind the 5px
+     accent edge, not instead of it. */
+  --go-row: rgba(86,200,138,.075); --due-row: rgba(226,104,92,.085);
+  --closing-row: rgba(217,164,65,.075); --awaiting-row: rgba(87,174,201,.075);
+
   --shadow: 0 1px 2px rgba(0,0,0,.3);
   --shadow-md: 0 10px 30px rgba(0,0,0,.5);
   --shadow-lg: 0 20px 60px rgba(0,0,0,.55);
@@ -31,6 +37,14 @@
   --due: #C33B2E; --on-due: #FFFFFF; --due-line: #EEBAB4; --due-chip: #FBE4E1; --due-row: #FBECEA;
   --closing: #8A6314; --closing-line: #E0C98F; --closing-chip: #F7EBD2; --closing-row: #FAF1DF;
   --awaiting: #1E6C86; --awaiting-line: #A9D3E0; --awaiting-chip: #DCEFF5; --awaiting-row: #E6F2F7;
+
+  /* The tokens above are named -chip after the source of truth; components.css
+     reads -tint, which is what index.html calls the same light value. Without
+     these four the -tint names fell through to their DARK definitions, so every
+     pill, outline button and callout rendered a translucent dark wash on white.
+     Same values as the chips -- one name per consumer, not two colours. */
+  --go-tint: #DCF0E4; --due-tint: #FBE4E1;
+  --closing-tint: #F7EBD2; --awaiting-tint: #DCEFF5;
   --closed: #B6C4BC;
 
   --shadow: 0 1px 2px rgba(24,33,28,.07);
