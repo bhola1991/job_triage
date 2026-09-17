@@ -18,6 +18,7 @@ once and serve to everyone is the only version that scales. That is the index.
 
     sources.json    the crawl list — ATS boards and free feeds, all keyless
     ingest.js       crawl once, centrally, into one JSONL store
+    embed.mjs       give every indexed job a meaning-vector (channel C)
     retrieve.js     stage one: cut the index to a few hundred candidates, free
 
 Run:
@@ -80,9 +81,43 @@ query collapsed recall to 1/40 — "Operations Manager" and "Video Editor" and
 "Founder" in one bag match nothing well. This mirrors how the app already
 searches, one track at a time.
 
-The 12 good jobs that stay outside are not reachable by widening the net: their
-wording does not overlap the track titles at all. That residue is the argument
-for embeddings as a third retrieval channel, and it is worth roughly 30% recall.
+## Channel C: embeddings — measured, and smaller than I claimed
+
+`embed.mjs` gives every indexed job a 384-dim vector (`Xenova/all-MiniLM-L6-v2`,
+local, no API key). 4,838 jobs in 87s, 7.4 MB. It runs at crawl time, once,
+shared by everyone; per user the only new work is embedding their track titles.
+
+**The first integration was wrong.** Interleaving vector picks with BM25 picks
+at a fixed pool size made recall *worse* — 70% → 68% — because every vector pick
+displaced a BM25 pick that was already earning its place. Embeddings exist to
+reach what word overlap cannot see, so they must widen the net, not re-cut it.
+
+Additive, they help — modestly:
+
+| channels | pool | kept of 40 | cost |
+| --- | --- | --- | --- |
+| BM25 60/track | 230 | 28 (70%) | ₹3.83 |
+| + vector 30/track | 338 | **29 (73%)** | **₹5.63** |
+| + vector 60/track | 435 | 29 (73%) | ₹7.25 |
+| BM25 150/track, no vector | 535 | 29 (73%) | ₹8.92 |
+
+**The honest read: embeddings buy the same recall for 37% less money**
+(₹5.63 vs ₹8.92 at 73%), not more recall. An earlier version of this file
+claimed they were worth ~30% recall. That was a guess, and measuring it showed
+it was wrong: about 3 points, and it plateaus.
+
+## Why recall stalls near 73% — it is not the retriever
+
+All 40 jobs the scorer rated 65+ came from **board search**: LinkedIn, Indeed,
+Upwork, Naukri, Google. This index holds ATS feeds (Greenhouse/Lever/Ashby) plus
+three remote feeds. Most of those good jobs have no analogue in it at all — they
+are freelance gigs and India-market content roles; the index is global-tech
+company postings.
+
+So the ceiling measured here is a **coverage** ceiling, not a retrieval one.
+Judging the three channels properly needs an index containing the kind of work
+the profile actually wants. That is a `sources.json` problem, and it comes
+before any further retrieval tuning.
 
 ## What is NOT proven
 
