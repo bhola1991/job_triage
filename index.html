@@ -541,6 +541,10 @@
 <script>
 (function(){
 const $ = s => document.querySelector(s);
+// javascript: and data: URLs survive esc() untouched — esc stops attribute
+// break-out, not a scheme. Anything that becomes an href or a window.open
+// target goes through here first.
+const httpUrl = u => { try{ const p = new URL(u); return (p.protocol==='http:'||p.protocol==='https:') ? u : ''; }catch(e){ return ''; } };
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const today = () => new Date().toISOString().slice(0,10);
 /* Password fields, with a way to read back what was typed. */
@@ -2056,7 +2060,8 @@ function trackVerdict(t){
 
 /* ═══ scoring prompt, built from THIS person ═══ */
 function sysPrompt(prof, track){
-  const t = (prof.tracks||[]).find(x=>x.id===track) || prof.tracks[0] || {};
+  const ts = prof.tracks || [];
+  const t = ts.find(x=>x.id===track) || ts[0] || {};
   return `You score job listings for one specific candidate. You will be given their profile and a batch of jobs.
 
 CANDIDATE SNAPSHOT
@@ -2421,6 +2426,7 @@ const POSTING_SHAPE = {
    and they read like job talk without being a job. */
 const NOT_JOB_HOST = /(^|\.)(reddit|quora|medium|youtube|twitter|x|facebook|instagram|stackoverflow|stackexchange|github|dev|substack|hashnode)\.(com|to|io)$/i;
 function isPostingUrl(u){
+  if(!httpUrl(u)) return false;
   let host=''; try{ host=new URL(u).hostname; }catch(e){ return false; }
   if(NOT_JOB_HOST.test(host)) return false;
   for(const h in POSTING_SHAPE) if(host.includes(h.replace(/\.$/,''))) return POSTING_SHAPE[h].test(u);
@@ -2823,7 +2829,8 @@ function renderOnb(){
       ${body}</div>`;
 
   if($('#onbSignOut')) $('#onbSignOut').onclick=async()=>{
-    try{ await putLocal('triage:db',''); }catch(e){}
+    // Same rule as the main sign-out: unsynced work is only here.
+    if(!CLOUD_DOWN){ try{ await putLocal('triage:db',''); }catch(e){} }
     try{ await SB.auth.signOut(); }catch(e){}
     USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
   };
@@ -3031,7 +3038,9 @@ function followUpOn(j){
   d.setUTCDate(d.getUTCDate()+FOLLOWUP_DAYS);
   return isoOf(d);
 }
-const mmdd = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')) ? String(s).slice(5) : String(s||'');
+// Returns '' rather than echoing the input: this feeds markup, and a value
+// that is not a date has no business being rendered as one.
+const mmdd = s => /^\d{4}-\d{2}-\d{2}$/.test(String(s||'')) ? String(s).slice(5) : '';
 const ordinal = n => { const t=n%100; return n+((t>10&&t<14)?'th':({1:'st',2:'nd',3:'rd'}[n%10]||'th')); };
 
 /* One job, opened in place under its own row. Deliberately does not repeat the
@@ -3164,12 +3173,15 @@ function jobCard(j,i){
   const open = OPEN_JOB===keyOf(j);
   const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
   const details=btn('open', open?'Hide':'Details');
+  // btn() interpolates its label raw, so anything from a job record is escaped
+  // before it gets there. follow_up_date arrives from CSV import and backups.
+  const chaseOn = esc(mmdd(followUpOn(j)));
   const acts =
       st==='new'  ? btn('sent', ch==='cold'?'Mark contacted':'Mark applied') + details
                     + btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', 'btn-go')
     : st==='sent' ? btn('live','They replied') + details
                     + (due ? btn('chase','Write the chase','btn-due')
-                           : btn('chase', followUpOn(j)?`Chase on ${mmdd(followUpOn(j))}`:'Chase', 'btn-await'))
+                           : btn('chase', chaseOn?`Chase on ${chaseOn}`:'Chase', 'btn-await'))
     : st==='live' ? details + btn('note','Log a note','btn-go')
     : details + btn('reopen','Reopen');
 
@@ -3662,10 +3674,18 @@ function renderApp(){
     if(AUTO) await autoScore(); else setInfo('');
   };
   if($('#btnSignOut')) $('#btnSignOut').onclick=async()=>{
-    if(!confirm('Sign out? Anything saved is in your account and will be here when you come back.')) return;
+    // While CLOUD_DOWN is latched, put() has been writing to this device only,
+    // so local IS the only copy of everything saved since. Say so, and leave it
+    // alone -- the usual promise ("it is in your account") is not true yet.
+    if(CLOUD_DOWN){
+      if(!confirm('Sign out? Your account could not be reached, so changes made on this device have not synced yet. Signing out now loses them.')) return;
+    }else{
+      if(!confirm('Sign out? Anything saved is in your account and will be here when you come back.')) return;
+    }
     // The local copy is this account's data sitting on a possibly shared
-    // machine. Signing out should actually remove it, not just hide it.
-    try{ await putLocal('triage:db',''); }catch(e){}
+    // machine. Signing out should actually remove it, not just hide it -- but
+    // only once the account actually has it.
+    if(!CLOUD_DOWN){ try{ await putLocal('triage:db',''); }catch(e){} }
     try{ await SB.auth.signOut(); }catch(e){}
     USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
   };
@@ -3775,7 +3795,7 @@ function bindPlot(){
   svg.addEventListener('click',ev=>{
     if(!ev.target.classList.contains('dot')) return;
     const idx=parseInt(ev.target.dataset.idx,10), j=P().jobs[idx];
-    if(j && j.url) window.open(j.url,'_blank','noopener');
+    if(j && httpUrl(j.url)) window.open(j.url,'_blank','noopener');
     else showJob(idx);
   });
 }
@@ -4247,7 +4267,7 @@ async function draftInmail(i,ci){
     eyebrow:'InMail draft', head:`${esc(c.name||'them')} · ${esc(j.company)}`, rows:8, maxTok:700,
     retry:()=>draftInmail(i,ci),
     extras: c.linkedin ? [{id:'msgOpen', label:'Open their profile',
-      run:()=>window.open(c.linkedin,'_blank','noopener')}] : [],
+      run:()=>{ if(httpUrl(c.linkedin)) window.open(c.linkedin,'_blank','noopener'); }}] : [],
     prompt:`Write a short LinkedIn InMail message from a job seeker to one specific person.
 
 ${senderBlock(prof,p.raw,"WHO IT'S FROM",false)}
