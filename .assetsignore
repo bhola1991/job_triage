@@ -1,0 +1,36 @@
+# What Wrangler uploads as static assets, when assets.directory is "." (see
+# wrangler.jsonc). This has NO relation to .gitignore -- Wrangler walks the
+# real filesystem after clone, not git's tracked-file list, so anything on
+# disk gets served unless named here. Confirmed by the build log for commit
+# 16179ab: it uploaded .git/HEAD, .git/objects/*, .git/config and .git/hooks/*
+# as live static assets, because nothing told it not to.
+#
+# Cloudflare's own migration guide (developers.cloudflare.com/workers/
+# static-assets/migration-guides/migrate-from-pages/) lists what Pages used
+# to exclude automatically and Workers does not: node_modules, .DS_Store,
+# .git. A list like that only protects what someone thought to name -- which
+# is exactly how .git ended up served in the first place. This repo is a
+# single flat HTML app by design (README: "One HTML file. No build step"),
+# so the safer shape is an allow-list: deny everything, then name only the
+# 11 root files the running app and service worker actually fetch by path.
+# A future top-level addition -- another script, another doc -- is excluded
+# by default instead of leaking until someone remembers to list it.
+#
+# The 11 come straight from grepping the current files, not from memory:
+#   index.html's own <head>            -> config.js, manifest.json, icon.svg
+#   index.html's LEGAL_LINKS map       -> pricing/terms/refund/privacy/contact.html
+#   sw.js's own SHELL cache list       -> ./, index.html, config.js, manifest.json, icon.svg
+#   index.html's serviceWorker.register -> sw.js
+#   the five legal pages' own <link>   -> legal.css
+*
+!/index.html
+!/config.js
+!/manifest.json
+!/icon.svg
+!/sw.js
+!/pricing.html
+!/terms.html
+!/refund.html
+!/privacy.html
+!/contact.html
+!/legal.css
