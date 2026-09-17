@@ -19,10 +19,16 @@ __preview_local.html
 design/support.js
 .thumbnail
 Job triage app mockups/
+Job triage UI color system/
 
 # Server secrets for `supabase secrets set --env-file`. Never commit.
 supabase/.env
 supabase/.temp/
+
+# Per-machine tool state -- local debug configs, session dumps -- never the
+# same across two machines and never something to sync through the repo.
+.claude/
+claude --teleport*.txt
 
 # Index build output: crawl it, do not commit it (37 MB per 5k jobs).
 scripts/index/index.jsonl
