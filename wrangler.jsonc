@@ -1,0 +1,21 @@
+{
+  // Static-asset deploy for the app: index.html, config.js, manifest.json etc.
+  // at the repo root. No Worker script -- there is no server-side code here,
+  // per README ("One HTML file. No build step, no dependencies, no backend").
+  //
+  // This file did not exist before 2026-09-17. Every earlier successful build
+  // relied on `wrangler deploy`'s interactive wizard auto-generating an
+  // equivalent config INSIDE the throwaway build container and discarding it
+  // when the build finished -- so the deploy was never actually backed by a
+  // committed config. The build's own deploy command later changed to
+  // `wrangler versions upload`, which has no such auto-detect fallback and
+  // fails immediately without a real file to read. This is that file.
+  "name": "jobtriage",
+  "compatibility_date": "2026-09-16",
+  "observability": {
+    "enabled": true
+  },
+  "assets": {
+    "directory": "."
+  }
+}
