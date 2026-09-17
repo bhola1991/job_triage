@@ -90,6 +90,17 @@ type Job = { title: string; company: string; url: string; location: string; desc
 type Any = any;
 const PER_SOURCE = 50;   // free APIs: take a full page (Adzuna and Jooble cap a page at 50)
 const env = (k: string) => Deno.env.get(k) || "";
+const countryCode = (c: string) => (/^[a-z]{2}$/i.test(c.trim()) ? c.trim().toLowerCase() : "in");
+/* Some sources want their key in the URL rather than a header: Jooble takes it
+   as a path segment, Adzuna as query parameters. A failure message that quotes
+   the request URL therefore quotes the key, and those messages travel — into
+   the board_search response as sourceErrors, into usage_events.note, and into
+   the logs. So nothing derived from a request may leave here unredacted. */
+const SECRETS_IN_URLS = ["JOOBLE_API_KEY", "ADZUNA_APP_ID", "ADZUNA_APP_KEY"];
+const redact = (s: string) => SECRETS_IN_URLS
+  .map((k) => env(k))
+  .filter((v) => v.length > 3)
+  .reduce((acc, v) => acc.split(v).join("<redacted>"), String(s));
 // Dates arrive as ISO strings, RFC dates, or epoch seconds/milliseconds (as numbers or digit strings).
 const isoDay = (v: unknown) => {
   const s = String(v ?? "").trim();
@@ -98,8 +109,13 @@ const isoDay = (v: unknown) => {
 };
 const plain = (h: unknown) => String(h || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
 const getJson = async (url: string, init: RequestInit = {}) => {
-  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
-  if (!r.ok) throw new Error(`${new URL(url).hostname} ${r.status}: ${(await r.text()).slice(0, 100)}`);
+  // The host is named, never the URL: a transport-level failure (DNS, TLS,
+  // reset, proxy) rejects out of fetch with a message that embeds the whole
+  // request URL, credentials included.
+  const host = new URL(url).hostname;
+  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) })
+    .catch(() => { throw new Error(`${host}: network error`); });
+  if (!r.ok) throw new Error(`${host} ${r.status}: ${redact((await r.text()).slice(0, 100))}`);
   return r.json();
 };
 const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
@@ -233,6 +249,9 @@ const SCRAPERS: Record<string, {
   // delivery and warehouse listings that are the only advertised gig work.
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
     modes: { permanent: "core", freelance: "probe", gig: "core" },
+    // Safe to build a host from cc: countryCode() has already constrained it to
+    // exactly two ASCII letters, so it cannot carry a dot, slash, @ or colon.
+    // ca/au/de/fr etc. genuinely live at <cc>.indeed.com.
     input: (c, rows) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
       q: orTerms(c.titles), l: c.city, sort: "date",
       fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: rows, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
@@ -347,7 +366,7 @@ async function searchAll(titles: string[], where: string, country: string, since
   const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>(), requests: Record<string, number> = {};
   settled.forEach((s, i) => {
     const origin = named[i][0];
-    if (s.status === "rejected") { errors.set(origin, String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    if (s.status === "rejected") { errors.set(origin, redact(String((s.reason as Error)?.message || s.reason)).slice(0, 140)); return; }
     if (s.value === null) return;
     requests[origin] = (requests[origin] || 0) + 1;
     for (const j of s.value) {
@@ -426,7 +445,10 @@ Deno.serve(async (req) => {
         // nothing for niche roles. Jobs already in the list are dropped as seen.
         const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), MIN_WINDOW_DAYS), 30);
         const ctx: Ctx = { titles, skills: list(b.skills, 6), since, mode: String(b.mode || ""),
-          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
+          // cc lands in the HOST of the Indeed search URL, so it is shape-checked
+          // here rather than trusted: anything but two letters would let a caller
+          // choose the origin a paid scraper run fetches.
+          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: countryCode(country) };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
         const searchId = crypto.randomUUID();
         const free = s.used === "free";
