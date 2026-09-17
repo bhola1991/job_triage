@@ -364,7 +364,12 @@
       box-shadow:var(--shadow-md);position:relative;z-index:1}
   }
   .qrank{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;line-height:1;color:var(--text)}
-  .qrank.good{color:var(--go)} .qrank.quiet{color:var(--muted)}
+  /* No accent on the rank: colour is an instruction and a score is not one
+     (see the colour law at the top of this file). The row's edge and the
+     section it sits in already say what to do, and a green rank on an amber
+     closing row put two accents on one row. Grey stays: it is the absence
+     of an instruction, not an accent. */
+  .qrank.quiet{color:var(--muted)}
   .qt{font-size:14px;line-height:1.35}
   .qs{font-size:12px;color:var(--muted);margin-top:2px}
   .qfact .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;margin-top:3px;white-space:nowrap}
@@ -410,7 +415,6 @@
   .qd-stat{padding:13px 0}
   .qd-stat .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:24px;line-height:1;margin-top:7px}
   .qd-stat .c{font-size:11px;color:var(--dim);margin-top:6px}
-  .qd-stat.good .v{color:var(--go)}
   .qd-stat.closing .v,.qd-stat.closing .c{color:var(--closing)}
   .qd-h{font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
     color:var(--dim);padding-bottom:8px;border-bottom:1px solid var(--line);margin-top:24px}
@@ -2225,9 +2229,10 @@ const stOf   = j => { const v=String(j.stage||'').trim().toLowerCase();
 const dayDiff = (a,b) => Math.round((new Date(b)-new Date(a))/86400000);
 function isDue(j){
   if(stOf(j)!=='sent') return false;
-  if(j.follow_up_date) return j.follow_up_date <= today();
-  const t=j.last_touch||j.date_applied;
-  return t ? dayDiff(t,today())>=FOLLOWUP_DAYS : false;
+  // One definition of "when is this due", shared with followUpOn, so the card,
+  // the panel and the overdue count cannot disagree.
+  const on=followUpOn(j);
+  return on ? on <= today() : false;
 }
 const daysSilent = j => { const t=j.last_touch||j.date_applied; return t?dayDiff(t,today()):0; };
 const listOf = (j,k) => { try{ const v=JSON.parse(j[k]||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } };
@@ -3030,13 +3035,23 @@ function accentOf(j){
   if(isScored(j) && isStrong(j)) return 'go';
   return '';
 }
-/* When a sent row falls due, for the rows that are not due yet. */
+/* When a sent row falls due: the later of the date stored on it and one window
+   after the last time it was touched.
+   The max is the point: logEvent advances last_touch and never
+   follow_up_date, so reading the stored date alone left a row Overdue forever
+   once its date had passed -- the chase would be sent, logged, and the row
+   would still be asking for it while reporting "silent for 0 days". A date the
+   user set further out still wins, because nothing touches the row to move it. */
 function followUpOn(j){
-  if(j.follow_up_date) return j.follow_up_date;
-  const t=j.last_touch||j.date_applied; if(!t) return '';
-  const d=new Date(t+'T00:00:00Z'); if(isNaN(d)) return '';
-  d.setUTCDate(d.getUTCDate()+FOLLOWUP_DAYS);
-  return isoOf(d);
+  const on=[];
+  if(j.follow_up_date) on.push(j.follow_up_date);
+  const t=j.last_touch||j.date_applied;
+  if(t){
+    const d=new Date(t+'T00:00:00Z');
+    if(!isNaN(d)){ d.setUTCDate(d.getUTCDate()+FOLLOWUP_DAYS); on.push(isoOf(d)); }
+  }
+  // ISO dates sort chronologically as strings.
+  return on.length ? on.reduce((a,b)=>a>b?a:b) : '';
 }
 // Returns '' rather than echoing the input: this feeds markup, and a value
 // that is not a date has no business being rendered as one.
@@ -3093,7 +3108,7 @@ function jobDetail(j,i,acc){
     <div class="qd-main">
       <div class="qd-eb"><i></i><span class="eyebrow">${esc(eyebrow)}</span></div>
       <div class="qd-stats">
-        ${stat('Rank', scored?Math.round(rankOf(j)):'—', pos?`${ordinal(pos)} of ${all.length}`:'', scored&&isStrong(j)&&st==='new'?'good':'')}
+        ${stat('Rank', scored?Math.round(rankOf(j)):'—', pos?`${ordinal(pos)} of ${all.length}`:'')}
         ${stat('Fit', scored?fitOf(j):'—', 'what you can do')}
         ${stat('Reach', scored?reachOf(j):'—', 'whether they will look')}
         ${stat('Window', age===null?'—':spanTxt(age), window_, acc==='closing'?'closing':'')}
@@ -3198,7 +3213,7 @@ function jobCard(j,i){
     : fact('state', 'closed', 'quiet') + (scored ? fact('fit / reach', `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
 
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
-  const rankCls = st!=='new' ? 'quiet' : (scored&&isStrong(j)) ? 'good' : '';
+  const rankCls = st!=='new' ? 'quiet' : '';
 
   return `<div class="qitem ${acc} ${open?'open':''}" data-jobidx="${i}">
     <div class="qrow">
@@ -3267,13 +3282,25 @@ const sect=(acc,title,sub,rows)=>rows.length?`<div class="qsec ${acc}">
 /* The same section, folded away: rows that are real but not what you came for
    -- under the bar, not yet scored, already closed. Reachable without being
    scrolled past. Capped, because a fold can hold hundreds. */
-const foldSect=(key,title,sub,rows)=>rows.length?`<details class="fold" data-fold="${key}" ${FOLDS[key]?'open':''} style="margin-bottom:26px">
+const foldSect=(key,title,sub,rows)=>{
+  if(!rows.length) return '';
+  /* A fold holding the open job has to be open AND has to render it. Folds
+     start closed and cap at LIST_CAP, so "Open" from the dashboard on a closed
+     or far-down row used to switch tab and then do nothing at all: the row was
+     display:none inside a shut <details>, or past the cap and never rendered,
+     and scrollIntoView had nothing to find. */
+  const holdsOpen = !!OPEN_JOB && rows.some(x=>keyOf(x.j)===OPEN_JOB);
+  const shown = rows.slice(0,LIST_CAP);
+  if(holdsOpen && !shown.some(x=>keyOf(x.j)===OPEN_JOB)) shown.push(rows.find(x=>keyOf(x.j)===OPEN_JOB));
+  const hidden = rows.length - shown.length;
+  return `<details class="fold" data-fold="${key}" ${(FOLDS[key]||holdsOpen)?'open':''} style="margin-bottom:26px">
     <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
     <div class="foldbody">
       <p class="qsec-sub" style="margin:0 0 4px">${sub}</p>
-      ${rows.slice(0,LIST_CAP).map(x=>jobCard(x.j,x.i)).join('')}
-      ${rows.length>LIST_CAP?`<p class="hint">${rows.length-LIST_CAP} more not shown. Narrow with the channel filter, or sort to bring what you want to the top.</p>`:''}
-    </div></details>`:'';
+      ${shown.map(x=>jobCard(x.j,x.i)).join('')}
+      ${hidden>0?`<p class="hint">${hidden} more not shown. Narrow with the channel filter, or sort to bring what you want to the top.</p>`:''}
+    </div></details>`;
+};
 
 /* ═══ Unapplied ═══
    Everything still to decide on, in the order worth deciding it. Two bands
