@@ -27,3 +27,6 @@ supabase/.temp/
 # Index build output: crawl it, do not commit it (37 MB per 5k jobs).
 scripts/index/index.jsonl
 scripts/index/candidates.jsonl
+scripts/index/vectors.bin
+scripts/index/vectors.json
+scripts/index/node_modules/
