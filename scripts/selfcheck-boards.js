@@ -5,6 +5,7 @@ const src=[
   grab(/const MAX_AGE_DAYS[\s\S]*?\nasync function runBoards/).replace(/async function runBoards$/,''),
   grab(/const TITLE_NOISE[^\n]*\n/), grab(/function roleWords[\s\S]*?\n}\n/),
   grab(/const ATS = \{[\s\S]*?\n\};\n/), grab(/const stripTags[^\n]*\n/),
+  grab(/const httpUrl = [^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
 ].join('\n');
 let DBJOBS=[{url:'https://x/old'}], AGE={}, CLAUDE=null, FEEDS={};
@@ -19,6 +20,12 @@ eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCu
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
+ // A scheme esc() cannot neutralise. These reach an href and window.open.
+ ok(!isPostingUrl('javascript:alert(1)'),'javascript: rejected');
+ ok(!isPostingUrl('data:text/html,<script>alert(1)</script>'),'data: rejected');
+ ok(!isPostingUrl('JavaScript:alert(1)'),'JavaScript: rejected (case)');
+ ok(!isPostingUrl('vbscript:msgbox(1)'),'vbscript: rejected');
+ ok(!isPostingUrl('file:///etc/passwd'),'file: rejected');
  ok(isPostingUrl('https://www.linkedin.com/jobs/view/123'),'li post');
  ok(!isPostingUrl('https://www.linkedin.com/jobs/data-engineer-jobs'),'li listing');
  ok(isPostingUrl('https://www.glassdoor.co.in/job-listing/x-JV_1.htm'),'gd post');
