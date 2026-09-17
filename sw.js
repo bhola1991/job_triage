@@ -12,7 +12,13 @@ const CACHE = 'job-triage-v1';
 const SHELL = ['./', './index.html', './config.js', './manifest.json', './icon.svg'];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // Activation must not depend on the cache warm-up. addAll is all-or-nothing,
+  // so one flaky shell request used to reject the install outright: the new
+  // worker never took over and the old copy kept serving pages -- precisely the
+  // "nobody receives the fix" failure this file is written to avoid. Warm what
+  // we can, tolerate misses, and take over either way.
+  self.skipWaiting();
+  e.waitUntil(caches.open(CACHE).then(c => Promise.allSettled(SHELL.map(u => c.add(u)))));
 });
 
 self.addEventListener('activate', e => {
@@ -32,10 +38,21 @@ self.addEventListener('fetch', e => {
   e.respondWith(
     fetch(req)
       .then(res => {
-        const copy = res.clone();
-        caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        // Only a success may replace what is cached. fetch() resolves for 404s
+        // and 502s too, so caching unconditionally let a deploy-window error
+        // page overwrite a working shell -- and then be served as the offline
+        // copy, bricking the app until the next successful online fetch.
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
+        }
         return res;
       })
-      .catch(() => caches.match(req).then(hit => hit || caches.match('./index.html')))
+      // respondWith rejects if handed undefined, which surfaces as a service
+      // worker error instead of an offline page, so the chain always ends in a
+      // real Response.
+      .catch(() => caches.match(req)
+        .then(hit => hit || caches.match('./index.html'))
+        .then(hit => hit || new Response('offline', { status: 503, headers: { 'Content-Type': 'text/plain' } })))
   );
 });
