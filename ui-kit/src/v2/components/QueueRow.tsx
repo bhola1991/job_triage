@@ -10,8 +10,6 @@ export interface QueueRowProps {
   /** The row's status accent — the bar on the left. At most one per row. */
   accentTone: 'go' | 'due' | 'closing' | 'awaiting' | 'neutral';
   rank: number | string;
-  /** Whether the rank figure reads as good — a separate signal from the row's status accent. */
-  rankTone?: 'go' | 'neutral';
   title: string;
   subtitle: string;
   /** Up to 2 label/value fact columns (e.g. "fit / reach", "posted · 4d ago"). */
@@ -22,7 +20,7 @@ export interface QueueRowProps {
 }
 
 /** A ruled queue row: accent bar, rank, title/company, up to 2 facts, actions. Score is never the row's accent. */
-export function QueueRow({ accentTone, rank, rankTone = 'neutral', title, subtitle, facts, actions, onOpen }: QueueRowProps) {
+export function QueueRow({ accentTone, rank, title, subtitle, facts, actions, onOpen }: QueueRowProps) {
   const click = onOpen
     ? (e: MouseEvent<HTMLDivElement>) => {
         if (!(e.target as HTMLElement).closest('button,a,input,select,textarea,label')) onOpen();
@@ -31,7 +29,7 @@ export function QueueRow({ accentTone, rank, rankTone = 'neutral', title, subtit
   return (
     <div data-palette="v2" className={`qrow ${accentTone}${onOpen ? ' clickable' : ''}`} onClick={click}>
       <i className={`bar ${accentTone}`} />
-      <span className={`rank ${rankTone}`}>{rank}</span>
+      <span className="rank">{rank}</span>
       <div className="main">
         <div className="t">{title}</div>
         <div className="s">{subtitle}</div>
