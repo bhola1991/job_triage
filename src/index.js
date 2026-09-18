@@ -54,6 +54,8 @@ async function handleContact(request, env) {
   });
 
   if (!resendResponse.ok) {
+    const detail = await resendResponse.text().catch(() => '');
+    console.error(`Resend send failed: ${resendResponse.status} ${detail}`);
     return jsonResponse({ ok: false, error: 'Failed to send message' }, 502);
   }
 
