@@ -97,7 +97,7 @@ if (!bad) console.log(`  ok    all ${used.size} tokens components.css reads reso
    measured 3.59 even with no tint at all -- so the accents themselves moved.
    Measured against the worst surface each can land on, which is --panel2 in
    dark (the lightest) and the chip itself in light. */
-console.log('\naccent-on-tint contrast (AA needs 4.5:1):');
+console.log('\naccent-on-tint and accent-on-row contrast (AA needs 4.5:1):');
 const srgb = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
 const rgb = (hex) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
 const lum = (hex) => { const [r, g, b] = rgb(hex); return 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b); };
@@ -114,13 +114,22 @@ const AA = 4.5;
 for (const [label, block, surface] of [['dark', kitDark, '--panel2'], ['light', kitLight, null]]) {
   const t = decls(block);
   for (const tone of ['go', 'due', 'closing', 'awaiting']) {
-    const fg = t[tone], tint = t[`${tone}-tint`];
-    if (!fg || !tint) { fail(`${label}: --${tone} or --${tone}-tint missing`); continue; }
-    const bg = flatten(tint, surface ? decls(block)[surface.replace('--', '')] : '#FFFFFF');
-    const r = ratio(fg, bg);
-    const ok = r >= AA;
-    if (!ok) fail(`${label}: --${tone} ${fg} on its tint (${bg}) is ${r.toFixed(2)}:1, needs ${AA}:1`);
-    else console.log(`  ok    ${label} --${tone} ${fg} on ${bg} = ${r.toFixed(2)}:1`);
+    const fg = t[tone];
+    if (!fg) { fail(`${label}: --${tone} missing`); continue; }
+    /* Two backgrounds, because the accent is used as text on both: the chip
+       (.pill2/.callout/.btn2.outline) and the whole-row wash (.qfact .v.<tone>
+       in the app). The chip sits on an arbitrary surface, so it is measured
+       against the lightest one it can land on; the row only ever sits on the
+       page, so it is measured against --ink. */
+    for (const [part, against] of [['tint', surface], ['row', '--ink']]) {
+      const value = t[`${tone}-${part}`];
+      if (!value) { fail(`${label}: --${tone}-${part} missing`); continue; }
+      const base = against ? t[against.replace('--', '')] : '#FFFFFF';
+      const bg = flatten(value, base);
+      const r = ratio(fg, bg);
+      if (r < AA) fail(`${label}: --${tone} ${fg} on its ${part} (${bg}) is ${r.toFixed(2)}:1, needs ${AA}:1`);
+      else console.log(`  ok    ${label} --${tone} ${fg} on ${part} ${bg} = ${r.toFixed(2)}:1`);
+    }
   }
 }
 

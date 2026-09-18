@@ -187,7 +187,7 @@
         "description": "Whole-row tint for a go row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
       },
       "due": {
-        "value": "#EB978E",
+        "value": "#E2685C",
         "type": "color",
         "description": "Overdue: past the follow-up date"
       },
@@ -202,9 +202,9 @@
         "description": "Border for due chips"
       },
       "due-tint": {
-        "value": "rgba(226,104,92,.14)",
+        "value": "#372018",
         "type": "color",
-        "description": "Due wash"
+        "description": "Due wash. Opaque, unlike the other three: --due is the one accent dark enough that a translucent wash lightens the chip past what the red can carry at AA. Fixing the wash instead of the red keeps #E2685C, and makes the chip independent of whatever surface it sits on"
       },
       "due-row": {
         "value": "rgba(226,104,92,.085)",
