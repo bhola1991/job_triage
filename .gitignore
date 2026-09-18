@@ -59,3 +59,7 @@ scripts/index/node_modules/
 # run locally. Never the same across two machines; regenerated on demand.
 .wrangler/
 worker-configuration.d.ts
+
+# Local-only secrets for `wrangler dev` (e.g. RESEND_API_KEY). Never commit --
+# the real value lives in the Cloudflare secret store via `wrangler secret put`.
+.dev.vars
