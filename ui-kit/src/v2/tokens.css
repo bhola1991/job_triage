@@ -9,7 +9,7 @@
   --text: #EDF3EF; --muted: #93A597; --dim: #8A9C8E;
 
   --go: #56C88A; --on-go: #0A1B0F; --go-line: #2C5540; --go-tint: rgba(86,200,138,.12);
-  --due: #EB978E; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: rgba(226,104,92,.14);
+  --due: #E2685C; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: #372018;
   --closing: #DEAF57; --closing-line: #5A4620; --closing-tint: rgba(217,164,65,.13);
   --awaiting: #75BDD3; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
   --closed: #3E4F44;

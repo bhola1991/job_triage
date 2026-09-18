@@ -38,7 +38,7 @@ answering "what colour is X".
 ```css
 --go:#56C88A;      /* v2 */
 --signal:#56C88A;  /* v1 alias — same hue */
---warn:#EB978E;    /* == --due */
+--warn:#E2685C;    /* == --due */
 --live:#56C88A;    /* == --go */
 ```
 
@@ -118,20 +118,34 @@ the type is 11-13px, so the 3:1 large-text threshold does not apply).
 
 Five of the eight pairs did not, and nothing noticed until 2026-09-18: light
 `--go` 4.25, light `--due` 4.34, dark `--closing` 4.18, dark `--awaiting` 3.78,
-dark `--due` 3.08. So the accents moved, holding hue and saturation and shifting
-only lightness — the light pair by ~1%, imperceptibly; the dark three visibly.
+dark `--due` 3.08.
 
-Two things worth knowing before touching these again:
+There are two ways to fix such a pair, and which one is right differs:
 
-- **The tints did not move, deliberately.** They are the backgrounds the ratio
-  is measured against; lightening them gives the contrast straight back.
-- **Dark `--due` could not be fixed by the wash at all.** It measured 3.59:1
-  against `--panel2` with *no* tint, so the accent itself had to change. If you
-  are tempted to restore `#E2685C`, that is why you cannot.
+- **Move the accent.** Holding hue and saturation and shifting only lightness
+  keeps the meaning. Light `--go` and `--due` moved ~1% this way,
+  imperceptibly; dark `--closing` and `--awaiting` moved a few percent and are
+  slightly lighter than they were.
+- **Move the wash.** Dark `--due` is the case where the accent could not move
+  far enough to matter without going pink — it measured only 3.59:1 against
+  `--panel2` even with *no* tint, because a translucent wash *lightens* the
+  chip and a red that dark needs a dark background. So its wash became
+  **opaque** (`--due-tint: #372018`) and the accent stayed `#E2685C`. Being
+  opaque also makes that chip independent of whatever surface it sits on,
+  which is stricter than the other three, not looser.
 
-`scripts/selfcheck-tokens.js` now asserts all eight, against the worst surface
-each can land on (`--panel2` in dark, the chip in light). Dark `--go` passes at
-exactly **4.50:1** — it has no margin, so treat it as a floor.
+That is why `--due-tint` is the one dark tint that is not an `rgba()`. Its chip
+is visibly darker than its three siblings (L≈0.019 against L≈0.050) — an
+unavoidable consequence of carrying a red that deep at AA, and the reason not
+to "tidy" it back into a translucent value.
+
+`scripts/selfcheck-tokens.js` asserts **all sixteen** pairs: each accent as
+text on its chip and on its whole-row wash, in both themes. The chip is
+measured against the lightest surface it can land on (`--panel2` in dark) since
+`StatusPill` is documented safe anywhere (§2); the row only ever sits on the
+page, so it is measured against `--ink`. Two pairs have almost no margin —
+dark `--go` on its tint at **4.50** and dark `--due` on its row at **4.53** —
+so treat both as floors.
 
 ### The dark surface ramp is tuned, not arbitrary
 
@@ -165,7 +179,7 @@ Four accents, one instruction each (`index.html:13-23`, `design/README.md`):
 | Token | Dark | Light | Means |
 | --- | --- | --- | --- |
 | `--go` | `#56C88A` | `#147A3F` | Do this now. The only fill-weight button. |
-| `--due` | `#EB978E` | `#BE3A2D` | Overdue — past the follow-up date. |
+| `--due` | `#E2685C` | `#BE3A2D` | Overdue — past the follow-up date. |
 | `--closing` | `#DEAF57` | `#8A6314` | Posting old enough to be filled soon. |
 | `--awaiting` | `#75BDD3` | `#1E6C86` | Sent; the next move is theirs. |
 | `--closed` | `#3E4F44` | `#B6C4BC` | Grey = the absence of an instruction. |
