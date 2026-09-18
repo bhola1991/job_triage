@@ -27,7 +27,25 @@ supabase/.temp/
 
 # Per-machine tool state -- local debug configs, session dumps -- never the
 # same across two machines and never something to sync through the repo.
-.claude/
+#
+# Not .claude/ wholesale, though it was until 2026-09-18. Ignoring the whole
+# directory also swallowed .claude/settings.json -- the SHARED project settings
+# file, the one Claude Code's docs say to commit so teammates get it -- along
+# with .claude/skills, commands and agents, which are repo-level config too. So
+# nothing about how this project is worked on could be shared through the repo
+# at all, which is how a plugin install came to persist nowhere. Only the
+# genuinely per-machine files are named now:
+#   *.local.json   settings.local.json and friends: personal overrides for this
+#                  one project, which the docs say to keep out of git
+#   launch.json    the local debug config this section was added for (34a2c6a)
+# A machine-local file nobody thought to name here shows up as untracked in git
+# status: noticeable, and harmless. Note this is the opposite shape to
+# .assetsignore, which allow-lists precisely because a file it fails to name is
+# served to the public. Here the worse mistake is the other one -- silently
+# failing to share something that was meant to be shared -- so the rule names
+# what to exclude rather than what to keep.
+.claude/*.local.json
+.claude/launch.json
 claude --teleport*.txt
 
 # Index build output: crawl it, do not commit it (37 MB per 5k jobs).
