@@ -1,5 +1,9 @@
 const MAX_MESSAGE_LENGTH = 2000;
-const CONTACT_TO_EMAIL = 'banerjeesoumyadip1991@gmail.com';
+// Resend's sandbox sender (onboarding@resend.dev) can only deliver to the
+// account's own address until a custom domain is verified at
+// resend.com/domains -- so this can't be banerjeesoumyadip1991@gmail.com
+// (the site's published contact address) without that verification step.
+const CONTACT_TO_EMAIL = 'reachbhola@gmail.com';
 
 export default {
   async fetch(request, env) {
