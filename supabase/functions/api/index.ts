@@ -50,6 +50,8 @@ const APIFY = "https://api.apify.com/v2";
 // (and arbitrarily expensive) actors on your Apify account.
 const ACTOR = "apify~google-search-scraper";
 const MAX_QUERIES = 14;
+// How long after a search its yield report is still accepted.
+const REPORT_WINDOW_MS = 15 * 60_000;
 const MAX_REGISTRY_QUERIES = 8;   // the specialist boards a board search adds to JSearch
 
 /* JSearch reads Google for Jobs, so one request covers LinkedIn, Indeed,
@@ -90,6 +92,17 @@ type Job = { title: string; company: string; url: string; location: string; desc
 type Any = any;
 const PER_SOURCE = 50;   // free APIs: take a full page (Adzuna and Jooble cap a page at 50)
 const env = (k: string) => Deno.env.get(k) || "";
+const countryCode = (c: string) => (/^[a-z]{2}$/i.test(c.trim()) ? c.trim().toLowerCase() : "in");
+/* Some sources want their key in the URL rather than a header: Jooble takes it
+   as a path segment, Adzuna as query parameters. A failure message that quotes
+   the request URL therefore quotes the key, and those messages travel — into
+   the board_search response as sourceErrors, into usage_events.note, and into
+   the logs. So nothing derived from a request may leave here unredacted. */
+const SECRETS_IN_URLS = ["JOOBLE_API_KEY", "ADZUNA_APP_ID", "ADZUNA_APP_KEY"];
+const redact = (s: string) => SECRETS_IN_URLS
+  .map((k) => env(k))
+  .filter((v) => v.length > 3)
+  .reduce((acc, v) => acc.split(v).join("<redacted>"), String(s));
 // Dates arrive as ISO strings, RFC dates, or epoch seconds/milliseconds (as numbers or digit strings).
 const isoDay = (v: unknown) => {
   const s = String(v ?? "").trim();
@@ -98,8 +111,13 @@ const isoDay = (v: unknown) => {
 };
 const plain = (h: unknown) => String(h || "").replace(/<[^>]*>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
 const getJson = async (url: string, init: RequestInit = {}) => {
-  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) });
-  if (!r.ok) throw new Error(`${new URL(url).hostname} ${r.status}: ${(await r.text()).slice(0, 100)}`);
+  // The host is named, never the URL: a transport-level failure (DNS, TLS,
+  // reset, proxy) rejects out of fetch with a message that embeds the whole
+  // request URL, credentials included.
+  const host = new URL(url).hostname;
+  const r = await fetch(url, { ...init, signal: AbortSignal.timeout(15000) })
+    .catch(() => { throw new Error(`${host}: network error`); });
+  if (!r.ok) throw new Error(`${host} ${r.status}: ${redact((await r.text()).slice(0, 100))}`);
   return r.json();
 };
 const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
@@ -233,6 +251,9 @@ const SCRAPERS: Record<string, {
   // delivery and warehouse listings that are the only advertised gig work.
   indeed: { actor: "misceres~indeed-scraper", label: "Indeed",
     modes: { permanent: "core", freelance: "probe", gig: "core" },
+    // Safe to build a host from cc: countryCode() has already constrained it to
+    // exactly two ASCII letters, so it cannot carry a dot, slash, @ or colon.
+    // ca/au/de/fr etc. genuinely live at <cc>.indeed.com.
     input: (c, rows) => ({ startUrls: [{ url: `https://${INDEED_HOST[c.cc] || `${c.cc}.indeed.com`}/jobs?` + new URLSearchParams({
       q: orTerms(c.titles), l: c.city, sort: "date",
       fromage: String(bucket(c.since, [1, 3, 7, 14])) }) }], maxItemsPerSearch: rows, parseCompanyDetails: false, saveOnlyUniqueItems: true }) },
@@ -282,7 +303,11 @@ async function startScrapers(user: string, c: Ctx, only?: string[]) {
         errors.push(`${source}: Apify ${r.status} ${msg}`);
         return null;
       }
-      const run = (await r.json()).data;
+      // A 2xx whose body is truncated or not JSON must be reported like any
+      // other failed source, not thrown: this runs inside a Promise.all that
+      // the caller has already paid for.
+      const run = await r.json().then((d) => d?.data).catch(() => null);
+      if (!run?.id) { errors.push(`${source}: Apify returned no run`); return null; }
       await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source });
       return { id: run.id, source, label: s.label };
     }));
@@ -347,7 +372,7 @@ async function searchAll(titles: string[], where: string, country: string, since
   const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>(), requests: Record<string, number> = {};
   settled.forEach((s, i) => {
     const origin = named[i][0];
-    if (s.status === "rejected") { errors.set(origin, String((s.reason as Error)?.message || s.reason).slice(0, 140)); return; }
+    if (s.status === "rejected") { errors.set(origin, redact(String((s.reason as Error)?.message || s.reason)).slice(0, 140)); return; }
     if (s.value === null) return;
     requests[origin] = (requests[origin] || 0) + 1;
     for (const j of s.value) {
@@ -426,47 +451,60 @@ Deno.serve(async (req) => {
         // nothing for niche roles. Jobs already in the list are dropped as seen.
         const since = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), MIN_WINDOW_DAYS), 30);
         const ctx: Ctx = { titles, skills: list(b.skills, 6), since, mode: String(b.mode || ""),
-          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: country.toLowerCase() || "in" };
+          // cc lands in the HOST of the Indeed search URL, so it is shape-checked
+          // here rather than trusted: anything but two letters would let a caller
+          // choose the origin a paid scraper run fetches.
+          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: countryCode(country) };
         const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
-        const searchId = crypto.randomUUID();
-        const free = s.used === "free";
+        try {
+          const searchId = crypto.randomUUID();
+          const free = s.used === "free";
 
-        const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
-          searchAll(titles, where, country, since, req, free),
-          startScrapers(user, ctx, free ? FREE_SCRAPERS : undefined),
-        ]);
-        errors.push(...scrapeErrors);
-        if (errors.length) console.error("sources:", errors);
-        // A source that failed leaves NO other trace in the ledger: its cost row
-        // is only written on success, so silence and "never ran" looked identical.
-        // 5 searches ran JSearch and it logged nothing at all, because every call
-        // threw. One zero-unit row per failure makes that readable in SQL.
-        await logUsage(errors.slice(0, 20).map((e) => ({
-          user_id: user, search_id: searchId, kind: "error",
-          source: e.split(":")[0].trim().slice(0, 40), units: 0, note: e.slice(0, 300),
-        })));
-        // Scraper rows are logged when their results are fetched (apify_items), since only then is the count known.
-        await logUsage(Object.entries(requests).map(([source, units]) =>
-          ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
+          const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
+            searchAll(titles, where, country, since, req, free),
+            startScrapers(user, ctx, free ? FREE_SCRAPERS : undefined),
+          ]);
+          errors.push(...scrapeErrors);
+          if (errors.length) console.error("sources:", errors);
+          // A source that failed leaves NO other trace in the ledger: its cost row
+          // is only written on success, so silence and "never ran" looked identical.
+          // 5 searches ran JSearch and it logged nothing at all, because every call
+          // threw. One zero-unit row per failure makes that readable in SQL.
+          await logUsage(errors.slice(0, 20).map((e) => ({
+            user_id: user, search_id: searchId, kind: "error",
+            source: e.split(":")[0].trim().slice(0, 40), units: 0, note: e.slice(0, 300),
+          })));
+          // Scraper rows are logged when their results are fetched (apify_items), since only then is the count known.
+          await logUsage(Object.entries(requests).map(([source, units]) =>
+            ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
 
-        // Free searches skip the Google run entirely (specialist boards and fallback): it costs per query.
-        const queries = free ? [] : [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
-        const run = queries.length
-          ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
-              method: "POST",
-              body: JSON.stringify({ queries: queries.join("\n"), countryCode: String(b.country || "").toLowerCase(), languageCode: "en", maxPagesPerQuery: 1, resultsPerPage: 10, mobileResults: false }),
-            }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
-          : null;
-        // Nothing came back from anywhere: they got nothing, so they pay nothing.
-        if (!jobs.length && !run?.id && !scrapers.length) {
-          await refund(user, s, "search", COST.boardSearch);
-          throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
+          // Free searches skip the Google run entirely (specialist boards and fallback): it costs per query.
+          const queries = free ? [] : [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
+          const run = queries.length
+            ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
+                method: "POST",
+                body: JSON.stringify({ queries: queries.join("\n"), countryCode: String(b.country || "").toLowerCase(), languageCode: "en", maxPagesPerQuery: 1, resultsPerPage: 10, mobileResults: false }),
+              }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
+            : null;
+          // Nothing came back from anywhere: they got nothing, so they pay nothing.
+          if (!jobs.length && !run?.id && !scrapers.length) {
+            await refund(user, s, "search", COST.boardSearch);
+            throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
+          }
+          if (run?.id) {
+            await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
+            await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
+          }
+          return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, free, sourceErrors: errors, ...wallet(s) });
+        } catch (e) {
+          // Anything that throws after the credit was taken has to put it back.
+          // The outer handler collapses a non-Http error into "Server error" and
+          // refunds nothing, so an unexpected failure here used to be charged
+          // for silently. The Http paths above refund themselves, so they are
+          // deliberately left alone.
+          if (!(e instanceof Http)) await refund(user, s, "search", COST.boardSearch);
+          throw e;
         }
-        if (run?.id) {
-          await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
-          await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
-        }
-        return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, free, sourceErrors: errors, ...wallet(s) });
       }
 
       // The app's per-source yield for one search: found, new, scored 50+, and
@@ -474,6 +512,21 @@ Deno.serve(async (req) => {
       case "search_report": {
         const sid = String(b.search_id || "");
         if (!/^[0-9a-f-]{36}$/i.test(sid)) throw new Http(400, "bad search id");
+        // These numbers feed source_yield.inr_per_exclusive_50, which is the
+        // table SCRAPERS[].modes is meant to be edited from -- so a report has
+        // to come from a real search of this caller's. This was the one mutating
+        // action that spent nothing and proved nothing: any uuid and any figures
+        // were accepted, 30 rows at a time, unmetered and unbounded.
+        const { data: own } = await admin.from("usage_events")
+          .select("created_at").eq("search_id", sid).eq("user_id", user)
+          .order("created_at", { ascending: true }).limit(1).maybeSingle();
+        if (!own) throw new Http(404, "unknown search");
+        if (Date.now() - new Date(own.created_at as string).getTime() > REPORT_WINDOW_MS)
+          throw new Http(409, "search too old to report");
+        // One report per search: a retry must not double the row count.
+        const { count: already } = await admin.from("usage_events")
+          .select("id", { count: "exact", head: true }).eq("search_id", sid).eq("kind", "yield");
+        if (already) throw new Http(409, "already reported");
         const n = (v: unknown) => Math.min(Math.max(Math.round(Number(v) || 0), 0), 100000);
         const known = new Set([...Object.keys(PRICE_USD)]);
         await logUsage(Object.entries(b.sources || {}).filter(([k]) => known.has(k)).slice(0, 30).map(([source, v]: [string, Any]) => ({
@@ -487,27 +540,41 @@ Deno.serve(async (req) => {
         const prompt = String(b.prompt || "");
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
-        const r = await fetch("https://api.deepseek.com/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
-          body: JSON.stringify({
-            model: "deepseek-chat", temperature: 0.2,
-            max_tokens: Math.min(Number(b.max_tokens) || 1400, 4000),
-            messages: [{ role: "user", content: prompt }],
-          }),
-        }).catch(() => null);
-        const d = r && r.ok ? await r.json() : null;
-        const text = (d?.choices?.[0]?.message?.content || "").trim();
-        if (!text) {                       // their call failed, so it shouldn't cost them
-          await refund(user, s, "llm", COST.llm);
-          throw new Http(502, "The model didn't answer. No credit was used — try again.");
+        try {
+          const r = await fetch("https://api.deepseek.com/chat/completions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
+            body: JSON.stringify({
+              model: "deepseek-chat", temperature: 0.2,
+              max_tokens: Math.min(Number(b.max_tokens) || 1400, 4000),
+              messages: [{ role: "user", content: prompt }],
+            }),
+          }).catch(() => null);
+          // A truncated or non-JSON 200 rejected here, after the credit was
+          // taken, and the outer handler refunds nothing -- so it fell through to
+          // "Server error" having charged for nothing. Fail soft into the !text
+          // branch below, which refunds.
+          const d = r && r.ok ? await r.json().catch(() => null) : null;
+          const text = (d?.choices?.[0]?.message?.content || "").trim();
+          if (!text) {                       // their call failed, so it shouldn't cost them
+            await refund(user, s, "llm", COST.llm);
+            throw new Http(502, "The model didn't answer. No credit was used — try again.");
+          }
+          // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
+          const u = d.usage || {}, cached = u.prompt_cache_hit_tokens || 0, tin = u.prompt_tokens || 0, tout = u.completion_tokens || 0;
+          await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
+            kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout,
+            cost_inr: inr(((tin - cached) * DEEPSEEK_USD_PER_M.in + cached * DEEPSEEK_USD_PER_M.in_cached + tout * DEEPSEEK_USD_PER_M.out) / 1e6) }]);
+          return json({ text, ...wallet(s) });
+        } catch (e) {
+          // Anything that throws after the credit was taken has to put it back.
+          // The outer handler collapses a non-Http error into "Server error" and
+          // refunds nothing, so an unexpected failure here used to be charged
+          // for silently. The Http paths above refund themselves, so they are
+          // deliberately left alone.
+          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          throw e;
         }
-        // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
-        const u = d.usage || {}, cached = u.prompt_cache_hit_tokens || 0, tin = u.prompt_tokens || 0, tout = u.completion_tokens || 0;
-        await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
-          kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout,
-          cost_inr: inr(((tin - cached) * DEEPSEEK_USD_PER_M.in + cached * DEEPSEEK_USD_PER_M.in_cached + tout * DEEPSEEK_USD_PER_M.out) / 1e6) }]);
-        return json({ text, ...wallet(s) });
       }
 
       case "apify_start": {
@@ -518,21 +585,31 @@ Deno.serve(async (req) => {
         // Board search has its own action (board_search) and the free uses; this is
         // the HR finder and careers-page lookup, which always pay.
         const s = await spend("spend_search", { p_user: user, p_n: cost, p_board: false });
-        const timeout = Math.min(Math.max(Number(b.timeout) || 300, 60), 660);
-        const r = await apify(`/acts/${ACTOR}/runs?timeout=${timeout}`, {
-          method: "POST",
-          body: JSON.stringify({
-            queries: queries.join("\n"), countryCode: String(p.countryCode || ""), languageCode: "en",
-            maxPagesPerQuery: 1, resultsPerPage: Math.min(Number(p.resultsPerPage) || 10, 10), mobileResults: false,
-          }),
-        }).catch(() => null);
-        const run = r && r.ok ? (await r.json()).data : null;
-        if (!run?.id) {
-          await refund(user, s, "search", cost);
-          throw new Http(502, "Search couldn't start. No credits were used.");
+        try {
+          const timeout = Math.min(Math.max(Number(b.timeout) || 300, 60), 660);
+          const r = await apify(`/acts/${ACTOR}/runs?timeout=${timeout}`, {
+            method: "POST",
+            body: JSON.stringify({
+              queries: queries.join("\n"), countryCode: String(p.countryCode || ""), languageCode: "en",
+              maxPagesPerQuery: 1, resultsPerPage: Math.min(Number(p.resultsPerPage) || 10, 10), mobileResults: false,
+            }),
+          }).catch(() => null);
+          const run = r && r.ok ? await r.json().then((d) => d?.data).catch(() => null) : null;
+          if (!run?.id) {
+            await refund(user, s, "search", cost);
+            throw new Http(502, "Search couldn't start. No credits were used.");
+          }
+          await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
+          return json({ id: run.id, ...wallet(s) });
+        } catch (e) {
+          // Anything that throws after the credit was taken has to put it back.
+          // The outer handler collapses a non-Http error into "Server error" and
+          // refunds nothing, so an unexpected failure here used to be charged
+          // for silently. The Http paths above refund themselves, so they are
+          // deliberately left alone.
+          if (!(e instanceof Http)) await refund(user, s, "search", cost);
+          throw e;
         }
-        await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
-        return json({ id: run.id, ...wallet(s) });
       }
 
       case "apify_status": {

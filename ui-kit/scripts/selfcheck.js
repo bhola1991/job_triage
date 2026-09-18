@@ -2,6 +2,7 @@
 // produced non-empty, expected-looking markup. No test framework needed.
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createElement as h } from 'react';
+import { readFileSync } from 'node:fs';
 import * as UI from '../dist/index.js';
 
 const cases = [
@@ -45,7 +46,11 @@ const cases = [
   [UI.PostingLink, { url: 'https://example.com/job', title: 'Forward Deployed Engineer' }, 'open the original posting'],
   [UI.PostingLink, { url: 'nan', title: 'Solutions Engineer', company: 'Hasura', location: 'Remote' }, 'google.com/search?q=Solutions%20Engineer%20Hasura%20Remote%20job'],
   [UI.ColorKey, { counts: { go: 3, due: 1 } }, 'Do this now'],
-  [UI.QueueRow, { accentTone: 'go', rank: 72, title: 'Clickable row', subtitle: 'Sarvam AI', onOpen: () => {} }, 'qrow clickable'],
+  [UI.QueueRow, { accentTone: 'go', rank: 72, title: 'Clickable row', subtitle: 'Sarvam AI', onOpen: () => {} }, 'qrow go clickable'],
+  // The DEFAULT emphasis, which every case above skipped by passing 'fill'
+  // explicitly -- which is how .btn2.outline.go went missing unnoticed and
+  // the primary action rendered as neutral.
+  [UI.ActionButton, { tone: 'go', children: 'Apply' }, 'btn2 outline go'],
 ];
 
 let failures = 0;
@@ -65,6 +70,24 @@ for (const [Component, props, expect] of cases) {
     continue;
   }
   console.log(`ok   ${name}`);
+}
+
+/* Rendering proves the class is emitted, not that anything styles it. ActionButton
+   defaults to emphasis="outline" and only .btn2.fill.go, .btn2.fill.due and
+   .btn2.outline.awaiting existed, so <ActionButton tone="go"> -- the primary
+   action -- matched no rule and rendered as neutral. Nothing above could see
+   that, because every case passed emphasis: 'fill' explicitly. So assert the
+   CSS too: every combination the component can emit needs a rule.
+   neutral is the exception: it is the base .btn2 look, by design. */
+const css = readFileSync(new URL('../src/v2/components.css', import.meta.url), 'utf8');
+for (const emphasis of ['fill', 'outline']) {
+  for (const tone of ['go', 'due', 'awaiting']) {
+    const rule = `.btn2.${emphasis}.${tone}`;
+    if (!css.includes(rule)) {
+      console.error(`FAIL components.css: ActionButton can render "${rule.slice(1).replace(/\./g, ' ')}" but no ${rule} rule exists`);
+      failures++;
+    }
+  }
 }
 
 console.log(`\n${cases.length - failures}/${cases.length} components rendered as expected.`);

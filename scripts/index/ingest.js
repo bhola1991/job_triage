@@ -95,6 +95,16 @@ async function main() {
     }
   }));
 
+  // A crawl that kept nothing is a failure, not an empty index. Writing it out
+  // replaced a good index.jsonl with a single newline, reported NaN bytes/job,
+  // and still exited 0 -- so cron called it a success and the next retrieve.js
+  // died on JSON.parse('') with no hint why.
+  if (!rows.length) {
+    console.error(`\nno jobs crawled from ${tasks.length} sources; leaving ${out} untouched`);
+    if (failed.length) console.error(`failed:\n  ${failed.join('\n  ')}`);
+    process.exitCode = 1;
+    return;
+  }
   fs.writeFileSync(out, rows.map(r => JSON.stringify(r)).join('\n') + '\n');
   const bytes = fs.statSync(out).size;
   console.log(`\nindexed ${rows.length} jobs from ${tasks.length - failed.length}/${tasks.length} sources`);

@@ -181,6 +181,11 @@
         "type": "color",
         "description": "Go wash"
       },
+      "go-row": {
+        "value": "rgba(86,200,138,.075)",
+        "type": "color",
+        "description": "Whole-row tint for a go row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
+      },
       "due": {
         "value": "#E2685C",
         "type": "color",
@@ -201,6 +206,11 @@
         "type": "color",
         "description": "Due wash"
       },
+      "due-row": {
+        "value": "rgba(226,104,92,.085)",
+        "type": "color",
+        "description": "Whole-row tint for a due row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
+      },
       "closing": {
         "value": "#D9A441",
         "type": "color",
@@ -215,6 +225,11 @@
         "value": "rgba(217,164,65,.13)",
         "type": "color",
         "description": "Closing wash"
+      },
+      "closing-row": {
+        "value": "rgba(217,164,65,.075)",
+        "type": "color",
+        "description": "Whole-row tint for a closing row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
       },
       "awaiting": {
         "value": "#57AEC9",
@@ -231,6 +246,11 @@
         "type": "color",
         "description": "Awaiting wash"
       },
+      "awaiting-row": {
+        "value": "rgba(87,174,201,.075)",
+        "type": "color",
+        "description": "Whole-row tint for a awaiting row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
+      },
       "closed": {
         "value": "#3E4F44",
         "type": "color",
@@ -240,6 +260,11 @@
         "value": "0 1px 2px rgba(0,0,0,.3)",
         "type": "boxShadow",
         "description": "Elevation"
+      },
+      "shadow-md": {
+        "value": "0 10px 30px rgba(0,0,0,.5)",
+        "type": "boxShadow",
+        "description": "Elevation: a lifted row or a hovered card"
       },
       "shadow-lg": {
         "value": "0 20px 60px rgba(0,0,0,.55)",
@@ -389,6 +414,11 @@
         "value": "0 1px 2px rgba(24,33,28,.07)",
         "type": "boxShadow",
         "description": "Elevation"
+      },
+      "shadow-md": {
+        "value": "0 8px 24px rgba(24,33,28,.12)",
+        "type": "boxShadow",
+        "description": "Elevation: a lifted row or a hovered card"
       },
       "shadow-lg": {
         "value": "0 18px 50px rgba(24,33,28,.24)",

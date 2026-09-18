@@ -1,4 +1,5 @@
-// Stage one of the funnel:  node scripts/index/retrieve.js --titles "..." --skills "..." [--top 200]
+// Stage one of the funnel:
+//   node scripts/index/retrieve.js --titles "..." --skills "..." [--top 200] [--vec-extra 100]
 //
 // The index is too big to LLM-score per user: at ~Rs 0.017/row, judging 100k
 // jobs for one person costs Rs 1,667. So a cheap retriever cuts the index down
@@ -83,6 +84,9 @@ async function main() {
   const titles = list(arg('titles', 'Platform Engineer,Staff Engineer,Infrastructure Engineer,Site Reliability Engineer'));
   const skills = list(arg('skills', 'kubernetes,terraform,postgres,python,go,aws,docker'));
   const TOP = +arg('top', 200);
+  // The vector channel's own allowance, on top of TOP rather than inside it.
+  // Same half-of-the-pool ratio validate.js measures with (--per 60 --vec-extra 30).
+  const VEC_EXTRA = +arg('vec-extra', Math.round(TOP / 2));
 
   const terms = [];
   for (const t of titles) for (let i = 0; i < 3; i++) terms.push(...tok(t));
@@ -113,13 +117,20 @@ async function main() {
     if (titles.some(t => r.title.toLowerCase().includes(t.toLowerCase()))) chosen.set(i, 'title');
   });
   const titleHits = chosen.size;
-  // Whatever the title channel did not claim is split evenly between the two
-  // ranked channels, taken in turn so neither can crowd the other out.
-  const queues = byVec ? [byBM, byVec] : [byBM];
-  const tags = byVec ? ['bm25', 'vector'] : ['bm25'];
-  for (let n = 0, q = 0; chosen.size < TOP && n < rows.length * queues.length; n++, q = (q + 1) % queues.length) {
-    const pick = queues[q][Math.floor(n / queues.length)];
-    if (pick && !chosen.has(pick.i)) chosen.set(pick.i, tags[q]);
+  /* BM25 fills the pool to TOP; the vector channel then ADDS beyond it rather
+     than sharing it. Interleaving the two inside one fixed budget is what this
+     script used to do, and validate.js records the measurement against it
+     (see its channel C block): recall fell 70% -> 68%, because every vector
+     pick displaced a BM25 pick that was already earning its place. Embeddings
+     are here to reach what word overlap cannot see, so they widen the net
+     instead of re-cutting it -- and the two scripts now agree, which is the
+     point of validating one with the other. */
+  for (let n = 0; chosen.size < TOP && n < byBM.length; n++)
+    if (!chosen.has(byBM[n].i)) chosen.set(byBM[n].i, 'bm25');
+  if (byVec && VEC_EXTRA > 0) {
+    let added = 0;
+    for (let n = 0; added < VEC_EXTRA && n < byVec.length; n++)
+      if (!chosen.has(byVec[n].i)) { chosen.set(byVec[n].i, 'vector'); added++; }
   }
 
   const score = new Map(byBM.map(r => [r.i, r.s]));
@@ -128,7 +139,7 @@ async function main() {
   fs.writeFileSync(path.join(dir, 'candidates.jsonl'), top.map(r => JSON.stringify(r)).join('\n') + '\n');
 
   const by = t => top.filter(j => j._via === t).length;
-  console.log(`index ${rows.length} jobs · ${Date.now() - t0}ms · ${V ? 'three' : 'two'} channels`);
+  console.log(`index ${rows.length} jobs · ${Date.now() - t0}ms · ${byVec ? 'three' : 'two'} channels`);
   console.log(`candidates ${top.length}: ${titleHits} title · ${by('bm25')} bm25 · ${by('vector')} vector\n`);
   for (const j of top.slice(0, 12))
     console.log(`  ${j._via.padEnd(6)} ${j.title.slice(0, 50).padEnd(52)} ${(j.company || '').slice(0, 14)}`);
@@ -137,6 +148,8 @@ async function main() {
   const want = rows.map((r, i) => i).filter(i => titles.some(t => rows[i].title.toLowerCase().includes(t.toLowerCase())));
   console.log(`\nliteral title matches kept: ${want.filter(i => kept.has(i)).length}/${want.length}`);
   const R = 0.20 / 12;
-  console.log(`scoring cost: whole index Rs ${(rows.length * R).toFixed(2)} · this pool Rs ${(TOP * R).toFixed(2)}`);
+  // top.length, not TOP: the title channel alone can exceed the budget, and
+  // this line is the whole reason the script exists.
+  console.log(`scoring cost: whole index Rs ${(rows.length * R).toFixed(2)} · this pool Rs ${(top.length * R).toFixed(2)}`);
 }
 main();

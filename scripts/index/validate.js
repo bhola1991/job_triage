@@ -51,6 +51,15 @@ async function main() {
   if (!process.argv.includes('--no-vector') && fs.existsSync(meta)) {
     try {
       const m = JSON.parse(fs.readFileSync(meta, 'utf8'));
+      // The same guard retrieve.js has. Without it a stale vectors.bin is laid
+      // over a freshly crawled index: all.set() succeeds, row i is scored
+      // against row j's vector, and the recall figure below -- the number that
+      // decides whether the cheap retriever goes in front of the paid scorer --
+      // is computed from garbage rankings while looking perfectly confident.
+      // ingest.js drains its queue across 8 workers, so row order is not even
+      // stable between crawls.
+      if (m.count !== index.length)
+        throw new Error(`vectors.json says ${m.count} jobs, index.jsonl has ${index.length} — re-run embed.mjs`);
       const buf = fs.readFileSync(path.join(DIR, 'vectors.bin'));
       const idxVecs = new Float32Array(buf.buffer, buf.byteOffset, buf.length / 4);
       const { pipeline } = await import('@xenova/transformers');

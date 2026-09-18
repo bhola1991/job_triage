@@ -29,7 +29,7 @@ export function QueueRow({ accentTone, rank, rankTone = 'neutral', title, subtit
       }
     : undefined;
   return (
-    <div data-palette="v2" className={`qrow${onOpen ? ' clickable' : ''}`} onClick={click}>
+    <div data-palette="v2" className={`qrow ${accentTone}${onOpen ? ' clickable' : ''}`} onClick={click}>
       <i className={`bar ${accentTone}`} />
       <span className={`rank ${rankTone}`}>{rank}</span>
       <div className="main">

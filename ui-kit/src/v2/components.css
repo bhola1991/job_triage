@@ -23,8 +23,15 @@
   color: var(--text); padding: 9px 14px; }
 .btn2:disabled { opacity: .4; cursor: not-allowed; }
 .btn2.sm { padding: 6px 10px; font-size: 12px; }
+/* Every emphasis x tone pair a consumer can ask for has a rule. Only three of
+   these existed, and emphasis defaults to outline -- so <ActionButton tone="go">,
+   the primary call to action, matched nothing and rendered identically to
+   tone="neutral". selfcheck could not see it: it only ever passes fill. */
 .btn2.fill.go { background: var(--go); border-color: var(--go); color: var(--on-go); font-weight: 700; }
 .btn2.fill.due { background: var(--due); border-color: var(--due); color: var(--on-due); font-weight: 700; }
+.btn2.fill.awaiting { background: var(--awaiting); border-color: var(--awaiting); color: var(--ink); font-weight: 700; }
+.btn2.outline.go { background: var(--go-tint); border-color: var(--go-line); color: var(--go); }
+.btn2.outline.due { background: var(--due-tint); border-color: var(--due-line); color: var(--due); }
 .btn2.outline.awaiting { background: var(--awaiting-tint); border-color: var(--awaiting-line); color: var(--awaiting); }
 .btn2-row { display: flex; gap: 7px; flex-wrap: wrap; align-items: center; }
 
@@ -43,6 +50,10 @@
 /* queue row */
 .qrow { display: grid; grid-template-columns: 5px 36px 1fr 150px 118px 196px; gap: 0 14px;
   align-items: center; padding: 14px 0; border-bottom: 1px solid var(--hair); }
+/* Both themes wash the cell; dark states the accent on the edge as well. The
+   app has done this since the v2 palette landed; the kit only had the edge. */
+.qrow.go { background: var(--go-row); } .qrow.due { background: var(--due-row); }
+.qrow.closing { background: var(--closing-row); } .qrow.awaiting { background: var(--awaiting-row); }
 .qrow .bar { height: 40px; }
 .qrow .bar.go { background: var(--go); } .qrow .bar.due { background: var(--due); }
 .qrow .bar.closing { background: var(--closing); } .qrow .bar.awaiting { background: var(--awaiting); }
