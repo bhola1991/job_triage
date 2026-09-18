@@ -16,7 +16,7 @@ const cases = [
   [
     UI.QueueRow,
     {
-      accentTone: 'go', rank: 72, rankTone: 'go',
+      accentTone: 'go', rank: 72,
       title: 'Forward Deployed Engineer', subtitle: 'Sarvam AI · Bangalore · posted role',
       facts: [{ label: 'fit / reach', value: '82 · 54' }, { label: 'posted', value: '4d ago' }],
       actions: h(UI.ActionButton, { tone: 'go', emphasis: 'fill' }, 'Apply'),

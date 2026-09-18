@@ -58,8 +58,10 @@
 .qrow .bar.go { background: var(--go); } .qrow .bar.due { background: var(--due); }
 .qrow .bar.closing { background: var(--closing); } .qrow .bar.awaiting { background: var(--awaiting); }
 .qrow .bar.neutral { background: var(--closed); }
-.qrow .rank { font-family: var(--mono); font-size: 17px; }
-.qrow .rank.go { color: var(--go); } .qrow .rank.neutral { color: var(--text); }
+/* No accent on the rank: colour is an instruction and a score is not one (see
+   the colour law in CLAUDE.md §1). The bar and the row's wash already say what
+   to do, and a green rank on a closing row put two accents on one row. */
+.qrow .rank { font-family: var(--mono); font-size: 17px; color: var(--text); }
 .qrow .main { min-width: 0; }
 .qrow .main .t { font-size: 14px; } .qrow .main .s { font-size: 12px; color: var(--muted); }
 .qrow .fact .eb { font-family: var(--mono); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }

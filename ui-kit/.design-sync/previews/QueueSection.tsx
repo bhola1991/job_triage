@@ -10,7 +10,6 @@ export function Overdue() {
         <QueueRow
           accentTone="due"
           rank={70}
-          rankTone="neutral"
           title="AI Operations Lead"
           subtitle="Observe.AI · Bangalore"
           facts={[{ label: 'silent for', value: '11 days', tone: 'due' }, { label: 'sent', value: '08-31' }]}
@@ -33,7 +32,6 @@ export function DoTheseFirst() {
         <QueueRow
           accentTone="go"
           rank={72}
-          rankTone="go"
           title="Forward Deployed Engineer"
           subtitle="Sarvam AI · Bangalore · posted role"
           facts={[{ label: 'fit / reach', value: '82 · 54' }, { label: 'posted', value: '4d ago' }]}
@@ -48,7 +46,6 @@ export function DoTheseFirst() {
         <QueueRow
           accentTone="awaiting"
           rank={63}
-          rankTone="neutral"
           title="Platform Ops Manager"
           subtitle="Zeta · Bangalore · applied"
           facts={[{ label: 'state', value: 'in review', tone: 'awaiting' }, { label: 'sent', value: '4d ago' }]}
@@ -71,7 +68,6 @@ export function ClosingSoon() {
         <QueueRow
           accentTone="closing"
           rank={65}
-          rankTone="go"
           title="Staff Solutions Engineer"
           subtitle="Portkey · Remote · posted role"
           facts={[{ label: 'fit / reach', value: '70 · 61' }, { label: 'posted', value: '24d ago', tone: 'closing' }]}

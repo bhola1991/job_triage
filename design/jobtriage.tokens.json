@@ -187,7 +187,7 @@
         "description": "Whole-row tint for a go row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
       },
       "due": {
-        "value": "#E2685C",
+        "value": "#EB978E",
         "type": "color",
         "description": "Overdue: past the follow-up date"
       },
@@ -212,7 +212,7 @@
         "description": "Whole-row tint for a due row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
       },
       "closing": {
-        "value": "#D9A441",
+        "value": "#DEAF57",
         "type": "color",
         "description": "Closing: posting about to be filled"
       },
@@ -232,7 +232,7 @@
         "description": "Whole-row tint for a closing row. About a quarter of the light theme's weight: the same tint reads far louder on a near-black ground, and it sits behind the 5px accent edge rather than instead of it"
       },
       "awaiting": {
-        "value": "#57AEC9",
+        "value": "#75BDD3",
         "type": "color",
         "description": "Sent, and their move"
       },
@@ -316,7 +316,7 @@
         "description": "Hints and eyebrow labels"
       },
       "go": {
-        "value": "#157F42",
+        "value": "#147A3F",
         "type": "color",
         "description": "Do this now. The only filled button"
       },
@@ -341,7 +341,7 @@
         "description": "Whole-row tint for a go row"
       },
       "due": {
-        "value": "#C33B2E",
+        "value": "#BE3A2D",
         "type": "color",
         "description": "Overdue: past the follow-up date"
       },

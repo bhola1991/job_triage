@@ -9,9 +9,9 @@
   --text: #EDF3EF; --muted: #93A597; --dim: #8A9C8E;
 
   --go: #56C88A; --on-go: #0A1B0F; --go-line: #2C5540; --go-tint: rgba(86,200,138,.12);
-  --due: #E2685C; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: rgba(226,104,92,.14);
-  --closing: #D9A441; --closing-line: #5A4620; --closing-tint: rgba(217,164,65,.13);
-  --awaiting: #57AEC9; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
+  --due: #EB978E; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: rgba(226,104,92,.14);
+  --closing: #DEAF57; --closing-line: #5A4620; --closing-tint: rgba(217,164,65,.13);
+  --awaiting: #75BDD3; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
   --closed: #3E4F44;
 
   /* The whole-row wash, at roughly a quarter of the light theme's weight: the
@@ -33,8 +33,8 @@
   --ink: #F1F5F2; --panel: #FFFFFF; --panel2: #E9EFEB; --line: #D5DFD8; --hair: #E6ECE8;
   --text: #18211C; --muted: #4F5E56; --dim: #5C6B63;
 
-  --go: #157F42; --on-go: #FFFFFF; --go-line: #A8D8BC; --go-chip: #DCF0E4; --go-row: #E9F4ED;
-  --due: #C33B2E; --on-due: #FFFFFF; --due-line: #EEBAB4; --due-chip: #FBE4E1; --due-row: #FBECEA;
+  --go: #147A3F; --on-go: #FFFFFF; --go-line: #A8D8BC; --go-chip: #DCF0E4; --go-row: #E9F4ED;
+  --due: #BE3A2D; --on-due: #FFFFFF; --due-line: #EEBAB4; --due-chip: #FBE4E1; --due-row: #FBECEA;
   --closing: #8A6314; --closing-line: #E0C98F; --closing-chip: #F7EBD2; --closing-row: #FAF1DF;
   --awaiting: #1E6C86; --awaiting-line: #A9D3E0; --awaiting-chip: #DCEFF5; --awaiting-row: #E6F2F7;
 

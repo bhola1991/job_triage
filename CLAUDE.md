@@ -38,7 +38,7 @@ answering "what colour is X".
 ```css
 --go:#56C88A;      /* v2 */
 --signal:#56C88A;  /* v1 alias — same hue */
---warn:#E2685C;    /* == --due */
+--warn:#EB978E;    /* == --due */
 --live:#56C88A;    /* == --go */
 ```
 
@@ -110,6 +110,29 @@ different shadow colour, this file was missing `shadow-md` and the four dark
 `--*-tint` names its own `components.css` reads — so every light-theme pill,
 outline button and callout rendered a dark translucent wash on white.
 
+### Accent-on-tint contrast is a constraint, not a preference
+
+Every accent is also used as **text on its own tint** — that is what `.pill2`,
+`.callout` and `.btn2.outline` do — so each pair has to clear WCAG AA (4.5:1;
+the type is 11-13px, so the 3:1 large-text threshold does not apply).
+
+Five of the eight pairs did not, and nothing noticed until 2026-09-18: light
+`--go` 4.25, light `--due` 4.34, dark `--closing` 4.18, dark `--awaiting` 3.78,
+dark `--due` 3.08. So the accents moved, holding hue and saturation and shifting
+only lightness — the light pair by ~1%, imperceptibly; the dark three visibly.
+
+Two things worth knowing before touching these again:
+
+- **The tints did not move, deliberately.** They are the backgrounds the ratio
+  is measured against; lightening them gives the contrast straight back.
+- **Dark `--due` could not be fixed by the wash at all.** It measured 3.59:1
+  against `--panel2` with *no* tint, so the accent itself had to change. If you
+  are tempted to restore `#E2685C`, that is why you cannot.
+
+`scripts/selfcheck-tokens.js` now asserts all eight, against the worst surface
+each can land on (`--panel2` in dark, the chip in light). Dark `--go` passes at
+exactly **4.50:1** — it has no margin, so treat it as a floor.
+
 ### The dark surface ramp is tuned, not arbitrary
 
 `--ink → --panel → --panel2 → --line` are spaced to be visibly distinct while
@@ -141,10 +164,10 @@ Four accents, one instruction each (`index.html:13-23`, `design/README.md`):
 
 | Token | Dark | Light | Means |
 | --- | --- | --- | --- |
-| `--go` | `#56C88A` | `#157F42` | Do this now. The only fill-weight button. |
-| `--due` | `#E2685C` | `#C33B2E` | Overdue — past the follow-up date. |
-| `--closing` | `#D9A441` | `#8A6314` | Posting old enough to be filled soon. |
-| `--awaiting` | `#57AEC9` | `#1E6C86` | Sent; the next move is theirs. |
+| `--go` | `#56C88A` | `#147A3F` | Do this now. The only fill-weight button. |
+| `--due` | `#EB978E` | `#BE3A2D` | Overdue — past the follow-up date. |
+| `--closing` | `#DEAF57` | `#8A6314` | Posting old enough to be filled soon. |
+| `--awaiting` | `#75BDD3` | `#1E6C86` | Sent; the next move is theirs. |
 | `--closed` | `#3E4F44` | `#B6C4BC` | Grey = the absence of an instruction. |
 
 Three rules a Figma import must not violate:

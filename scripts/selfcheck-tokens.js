@@ -90,5 +90,39 @@ for (const t of [...used].sort()) {
 }
 if (!bad) console.log(`  ok    all ${used.size} tokens components.css reads resolve in both themes`);
 
+/* Accent-as-text on its own tint must clear WCAG AA (4.5:1 for the 11-13px this
+   is used at). It did not, in both themes, and nothing noticed: light --go was
+   4.25 and --due 4.34, dark --due 3.08 and --awaiting 3.78 against the lightest
+   surface they sit on. Dark --due could not be fixed by changing the wash -- it
+   measured 3.59 even with no tint at all -- so the accents themselves moved.
+   Measured against the worst surface each can land on, which is --panel2 in
+   dark (the lightest) and the chip itself in light. */
+console.log('\naccent-on-tint contrast (AA needs 4.5:1):');
+const srgb = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+const rgb = (hex) => { const h = hex.replace('#', ''); return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)); };
+const lum = (hex) => { const [r, g, b] = rgb(hex); return 0.2126 * srgb(r) + 0.7152 * srgb(g) + 0.0722 * srgb(b); };
+const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+// Flatten a translucent tint onto the surface behind it.
+const flatten = (value, surface) => {
+  const m = value.match(/rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([.\d]+)\)/);
+  if (!m) return value;                                  // already opaque
+  const [, r, g, b, a] = m, al = parseFloat(a), base = rgb(surface);
+  const mix = [r, g, b].map((c, i) => Math.round(+c * al + base[i] * (1 - al)));
+  return '#' + mix.map((c) => c.toString(16).padStart(2, '0').toUpperCase()).join('');
+};
+const AA = 4.5;
+for (const [label, block, surface] of [['dark', kitDark, '--panel2'], ['light', kitLight, null]]) {
+  const t = decls(block);
+  for (const tone of ['go', 'due', 'closing', 'awaiting']) {
+    const fg = t[tone], tint = t[`${tone}-tint`];
+    if (!fg || !tint) { fail(`${label}: --${tone} or --${tone}-tint missing`); continue; }
+    const bg = flatten(tint, surface ? decls(block)[surface.replace('--', '')] : '#FFFFFF');
+    const r = ratio(fg, bg);
+    const ok = r >= AA;
+    if (!ok) fail(`${label}: --${tone} ${fg} on its tint (${bg}) is ${r.toFixed(2)}:1, needs ${AA}:1`);
+    else console.log(`  ok    ${label} --${tone} ${fg} on ${bg} = ${r.toFixed(2)}:1`);
+  }
+}
+
 console.log(bad ? `\n${bad} problem(s). A token change is four edits, in one commit: design/jobtriage.tokens.json,\nui-kit/src/v2/tokens.css, index.html's two :root blocks, and legal.css.` : '\nALL PASS');
 process.exit(bad ? 1 : 0);
