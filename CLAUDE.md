@@ -2,7 +2,8 @@
 
 Guidance for working on this codebase, and for importing Figma designs through the
 Figma MCP server. Every claim below was checked against the files on
-2026-09-15; file:line references are the authority, not this summary.
+2026-09-15, and §§1, 2, 7 and 8 again on 2026-09-18; file:line references are
+the authority, not this summary.
 
 ---
 
@@ -386,6 +387,7 @@ schema.sql  billing.sql             Supabase tables, RLS, credit functions, usag
 supabase/functions/api/index.ts     Deno edge function: search, scoring, payments.
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
+.claude/settings.json               Shared Claude Code config: the TypeSafe plugin. Committed on purpose.
 job-triage.tokens.json              ⚠ STALE v1 tokens. Not the source of truth.
 *.dc.html  canvas.json              ⚠ Superseded v1 artboards (ground #0E1411).
 design/
@@ -419,6 +421,17 @@ format, loading `./support.js`.
 
 - **`design/support.js` is gitignored on purpose** (root `.gitignore`: *"Design-tool exports… these are the runtime"*). A `.dc.html` will not render until it is supplied locally. This is expected, not a bug.
 - **Artboards hardcode hex, not tokens.** Verified: the root artboards contain 0 `var(--…)` and 75–191 hex literals each. They are static snapshots and will **not** pick up a token change. Never treat them as a live design source.
+
+### `.claude/` — shared Claude Code config
+
+`.claude/settings.json` is **tracked on purpose**. It declares the `typesafe-ai`
+marketplace and enables the `typesafe` plugin, so working on this repo brings
+that skill with it rather than every machine being set up by hand.
+
+- **Cloning does not finish the job.** Trusting the folder adds the marketplace with no prompt, but Claude Code will not auto-install a plugin that comes from an external source: it reports the plugin as not installed and prints the command. Run `claude plugin install typesafe@typesafe-ai` once per machine. `claude plugin disable typesafe@typesafe-ai` opts out locally without touching the repo.
+- **Keep that file to plugin declarations.** Everything in it reaches everyone who clones — no `env`, no `permissions`, no `hooks`, no secrets. Personal overrides belong in `.claude/settings.local.json`.
+- **`.claude/` is not ignored wholesale.** `.gitignore` names only `.claude/*.local.json` and `.claude/launch.json` as per-machine, so a project skill or agent added under `.claude/` **can** be committed — and a machine-local file nobody thought to name shows up as untracked rather than being silently swallowed. It was ignored wholesale until 2026-09-18, which is why nothing about how this project is worked on could be shared through the repo.
+- **What the plugin is**: one MIT-licensed skill of vendor documentation for the TypeSafe API — no hooks, no MCP servers. It carries an always-on context cost in every session; run `claude plugin details typesafe@typesafe-ai` for the current figures rather than trusting a number written here. It fetches live docs from `docs.typesafe.ai` when it fires, so it is no use offline.
 
 ---
 
