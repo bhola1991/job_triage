@@ -19,6 +19,72 @@
 
 <h2>Your data</h2>
 <p>You can export or delete your data yourself inside the app. For anything else, email us. See the <a href="privacy.html">privacy policy</a>.</p>
+
+<h2>Send a message</h2>
+<form id="contact-form" class="card" novalidate>
+  <div style="margin-bottom:12px">
+    <label for="cf-name" style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Name</label>
+    <input id="cf-name" name="name" type="text" autocomplete="name"
+      style="width:100%;padding:8px 10px;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:6px;font:inherit">
+  </div>
+  <div style="margin-bottom:12px">
+    <label for="cf-email" style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Email</label>
+    <input id="cf-email" name="email" type="email" required autocomplete="email"
+      style="width:100%;padding:8px 10px;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:6px;font:inherit">
+  </div>
+  <div style="margin-bottom:12px">
+    <label for="cf-message" style="display:block;margin-bottom:4px;color:var(--muted);font-size:13px">Message</label>
+    <textarea id="cf-message" name="message" required rows="5" maxlength="2000"
+      style="width:100%;padding:8px 10px;background:var(--ink);color:var(--text);border:1px solid var(--line);border-radius:6px;font:inherit;resize:vertical"></textarea>
+  </div>
+  <div style="position:absolute;left:-9999px" aria-hidden="true">
+    <label for="cf-website">Website</label>
+    <input id="cf-website" name="website" type="text" tabindex="-1" autocomplete="off">
+  </div>
+  <button type="submit"
+    style="background:var(--go);color:#0B140F;border:none;border-radius:6px;padding:9px 18px;font:inherit;font-weight:600;cursor:pointer">Send</button>
+  <p id="cf-status" role="status" style="margin:10px 0 0;font-size:13px"></p>
+</form>
 </main>
 <footer>Job Triage · Owned and operated by Soumyadip Banerjee, Kolkata, India · <a href="mailto:banerjeesoumyadip1991@gmail.com">banerjeesoumyadip1991@gmail.com</a></footer>
+<script>
+document.getElementById('contact-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const status = document.getElementById('cf-status');
+  const button = form.querySelector('button[type="submit"]');
+  const payload = {
+    name: form.name.value,
+    email: form.email.value,
+    message: form.message.value,
+    website: form.website.value,
+  };
+
+  button.disabled = true;
+  status.style.color = 'var(--muted)';
+  status.textContent = 'Sending…';
+
+  try {
+    const res = await fetch('/api/contact', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.ok) {
+      status.style.color = 'var(--go)';
+      status.textContent = 'Message sent — thanks, we’ll reply within 2 working days.';
+      form.reset();
+    } else {
+      status.style.color = 'var(--due)';
+      status.textContent = 'Could not send your message. Please email us directly instead.';
+    }
+  } catch {
+    status.style.color = 'var(--due)';
+    status.textContent = 'Could not send your message. Please email us directly instead.';
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
 </body></html>

@@ -1,7 +1,9 @@
 {
   // Static-asset deploy for the app: index.html, config.js, manifest.json etc.
-  // at the repo root. No Worker script -- there is no server-side code here,
-  // per README ("One HTML file. No build step, no dependencies, no backend").
+  // at the repo root, fronted by the Worker script in src/index.js (added for
+  // POST /api/contact; everything else falls through to env.ASSETS.fetch()).
+  // The app itself is still the single-file, no-backend thing the README
+  // describes -- src/index.js is deploy plumbing, not part of the app.
   //
   // This file did not exist before 2026-09-17. Every earlier successful build
   // relied on `wrangler deploy`'s interactive wizard auto-generating an
@@ -11,11 +13,14 @@
   // `wrangler versions upload`, which has no such auto-detect fallback and
   // fails immediately without a real file to read. This is that file.
   "name": "jobtriage",
-  "compatibility_date": "2026-09-16",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-18",
   "observability": {
     "enabled": true
   },
   "assets": {
-    "directory": "."
+    "directory": ".",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"]
   }
 }
