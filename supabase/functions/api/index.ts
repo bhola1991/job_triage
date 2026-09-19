@@ -5,11 +5,12 @@
 // secrets. Nothing secret is ever returned to the browser.
 //
 // Secrets (supabase secrets set ...):
-//   DEEPSEEK_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+//   DEEPSEEK_API_KEY, TYPESAFE_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 //   optional job sources: ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { deepseek } from "../_shared/api-clients.ts";
 
 // Prices are server-side only; the browser sends just the pack id. paise: ₹1 = 100.
 // A credit sells for ₹0.80 (Pro) to ₹0.99 (Starter).
@@ -541,20 +542,14 @@ Deno.serve(async (req) => {
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
-          const r = await fetch("https://api.deepseek.com/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
-            body: JSON.stringify({
-              model: "deepseek-chat", temperature: 0.2,
-              max_tokens: Math.min(Number(b.max_tokens) || 1400, 4000),
-              messages: [{ role: "user", content: prompt }],
-            }),
+          // A failed or malformed call must not throw past here: the credit is
+          // already taken and the outer handler refunds nothing. Fail soft into
+          // the !text branch below, which refunds.
+          const d: Any = await deepseek().chat.completions.create({
+            model: "deepseek-chat", temperature: 0.2,
+            max_tokens: Math.min(Number(b.max_tokens) || 1400, 4000),
+            messages: [{ role: "user", content: prompt }],
           }).catch(() => null);
-          // A truncated or non-JSON 200 rejected here, after the credit was
-          // taken, and the outer handler refunds nothing -- so it fell through to
-          // "Server error" having charged for nothing. Fail soft into the !text
-          // branch below, which refunds.
-          const d = r && r.ok ? await r.json().catch(() => null) : null;
           const text = (d?.choices?.[0]?.message?.content || "").trim();
           if (!text) {                       // their call failed, so it shouldn't cost them
             await refund(user, s, "llm", COST.llm);
