@@ -8,6 +8,14 @@ const src=[
   grab(/const httpUrl = [^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
 ].join('\n');
+/* Declared in index.html well above the slice grabbed here, so it has to be
+   supplied like any other outside-the-slice global. Its value is irrelevant to
+   what this checks -- scoreBatch is stubbed -- but its absence is not: an
+   undefined name throws inside the batch, and scoreAndCut is built to swallow
+   a throwing batch and keep the rows unscored. So a missing global does not
+   surface as "TOK_CAP is not defined", it surfaces as every job silently going
+   unscored, which is exactly how it would look in production. */
+const TOK_CAP = 4000;
 let DBJOBS=[{url:'https://x/old'}], AGE={}, CLAUDE=null, FEEDS={};
 const P=()=>({jobs:DBJOBS}), ageOf=j=>AGE[j.url]??null, setPosted=(j,d)=>{j.posted=d;};
 const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Error('network'); return f||null; };

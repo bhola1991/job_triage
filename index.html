@@ -684,6 +684,18 @@ function ageLabel(j){
 const STAGES = ["new","sent","live","closed"];
 const FOLLOWUP_DAYS = 7;
 
+/* Every LLM call in this file uses the same number, and deliberately so. A thinking model
+   spends tokens reasoning before it answers and those come out of the same
+   ceiling, so a budget sized for the reply alone truncates mid-answer -- and a
+   truncated scoring reply is the expensive failure: grabJSON throws, the batch
+   is kept unscored, and the credit was already spent. max_tokens is a ceiling
+   and not a reservation, so headroom costs nothing unless it is used; how long
+   an answer should actually be is the prompt's job, not this number's. The
+   server caps at 4000 (supabase/functions/api/index.ts), so nothing larger has
+   any effect. These were 700-3000 when the model did not think. */
+const TOK_CAP = 4000;
+
+
 /* ═══ state ═══
    Multi-profile. Each person who uses this gets their own entry:
    their parsed profile, their chosen track, their own job list. */
@@ -1630,7 +1642,7 @@ Rules:
 - why: max 12 words, specific about why this is the right desk. No flattery, no restating their title.
 - At most 8, best first, recruiting ahead of hiring side when equally good.
 - Nobody suitable is a valid answer: {"picks":[]}
-- Use only the numbered list above. Never invent a person or a title.`, 900);
+- Use only the numbered list above. Never invent a person or a title.`, TOK_CAP);
   const parsed=grabJSON(txt);
   const picks=Array.isArray(parsed)?parsed:(parsed.picks||[]);
   const out=[];
@@ -1664,7 +1676,7 @@ const LLM = {
     keyPrefix:"sk-",
     where:"platform.deepseek.com → API keys",
     headers:k=>({"Content-Type":"application/json","Authorization":"Bearer "+k}),
-    body:(prompt,mt)=>({model:"deepseek-v4-pro",max_tokens:mt||4000,
+    body:(prompt,mt)=>({model:"deepseek-v4-pro",max_tokens:mt||TOK_CAP,
       reasoning_effort:"high",thinking:{type:"enabled"},
       messages:[{role:"user",content:prompt}]}),
     read:d=>((d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"").trim()
@@ -1677,7 +1689,7 @@ const LLM = {
     headers:k=>{const h={"Content-Type":"application/json"};
       if(k){h["x-api-key"]=k;h["anthropic-version"]="2023-06-01";
         h["anthropic-dangerous-direct-browser-access"]="true";} return h;},
-    body:(prompt,mt)=>({model:"claude-sonnet-4-6",max_tokens:mt||1400,
+    body:(prompt,mt)=>({model:"claude-sonnet-4-6",max_tokens:mt||TOK_CAP,
       messages:[{role:"user",content:prompt}]}),
     read:d=>(d.content||[]).filter(x=>x.type==="text").map(x=>x.text).join("").trim()
   }
@@ -1686,7 +1698,7 @@ const LLM = {
 async function claude(prompt, maxTok){
   // No key of their own but signed in: the server calls DeepSeek with ours and takes a credit.
   // search_id ties the call to the board search it belongs to, for the usage ledger.
-  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||1400, search_id:SEARCH_ID})).text;
+  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||TOK_CAP, search_id:SEARCH_ID})).text;
   const cfg = LLM[PROV] || LLM.deepseek;
   // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
   if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
@@ -1812,7 +1824,7 @@ PROFILE:
 ${String(raw).slice(0,16000)}`;
 
 async function extractProfile(raw){
-  const txt = await claude(EXTRACT_PROMPT(raw), 2000);
+  const txt = await claude(EXTRACT_PROMPT(raw), TOK_CAP);
   const p = grabJSON(txt);
   p.name = p.name || 'Unnamed';
   // Google's countryCode wants "in" -- not "India", and not "IN".
@@ -1883,7 +1895,7 @@ Give 16 to 24 companies. Rules that matter:
 
 5. "odds" is about whether an approach from THIS person converts, considering their gaps, not about company quality.
 
-6. Real companies only, named exactly. No placeholders, no invented names, no "various startups". If unsure a company exists, leave it out.`, 3000);
+6. Real companies only, named exactly. No placeholders, no invented names, no "various startups". If unsure a company exists, leave it out.`, TOK_CAP);
   const d = grabJSON(txt);
   const list = Array.isArray(d) ? d : (d.companies||[]);
   return list.filter(c=>c&&c.name).slice(0,24);
@@ -2034,7 +2046,7 @@ Be honest rather than encouraging. If this is a bad idea for them, say so in the
 If the request is vague, interpret it as the nearest real job family and name that in the label.
 For boards: give the registries where this specific field posts, not general job sites. Bare domains, no protocol.
 For mode: "permanent" for a salaried post (use this when unsure), "freelance" for project or contract work with several clients, "gig" for platform task work paid per task.
-Use ONLY what is in the profile. Do not invent experience.`, 1600);
+Use ONLY what is in the profile. Do not invent experience.`, TOK_CAP);
   const t = grabJSON(txt);
   t.id = (t.id||'custom')+'_'+Math.random().toString(36).slice(2,5);
   ['transfers','missing','titles','boards'].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; });
@@ -2307,7 +2319,7 @@ async function scoreBatch(batch, prof, track, maxTok){
     if(saneDate(b.j.posted)) o.posted=b.j.posted;
     return o;
   });
-  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||1400);
+  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||TOK_CAP);
   const parsed = grabJSON(txt);
   // Short keys, with the old long names still read in case the model uses them.
   const items = Array.isArray(parsed)?parsed:(parsed.r||parsed.results||[]);
@@ -2475,7 +2487,8 @@ async function scoreAndCut(jobs, prof, track){
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
-      const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, 120+part.length*110);
+      // Not sized per batch any more: reasoning does not scale with the row count.
+      const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, TOK_CAP);
       part.forEach((j,k)=>{
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
@@ -4252,7 +4265,7 @@ async function draftPitch(i,isChase){
   const prof=p.profile;
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   return draftMessage({
-    eyebrow:'Outreach', head:`${esc(j.title)} · ${esc(j.company)}`, rows:10, maxTok:1000,
+    eyebrow:'Outreach', head:`${esc(j.title)} · ${esc(j.company)}`, rows:10, maxTok:TOK_CAP,
     retry:()=>draftPitch(i,isChase),
     extras:[{id:'msgSave', label:'Save to notes', run:async(text)=>{
       j.notes=(j.notes?j.notes+' | ':'')+text;
@@ -4298,7 +4311,7 @@ async function draftInmail(i,ci){
   const c=listOf(j,'contacts')[ci]; if(!c) return;
   const prof=p.profile;
   return draftMessage({
-    eyebrow:'InMail draft', head:`${esc(c.name||'them')} · ${esc(j.company)}`, rows:8, maxTok:700,
+    eyebrow:'InMail draft', head:`${esc(c.name||'them')} · ${esc(j.company)}`, rows:8, maxTok:TOK_CAP,
     retry:()=>draftInmail(i,ci),
     extras: c.linkedin ? [{id:'msgOpen', label:'Open their profile',
       run:()=>{ if(httpUrl(c.linkedin)) window.open(c.linkedin,'_blank','noopener'); }}] : [],
