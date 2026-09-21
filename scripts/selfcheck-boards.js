@@ -7,6 +7,11 @@ const src=[
   grab(/const ATS = \{[\s\S]*?\n\};\n/), grab(/const stripTags[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
+  /* scoreAndCut writes flags through these now. It also swallows anything a
+     batch throws, by design -- so without them in the slice this file went on
+     passing its imports and reported every job unscored instead, which is
+     exactly what a missing global looks like from the outside. */
+  grab(/const FLAG_CODES = \{[\s\S]*?\nfunction addSpans[\s\S]*?\n}\n/),
 ].join('\n');
 /* Declared in index.html well above the slice grabbed here, so it has to be
    supplied like any other outside-the-slice global. Its value is irrelevant to
@@ -21,7 +26,7 @@ const P=()=>({jobs:DBJOBS}), ageOf=j=>AGE[j.url]??null, setPosted=(j,d)=>{j.post
 const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Error('network'); return f||null; };
 const claude=async(t)=>CLAUDE(t);
 let SCORES=null;
-const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); const o={}; batch.forEach(b=>{ const v=SCORES(b.j); if(v!=null) o[String(b.i)]={score:v,reach:50,conf:'high',reason:'r',flags:'',posted:null}; }); return o; };
+const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); const o={}; batch.forEach(b=>{ const v=SCORES(b.j); if(v!=null) o[String(b.i)]={score:v,reach:50,conf:'high',flags:[{code:'fit',fact:'go and postgres'}],posted:null}; }); return o; };
 const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
 eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts};');
@@ -57,6 +62,11 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  SCORES=j=>{ const i=+j.url.split('/').pop(); return i===29?null:(i%3===0?80:40); };
  const sc=await scoreAndCut(many,{},'t');
  ok(sc.kept.length===10 && sc.below===19 && sc.unscored.length===1 && sc.kept[0].ai_score==='80','scoreAndCut '+sc.kept.length+'/'+sc.below+'/'+sc.unscored.length);
+ // What actually lands on the row: flags as JSON, each with its fact, and no
+ // sentence anywhere. ai_reason is never written again.
+ const kf=JSON.parse(sc.kept[0].ai_flags);
+ ok(Array.isArray(kf) && kf[0].code==='fit' && kf[0].fact==='go and postgres','ai_flags carries code and fact '+sc.kept[0].ai_flags);
+ ok(!sc.kept[0].ai_reason,'no prose is written to the row');
  SCORES='fail';
  const sf=await scoreAndCut(many.slice(0,3),{},'t');
  ok(sf.kept.length===0 && sf.unscored.length===3,'scoring failure keeps batch unscored');

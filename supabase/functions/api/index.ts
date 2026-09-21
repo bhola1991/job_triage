@@ -637,7 +637,24 @@ Deno.serve(async (req) => {
         if (JSON.stringify({ posting, candidate: b.candidate || {} }).length > 20000) throw new Http(400, "posting too large");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
-          return json(await judge(posting, b.candidate || {}));
+          const out = await judge(posting, b.candidate || {});
+          /* Every other spend in this function writes a ledger row; this one
+             did not, so TypeSafe was the one vendor we paid with no record of
+             what for. `note` carries the model the call actually ran on --
+             the same trick as the DeepSeek rows, and the only way to find out
+             what "jev-latest" resolved to before pinning it.
+
+             No cost_inr: this is billed per judgment on a plan, not per token
+             at a list price we could multiply out, and a made-up number in a
+             column named cost is worse than an empty one. */
+          await logUsage([{
+            user_id: user, search_id: b.search_id ?? null,
+            kind: "llm", source: "typesafe", units: 1,
+            tokens_in: out.usage?.input_tokens ?? null,
+            tokens_out: out.usage?.output_tokens ?? null,
+            note: out.model,
+          }]);
+          return json(out);
         } catch (e) {
           if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
           throw new Http(502, "Judgment call failed. No credit was used.");

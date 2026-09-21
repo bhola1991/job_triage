@@ -380,3 +380,44 @@ end $$;
 
 revoke all on function public.delete_my_data() from public, anon;
 grant execute on function public.delete_my_data() to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- The outcome loop
+-- ---------------------------------------------------------------------------
+--
+-- "Log the outcome when someone acts on a job" needs no log. The outcome was
+-- always recorded -- stage is new/sent/live/closed and setStage stamps the
+-- dates -- it just had nowhere to meet the prediction, because the prediction
+-- lived inside a JSON blob that no query could reach into.
+--
+-- Now they are columns on the same row, so the loop closes with a view and no
+-- new writes, no second ledger and no further copy of anybody's data. What it
+-- answers is the question the matcher has to be judged on: of the jobs where
+-- we raised a given flag, how many did this person actually act on, and how
+-- many came back?
+--
+-- security_invoker means it runs as the caller, so row-level security on jobs
+-- scopes it to one person's own rows -- the same arrangement the usage views
+-- in billing.sql use. Tombstoned rows are counted on purpose: a job someone
+-- deleted is an outcome, and quite an informative one.
+
+create or replace view public.matcher_outcomes with (security_invoker = on) as
+select
+  fl.el ->> 'code'                                             as flag,
+  count(*)                                                     as judged,
+  count(*) filter (where j.stage in ('sent', 'live', 'closed')) as applied,
+  count(*) filter (where j.stage = 'live')                     as replied,
+  count(*) filter (where j.deleted)                            as discarded,
+  round(avg(j.ai_score), 1)                                    as avg_fit,
+  round(avg(j.ai_reachability), 1)                             as avg_reach
+from public.jobs j
+cross join lateral jsonb_array_elements(
+  -- ai_flags is text: a JSON array since the flags gained facts, a comma-
+  -- joined list of long names before that. Only the first shape is readable
+  -- here, and the older rows simply do not contribute.
+  case when left(btrim(coalesce(j.ai_flags, '')), 1) = '['
+       then j.ai_flags::jsonb
+       else '[]'::jsonb end
+) as fl(el)
+group by 1;

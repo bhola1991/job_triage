@@ -37,6 +37,10 @@ module.exports = {
     { name: 'LLM_TOK_CAP', file: 'supabase/functions/api/index.ts' },
     { name: 'DS_MODELS',  file: 'index.html',                        strings: true },
     { name: 'LLM_MODELS', file: 'supabase/functions/api/index.ts',   strings: true },
+    { name: 'FLAG_P',     file: 'index.html' },
+    { name: 'SPAN_FLOOR', file: 'index.html' },
+    { name: 'FLAG_CODES',       file: 'index.html',                          keys:  true },
+    { name: 'JUDGE_FLAG_CODES', file: 'supabase/functions/_shared/judge.ts', array: true },
   ],
 
   /* ── invariants ──────────────────────────────────────────────────────────
@@ -59,6 +63,14 @@ module.exports = {
            '        its own whitelist when we are paying. If the two maps drift, the same button scores\n' +
            '        on a different model depending on whose key paid, and nothing anywhere says so --\n' +
            '        the scores just stop being comparable between users.' },
+
+    { equal: ['FLAG_CODES', 'JUDGE_FLAG_CODES'],
+      why: 'The ten flag codes are written out twice: as keys in index.html, which decides what\n' +
+           '        DeepSeek may return and how each one is spelled in the UI, and as an array in\n' +
+           '        judge.ts, which decides what Jev is actually asked. Adding a code to one only is\n' +
+           '        silent in both directions -- a flag the model can raise that is never judged, or a\n' +
+           '        judgement whose answer nothing reads. Neither errors; both just quietly do less\n' +
+           '        than they look like they do.' },
   ],
 
   diagrams: [
@@ -202,7 +214,7 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '67df3b',
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '2ae7f9',
       note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
@@ -227,6 +239,18 @@ module.exports = {
     'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}',
       anchor: { file: 'index.html', re: 'else below\\+\\+' },
       note: 'The one place a paid-for row is thrown away. It was judged and it lost.' },
+    'sc.rescore': { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'runScoring \u2014 the Score button, batches of 6',
+      anchor: { file: 'index.html', fn: 'runScoring' }, section: 'scoring run',
+      note: 'The other scoring path, and the small one: a rescore of what is already in the list, guarded by {AUTO_MAX}. Because it is small it can afford a judgement per job; board search cannot.' },
+    'sc.judge':   { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeInto \u2014 {COST.llm} credit per JOB',
+      anchor: { file: 'index.html', fn: 'judgeInto' }, section: 'scoring run',
+      note: 'Per job, where a whole DeepSeek batch of {SCORE_BATCH} is also {COST.llm} credit \u2014 so judging is about twelve times the price of scoring, which is why only the rescore path does it. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe key is not reachable from the browser at all, and DeepSeek\'s own flags stand.' },
+    'sc.merge':   { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'mergeJudgment \u2014 Jev fires, DeepSeek explains',
+      anchor: { file: 'index.html', fn: 'mergeJudgment' }, section: 'scoring run',
+      note: 'Jev decides which flags are true above {FLAG_P}; the fact behind each comes from DeepSeek. A flag Jev raises that DeepSeek never mentioned shows with no fact rather than borrowing one from its neighbour.' },
+    'sc.span':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'bestSentence \u2014 the quote, found not asked for',
+      anchor: { file: 'index.html', fn: 'bestSentence' }, section: 'scoring run',
+      note: 'The evidence span is located in the browser by matching the fact against the posting, so it costs nothing, works with no account, and is a substring of the posting by construction rather than by the model\'s good behaviour. Below {SPAN_FLOOR} it returns nothing: an unquoted flag is honest, a confidently wrong quote is not.' },
     'sc.unscored': { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept unscored',
       anchor: { file: 'index.html', re: 'unscored\\.push\\(\\.\\.\\.part\\)' },
       note: 'The batch failed, but those rows were already paid for, so they are kept unjudged rather than lost. "Score new jobs" picks them up later.' },
@@ -347,6 +371,10 @@ module.exports = {
     { from: 'sc.grab', to: 'sc.keep', label: 'fit {MIN_FIT}+' },
     { from: 'sc.grab', to: 'sc.below', label: 'under {MIN_FIT}', style: 'drop' },
     { from: 'sc.batch', to: 'sc.unscored', label: 'batch threw', style: 'drop' },
+    { from: 'sc.rescore', to: 'sc.batch' },
+    { from: 'sc.rescore', to: 'sc.judge', label: 'one call per job' },
+    { from: 'sc.judge', to: 'sc.merge' }, { from: 'sc.grab', to: 'sc.merge' },
+    { from: 'sc.merge', to: 'sc.span' },
 
     { from: 'st.save', to: 'st.put' }, { from: 'st.put', to: 'st.localOnly', label: 'a key?' },
     { from: 'st.put', to: 'st.putLocal', label: 'always, first' },

@@ -430,6 +430,16 @@
     padding:2px 7px;border-radius:2px;border:1px solid var(--line);background:var(--panel2);
     color:var(--muted);white-space:nowrap}
   .pl.go{color:var(--go);background:var(--go-tint);border-color:var(--go-line)}
+  /* One flag, what in the posting makes it true, and the line it came from.
+     The quote is the point: a wrong one is obvious at a glance, which a wrong
+     sentence never was. */
+  .ev{margin-top:11px}
+  .ev-i{padding:9px 0;border-bottom:1px solid var(--hair)}
+  .ev-i:last-child{border-bottom:0;padding-bottom:0}
+  .ev-f{font-size:12.5px;color:var(--text);line-height:1.5;margin-top:6px}
+  .ev-s{font-size:12px;color:var(--muted);line-height:1.55;font-style:italic;
+    border-left:2px solid var(--line);padding-left:10px;margin-top:6px}
+  .ev-n{font-size:11.5px;color:var(--dim);line-height:1.5;margin-top:6px}
   .qh{display:grid;grid-template-columns:8px 86px minmax(0,1fr);gap:0 12px;align-items:baseline;
     padding:9px 0;border-bottom:1px solid var(--hair);font-size:12.5px}
   .qh i{width:5px;height:5px;border-radius:50%;background:var(--closed)}
@@ -2470,15 +2480,15 @@ ROLE SHAPES TO RULE OUT: ${(prof.wrong_shapes||[]).join('; ')||'none stated'}
 TODAY'S DATE IS ${today()}. Use it for any date reasoning below.
 
 Return ONLY a JSON object, no preamble, no markdown fences, using these short keys:
-{"r":[{"id":"...","s":0,"re":0,"c":"h","why":"...","f":["..."]}]}
+{"r":[{"id":"...","s":0,"re":0,"c":"h","f":[{"code":"loc","fact":"on-site Berlin, no remote"}]}]}
 
 For EACH job:
 - id: exactly as given
 - s (score): 0-100 FIT ONLY. How well does the described WORK match what this candidate can do and is targeting? Judge the work, not the title, and NOT whether they would win the process.
 - re (reachability): 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here.
 - c (confidence): "h" (real job description) | "m" (short snippet) | "l" (title and company only)
-- why: ONE sentence, max 12 words, specific. If fit and reachability diverge sharply, say why.
-- f (flags): codes from this set only, [] if none: fit=strong fit, sen_hi=seniority too high, sen_lo=seniority too low, cred=credential gated, shape=wrong role shape, loc=location ineligible, thin=thin data, comp=high competition, open=non-traditional friendly, rare=rare combination fit
+- f (flags): the codes that apply, [] if none. Each is an object: "code" from the set below, and "fact" -- the specific thing in THIS posting that makes the code true, max 10 words, lifted from what the posting actually says rather than generalised. "on-site Berlin, no remote" is a fact; "location mismatch" is just the code again in longer words. If you cannot point at something in the text, do not raise the flag.
+  Codes: fit=strong fit, sen_hi=seniority too high, sen_lo=seniority too low, cred=credential gated, shape=wrong role shape, loc=location ineligible, thin=thin data, comp=high competition, open=non-traditional friendly, rare=rare combination fit
 - p (posted): ONLY for a job given WITHOUT a "posted" value, and only when its text carries evidence of WHEN it was posted: the window that evidence allows, as {"from":"YYYY-MM-DD","to":"YYYY-MM-DD"}. Otherwise leave the p key out entirely.
 
 Rules:
@@ -2678,6 +2688,151 @@ const FLAG_CODES = {fit:'strong_fit', sen_hi:'seniority_too_high', sen_lo:'senio
   shape:'wrong_role_shape', loc:'location_ineligible', thin:'thin_data', comp:'high_competition',
   open:'non_traditional_friendly', rare:'rare_combination_fit'};
 const CONF_CODES = {h:'high', m:'medium', l:'low'};
+/* Long name -> short code as well as short -> short, so a model that answers
+   in the old vocabulary still lands on a known flag instead of inventing one. */
+const FLAG_SHORT = {};
+Object.keys(FLAG_CODES).forEach(k => { FLAG_SHORT[k] = k; FLAG_SHORT[FLAG_CODES[k]] = k; });
+
+/* Flags, facts and evidence.
+   The model used to return a sentence -- "strong on the work, but the location
+   rules you out" -- and the app printed it. A sentence is the one part of a
+   judgement that cannot be checked: it reads exactly as well when it is wrong,
+   and there is nothing in it to point at.
+
+   So the judgement is a flag, a fact and a span. The flag is the category, the
+   fact is what in THIS posting makes it true, and the span is the sentence the
+   fact came from, quoted. A wrong span is visible at a glance in a way that a
+   wrong sentence never is, and that visibility is the whole point: the claim
+   this product makes is that it will show its work.
+
+   The span is found here, in the browser, by looking for it -- not asked of a
+   model. That keeps it free, keeps it working with no account and no key, and
+   means the quote is a substring of the posting by construction rather than by
+   the model's good behaviour. */
+function normFlags(f){
+  if(!Array.isArray(f)) return [];
+  const out = [], seen = {};
+  f.forEach(x => {
+    const raw  = (x && typeof x === 'object') ? x.code : x;
+    const code = FLAG_SHORT[String(raw||'').trim()];
+    if(!code || seen[code]) return;
+    seen[code] = 1;
+    out.push({ code, fact: String(((x && typeof x === 'object') ? x.fact : '') || '').trim().slice(0,120) });
+  });
+  return out;
+}
+
+/* Jobs scored before this change carry a comma-joined string of long names and
+   no facts at all. They are not re-scored for it -- that would be a paid
+   rewrite of work already done -- so every reader goes through here. */
+function flagsOf(j){
+  const v = j && j.ai_flags;
+  if(!v) return [];
+  if(Array.isArray(v)) return normFlags(v);
+  const t = String(v).trim();
+  if(t.charAt(0) === '[') { try{ return normFlags(JSON.parse(t)); }catch(e){} }
+  return normFlags(t.split(','));
+}
+
+const FACT_STOP = new Set(('a an the and or of to in for on with at by from as is are be was were we you your our their its this that it will can must have has had not no there they he she'
+  ).split(' '));
+const factTok = s => (String(s||'').toLowerCase().match(/[a-z0-9+#]{2,}/g) || []).filter(w => !FACT_STOP.has(w));
+/* How much of the fact a sentence has to account for before it is called the
+   evidence. An empty span says "no quote for this"; a confidently wrong one
+   says "here is your proof" and points at the wrong line, which is worse than
+   saying nothing. So this errs high. */
+const SPAN_FLOOR = 0.5;
+const SPAN_MAX = 240;
+
+/* The sentence of `desc` that best supports `fact`, quoted exactly, or ''. */
+function bestSentence(desc, fact){
+  const text = String(desc||'');
+  const want = factTok(fact);
+  if(!text || !want.length) return '';
+  const wanted = Array.from(new Set(want));
+  let at = 0, best = null, bestScore = 0;
+  const re = /[^.!?\n]+[.!?]*/g;
+  let m;
+  while((m = re.exec(text))){
+    if(!m[0].trim()) continue;
+    const have = new Set(factTok(m[0]));
+    let hit = 0;
+    wanted.forEach(w => { if(have.has(w)) hit++; });
+    const score = hit / wanted.length;
+    if(score > bestScore){ bestScore = score; best = [m.index, m.index + m[0].length]; }
+    at = m.index;
+  }
+  if(!best || bestScore < SPAN_FLOOR) return '';
+  /* Indices in, one slice out. Trimming by moving the ends rather than by
+     trimming the result is what makes "this is a substring of the posting"
+     true by construction instead of by inspection. */
+  let [a, b] = best;
+  while(a < b && /\s/.test(text.charAt(a))) a++;
+  while(b > a && /\s/.test(text.charAt(b-1))) b--;
+  if(b - a > SPAN_MAX){
+    const cut = text.lastIndexOf(' ', a + SPAN_MAX);
+    b = cut > a ? cut : a + SPAN_MAX;
+  }
+  return b > a ? text.slice(a, b) : '';
+}
+
+/* Above which probability a Jev noul counts as "this flag is true". Jev
+   returns a number per flag precisely so the caller can keep its own
+   threshold rather than trusting one chosen elsewhere; this is ours. */
+const FLAG_P = 0.5;
+
+/* Jev is asked about one job at a time and charged for it, so it needs the
+   candidate in the same shape every time rather than the whole profile. */
+const candidateOf = prof => ({
+  name: prof.name || '', location: prof.location || '',
+  seniority: prof.seniority || '',
+  strengths: prof.strengths || [], gaps: prof.gaps || [],
+  wrong_shapes: prof.wrong_shapes || [],
+});
+
+/* One job, judged. Returns null rather than throwing: a judgement is an
+   improvement on the DeepSeek flags, not a precondition for having any, and a
+   scoring run that already cost money must not be lost to it. Null is also
+   what every local-only and own-key run gets, because the TypeSafe key lives
+   on the server and deliberately never reaches the browser. */
+async function judgeInto(j, cand){
+  if(!cloudNow()) return null;
+  try{
+    return await judgeJob({
+      title: String(j.title||''), company: String(j.company||''),
+      location: String(j.location||''),
+      description: String(j.description||'').slice(0,4000),
+    }, cand);
+  }catch(e){ console.warn('judgment skipped:', e && e.message); return null; }
+}
+
+/* Jev decides which flags are true; DeepSeek says what in the posting makes
+   each one true. A flag Jev raises that DeepSeek never mentioned still shows,
+   with no fact and no quote -- which is the honest rendering of "we think so
+   and cannot point at why", and better than borrowing a fact from a flag that
+   happens to sit next to it. */
+function mergeJudgment(dsFlags, judged){
+  if(!judged || !Array.isArray(judged.flags)) return dsFlags;
+  const fact = {};
+  dsFlags.forEach(f => { fact[f.code] = f.fact; });
+  const out = [];
+  judged.flags.forEach(f => {
+    if(!(Number(f.probability) >= FLAG_P)) return;
+    const code = FLAG_SHORT[String(f.code||'')];
+    if(!code) return;
+    out.push({ code, fact: fact[code] || '' });
+  });
+  return out;
+}
+
+/* Attach the quote to each flag. Runs over whatever the posting actually says,
+   so a job with no description simply has no spans -- which is honest, and is
+   what the thin_data flag is for. */
+function addSpans(flags, desc){
+  flags.forEach(f => { f.span = f.fact ? bestSentence(desc, f.fact) : ''; });
+  return flags;
+}
+
 async function scoreBatch(batch, prof, track, maxTok, tier){
   const jobs = batch.map(b=>{
     const o={ id:String(b.i),
@@ -2700,8 +2855,7 @@ async function scoreBatch(batch, prof, track, maxTok, tier){
     score:num(it.s??it.score,0),
     reach:num(it.re??it.reachability,45),
     conf:CONF_CODES[c]||c,
-    reason:String(it.why??it.reason??'').slice(0,220),
-    flags:(it.f||it.flags||[]).map(x=>FLAG_CODES[x]||x).join(','),
+    flags:normFlags(it.f??it.flags),
     posted:p&&typeof p==='object'?p:null }; });
   return out;
 }
@@ -2716,10 +2870,27 @@ async function runScoring(all, auto){
     const batch=targets.slice(i,i+SIZE);
     try{
       const res=await scoreBatch(batch,p.profile,p.track);
-      batch.forEach(b=>{ const r=res[String(b.i)]; if(!r) return;
-        const j=p.jobs[b.i];
+      /* One judgement per job, and one credit per judgement -- where a whole
+         batch of DeepSeek scoring is also one credit. This path is the small
+         one (a rescore, capped at AUTO_MAX) which is why it can carry that;
+         board search arrives with hundreds of rows at a time and is left on
+         DeepSeek's own flags deliberately. In parallel across the batch, not
+         across the run: SIZE calls in flight is enough to keep it quick
+         without turning a rescore into a burst of paid traffic. */
+      const cand=candidateOf(p.profile);
+      const judged=await Promise.all(batch.map(b=>{
+        const r=res[String(b.i)];
+        return r ? judgeInto(p.jobs[b.i], cand) : null;
+      }));
+      batch.forEach((b,k)=>{ const r=res[String(b.i)]; if(!r) return;
+        const j=p.jobs[b.i], jv=judged[k];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
-        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags;
+        /* rankOf keys on the long names, and Jev's choice already answers in
+           them, so this is a straight swap. When there is no judgement it is
+           DeepSeek's own reading -- dropping confidence entirely would move
+           every unjudged job in the ranking. */
+        j.ai_confidence = (jv && jv.confidence) || r.conf;
+        j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
         // Only ever fills a gap. A date from a feed outranks the model's
         // reading of the same posting, and re-scoring must not overwrite it.
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
@@ -2868,7 +3039,11 @@ async function scoreAndCut(jobs, prof, track){
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
-        j.ai_confidence=r.conf; j.ai_reason=r.reason; j.ai_flags=r.flags;
+        /* No judgement call here on purpose. A search lands hundreds of rows
+           and Jev is charged per row, so judging this path would cost more
+           than the search that produced it. */
+        j.ai_confidence=r.conf;
+        j.ai_flags=JSON.stringify(addSpans(r.flags, j.description));
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
         if(r.score>=MIN_FIT) kept.push(j); else below++;
       });
@@ -3481,9 +3656,24 @@ function jobDetail(j,i,acc){
   const stat=(k,v,c,cls)=>`<div class="qd-stat ${cls||''}"><div class="eyebrow">${k}</div>
       <div class="v">${v}</div><div class="c">${c||'&nbsp;'}</div></div>`;
 
-  const flags=String(j.ai_flags||'').split(',').map(s=>s.trim()).filter(Boolean);
-  const pill=(f,cls)=>`<span class="pl ${cls}">${esc(f.replace(/_/g,' '))}</span>`;
-  const forIt=flags.filter(f=>FLAGS_GOOD.includes(f)), against=flags.filter(f=>!FLAGS_GOOD.includes(f));
+  const flags=flagsOf(j);
+  const longOf=f=>String(FLAG_CODES[f.code]||f.code);
+  const pill=(f,cls)=>`<span class="pl ${cls}">${esc(longOf(f).replace(/_/g,' '))}</span>`;
+  const forIt=flags.filter(f=>FLAGS_GOOD.includes(longOf(f))), against=flags.filter(f=>!FLAGS_GOOD.includes(longOf(f)));
+  /* The flag is the claim, the fact is what makes it true here, the span is
+     where that came from. A flag with no fact still shows -- it is a real
+     judgement, just one nothing could be pointed at for. */
+  const evidence=(list,cls)=>`<div class="ev">${list.map(f=>`<div class="ev-i">
+      ${pill(f,cls)}
+      ${f.fact?`<div class="ev-f">${esc(f.fact)}</div>`:''}
+      ${f.span?`<div class="ev-s">\u201c${esc(f.span)}\u201d</div>`
+        :f.fact?`<div class="ev-n">No line in the posting matches this closely enough to quote.</div>`:''}
+    </div>`).join('')}</div>`;
+  /* Jobs scored before the model stopped writing sentences have one, and no
+     facts. Re-scoring them to fix that would be a paid rewrite of work already
+     done, so the old sentence is shown for those rows and only those. */
+  const legacy = !flags.some(f=>f.fact) && j.ai_reason
+    ? `<p class="qd-p">${esc(j.ai_reason)}</p>` : '';
 
   // Who did what, coloured by the same law: a reply is your move, a send is theirs.
   const kindAcc = k => k==='reply' ? 'go' : k==='sent' ? 'awaiting' : k==='chase' ? 'due' : '';
@@ -3511,12 +3701,13 @@ function jobDetail(j,i,acc){
 
       <div class="qd-two">
         <div><div class="qd-h">Why it scores this way</div>
-          <p class="qd-p">${j.ai_reason ? esc(j.ai_reason)
-            : scored ? 'No reasoning was saved with this score.'
-            : 'Not scored yet — scoring reads it against your background.'}</p>
-          ${forIt.length?`<div class="pills">${forIt.map(f=>pill(f,'go')).join('')}</div>`:''}</div>
+          ${legacy}
+          ${forIt.length ? evidence(forIt,'go')
+            : legacy ? ''
+            : scored ? `<p class="qd-p">Nothing counted in its favour beyond the two scores themselves.</p>`
+            : `<p class="qd-p">Not scored yet — scoring reads it against your background.</p>`}</div>
         <div><div class="qd-h">Against it</div>
-          ${against.length?`<div class="pills">${against.map(f=>pill(f,'')).join('')}</div>`
+          ${against.length ? evidence(against,'')
             :`<p class="qd-p">Nothing flagged against it.</p>`}</div>
       </div>
 
