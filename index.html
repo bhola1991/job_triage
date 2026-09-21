@@ -1153,6 +1153,13 @@ async function hosted(action, body){
   if(data && typeof data.balance==='number') showCredits(data);
   return data;
 }
+/* Jev (TypeSafe System One) judges confidence and the ten flag codes for one
+   job. DeepSeek still returns fit/reach/why/date; this is the `c` and `f`
+   part of the old scoring JSON. Not called from scoreBatch yet — that is the
+   next step; it exists so the server action has a browser caller. */
+async function judgeJob(posting, candidate){
+  return hosted('judge', { posting, candidate });
+}
 function loadScript(src){
   return new Promise((ok,no)=>{ if(document.querySelector(`script[src="${src}"]`)) return ok();
     const s=document.createElement('script'); s.src=src; s.onload=ok; s.onerror=()=>no(new Error("Couldn't load "+(/pdf/.test(src)?'the PDF reader':'checkout')+". Check your connection and try again.")); document.head.appendChild(s); });
@@ -1669,6 +1676,26 @@ Rules:
    documents a header for it. DeepSeek does not document browser use either way,
    so if DeepSeek fails with a network error and the key is definitely right,
    that is CORS, and the fix is to switch provider rather than to retry. */
+/* Two tiers of the same provider. Everything defaults to "pro"; only
+   board-search scoring asks for "flash", because that is the one call site with
+   volume -- a search of 300 jobs is 25 calls, every other feature is one call
+   per click. Flash is roughly a quarter the price per token for a task that is
+   structured scoring against a fixed rubric, which is where the trade is worth
+   taking; a judgement the user reads as prose (the direction verdict, an
+   outreach draft) is not.
+
+   The id is "deepseek-flash", not "deepseek-v4-flash". DeepSeek retired the V4
+   Flash weights on 2026-09-10 and now routes the v4 name to V4.1 Flash, which
+   is the same model this asks for by its current name -- but their changelog
+   calls that routing "temporary", so the alias is a dependency with an
+   expiry date and the canonical id is not.
+
+   Both tiers think before they answer, so both are sized by TOK_CAP. Note that
+   swapping tiers also swaps prompt caches: the sysPrompt prefix is cached per
+   model, so the first scoring call after a board search pays full price for a
+   prefix the search had already warmed on the other tier. */
+const DS_MODELS = { pro:"deepseek-v4-pro", flash:"deepseek-flash" };
+
 const LLM = {
   deepseek: {
     url:"https://api.deepseek.com/chat/completions",
@@ -1676,7 +1703,7 @@ const LLM = {
     keyPrefix:"sk-",
     where:"platform.deepseek.com → API keys",
     headers:k=>({"Content-Type":"application/json","Authorization":"Bearer "+k}),
-    body:(prompt,mt)=>({model:"deepseek-v4-pro",max_tokens:mt||TOK_CAP,
+    body:(prompt,mt,tier)=>({model:DS_MODELS[tier]||DS_MODELS.pro,max_tokens:mt||TOK_CAP,
       reasoning_effort:"high",thinking:{type:"enabled"},
       messages:[{role:"user",content:prompt}]}),
     read:d=>((d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"").trim()
@@ -1689,23 +1716,30 @@ const LLM = {
     headers:k=>{const h={"Content-Type":"application/json"};
       if(k){h["x-api-key"]=k;h["anthropic-version"]="2023-06-01";
         h["anthropic-dangerous-direct-browser-access"]="true";} return h;},
+    // No tier here on purpose: "flash" is a DeepSeek price tier, not a rubric
+    // change, and picking a smaller Anthropic model to mirror it would be a
+    // quality decision nobody has made. An own-key Anthropic user scores every
+    // batch on the same model they always did.
     body:(prompt,mt)=>({model:"claude-sonnet-4-6",max_tokens:mt||TOK_CAP,
       messages:[{role:"user",content:prompt}]}),
     read:d=>(d.content||[]).filter(x=>x.type==="text").map(x=>x.text).join("").trim()
   }
 };
 
-async function claude(prompt, maxTok){
+// tier is "flash" or undefined (= "pro"). The hosted path sends the NAME, never
+// a model id: the server holds our key, so it picks the model from its own
+// whitelist and an unknown tier falls back to pro rather than reaching DeepSeek.
+async function claude(prompt, maxTok, tier){
   // No key of their own but signed in: the server calls DeepSeek with ours and takes a credit.
   // search_id ties the call to the board search it belongs to, for the usage ledger.
-  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||TOK_CAP, search_id:SEARCH_ID})).text;
+  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||TOK_CAP, tier, search_id:SEARCH_ID})).text;
   const cfg = LLM[PROV] || LLM.deepseek;
   // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
   if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
   let res;
   try{
     res = await fetch(cfg.url,{method:"POST",headers:cfg.headers(KEY),
-      body:JSON.stringify(cfg.body(prompt,maxTok))});
+      body:JSON.stringify(cfg.body(prompt,maxTok,tier))});
   }catch(e){
     throw new Error(KEY
       ? "Couldn't reach "+cfg.label+". If the key is right, this is the browser being blocked \u2014 try the other provider."
@@ -2308,7 +2342,7 @@ const FLAG_CODES = {fit:'strong_fit', sen_hi:'seniority_too_high', sen_lo:'senio
   shape:'wrong_role_shape', loc:'location_ineligible', thin:'thin_data', comp:'high_competition',
   open:'non_traditional_friendly', rare:'rare_combination_fit'};
 const CONF_CODES = {h:'high', m:'medium', l:'low'};
-async function scoreBatch(batch, prof, track, maxTok){
+async function scoreBatch(batch, prof, track, maxTok, tier){
   const jobs = batch.map(b=>{
     const o={ id:String(b.i),
       title:String(b.j.title||''), company:String(b.j.company||''),
@@ -2319,7 +2353,7 @@ async function scoreBatch(batch, prof, track, maxTok){
     if(saneDate(b.j.posted)) o.posted=b.j.posted;
     return o;
   });
-  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||TOK_CAP);
+  const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||TOK_CAP, tier);
   const parsed = grabJSON(txt);
   // Short keys, with the old long names still read in case the model uses them.
   const items = Array.isArray(parsed)?parsed:(parsed.r||parsed.results||[]);
@@ -2488,7 +2522,12 @@ async function scoreAndCut(jobs, prof, track){
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
       // Not sized per batch any more: reasoning does not scale with the row count.
-      const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, TOK_CAP);
+      // Flash, not pro: this is the only scoring path that runs in bulk (a search
+      // of 300 jobs is 25 calls), and it is the one whose output is a number
+      // against a fixed rubric rather than prose anyone reads. Rescoring from the
+      // Score button stays on pro, so a list can hold scores from both -- see
+      // MIN_FIT below, which is applied to these flash scores at intake.
+      const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, TOK_CAP, 'flash');
       part.forEach((j,k)=>{
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged

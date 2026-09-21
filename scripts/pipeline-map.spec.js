@@ -32,7 +32,33 @@ module.exports = {
     { name: 'STRONG_FIT',          file: 'index.html' },
     { name: 'STRONG_REACH',        file: 'index.html' },
     { name: 'CLOSING_DAYS',        file: 'index.html' },
+    { name: 'TOK_CAP',             file: 'index.html' },
     { name: 'COST', file: 'supabase/functions/api/index.ts', object: true },
+    { name: 'LLM_TOK_CAP', file: 'supabase/functions/api/index.ts' },
+    { name: 'DS_MODELS',  file: 'index.html',                        strings: true },
+    { name: 'LLM_MODELS', file: 'supabase/functions/api/index.ts',   strings: true },
+  ],
+
+  /* ── invariants ──────────────────────────────────────────────────────────
+     Two constants in two runtimes that have to hold the same value, where
+     nothing in either file can tell. Unlike the rest of this spec these are not
+     about the diagram at all -- they are here because this is the one program
+     that already reads named constants out of every runtime, and a check with
+     no home does not get written. */
+  invariants: [
+    { equal: ['TOK_CAP', 'LLM_TOK_CAP'],
+      why: 'The browser sends max_tokens: TOK_CAP and the edge function clamps it to LLM_TOK_CAP.\n' +
+           '        If the server number is the smaller one every hosted call is silently trimmed below\n' +
+           '        what the app asked for, and the only symptom is truncated JSON that grabJSON throws on\n' +
+           '        -- after the credit was spent. If the app number is the smaller one the extra ceiling\n' +
+           '        on the server is dead. Move one, move both, in the same commit.' },
+
+    { equal: ['DS_MODELS', 'LLM_MODELS'],
+      why: 'The same tier name has to mean the same model on both paths. index.html picks the\n' +
+           '        model itself when the user brought their own key; the edge function picks it from\n' +
+           '        its own whitelist when we are paying. If the two maps drift, the same button scores\n' +
+           '        on a different model depending on whose key paid, and nothing anywhere says so --\n' +
+           '        the scores just stop being comparable between users.' },
   ],
 
   diagrams: [
@@ -43,7 +69,7 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-      intro: 'One POST, ten actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
+    intro: 'One POST, eleven actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
@@ -153,6 +179,9 @@ module.exports = {
     'sv.llm':     { diagram: 'server', group: 'actions', kind: 'credit', label: 'llm — {COST.llm} credit',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'llm' },
       note: 'The server sees an opaque prompt string. It does no scoring of its own and knows nothing about jobs.' },
+    'sv.judge':   { diagram: 'server', group: 'actions', kind: 'credit', label: 'judge — {COST.llm} credit',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'judge' },
+      note: 'The scoring prompt\'s c and f fields, moved off DeepSeek onto a typed System One judgment: one choice (confidence) and one noul per flag. One credit, refunded if Jev fails.' },
     'sv.apStart': { diagram: 'server', group: 'actions', kind: 'credit', label: 'apify_start — {COST.apifyQuery} per query',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_start' } },
     'sv.apStat':  { diagram: 'server', group: 'actions', kind: 'net', label: 'apify_status',
@@ -173,8 +202,8 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'a5ec87',
-      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds.' },
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '67df3b',
+      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
       note: 'Descriptions cut to 700 chars. A row that already has a trustworthy date sends it, so the model is never asked to guess one.' },
@@ -184,9 +213,9 @@ module.exports = {
     'sc.claude':  { diagram: 'scoring', group: 'browser', kind: 'branch', label: 'claude — own key, or ours?',
       anchor: { file: 'index.html', fn: 'claude' }, section: 'LLM',
       note: 'No local key plus cloud available means the hosted route and a credit. A local key goes direct to DeepSeek or Anthropic and costs nothing here.' },
-    'sc.deepseek': { diagram: 'scoring', group: 'server', kind: 'net', label: 'DeepSeek — deepseek-v4-pro',
-      anchor: { file: 'supabase/functions/api/index.ts', re: 'model: "deepseek-v4-pro"' },
-      note: 'The only model the server ever calls. Anthropic exists in this app but is client-side only, on the user\'s own key.' },
+    'sc.deepseek': { diagram: 'scoring', group: 'server', kind: 'net', label: 'DeepSeek — {LLM_MODELS.flash} here, {LLM_MODELS.pro} elsewhere',
+      anchor: { file: 'supabase/functions/api/index.ts', re: 'const model = LLM_MODELS\\[' },
+      note: 'The browser sends a tier name, never a model id -- our key pays, so the model is chosen server-side from a whitelist and an unknown tier falls back to pro. Board search is the one caller that asks for flash; every other feature is one call per click and stays on pro. Anthropic exists in this app but is client-side only, on the user\'s own key.' },
     'sc.refund':  { diagram: 'scoring', group: 'server', kind: 'credit', label: 'refund on empty or malformed',
       anchor: { file: 'supabase/functions/api/index.ts', fn: 'refund' },
       note: 'Charged first, so every failure path after the charge has to give it back. This was a real bug once: charged, then collapsed into "Server error".' },
@@ -229,7 +258,7 @@ module.exports = {
       note: 'Free pot first, then paid balance, then null. Every pot check sits inside the UPDATE WHERE, so two parallel calls cannot both spend the last credit. When the free searches run out it also flips free_tier off — which is the moment free AI scoring ends.' },
     'cr.spendLlm':    { diagram: 'credits', group: 'spend', kind: 'credit', label: 'spend_llm',
       anchor: { file: 'billing.sql', sql: 'public.spend_llm' },
-      note: 'The free branch decrements by one regardless of the amount asked for. Harmless today because the cost is {COST.llm}, but it would undercharge for anything larger.' },
+      note: 'The free branch decrements by the amount asked for, never below zero; a call larger than the remaining free balance falls through to paid credits.' },
     'cr.refundFree':  { diagram: 'credits', group: 'give back', kind: 'credit', label: 'refund_free',
       anchor: { file: 'billing.sql', sql: 'public.refund_free' } },
     'cr.add':         { diagram: 'credits', group: 'give back', kind: 'credit', label: 'add_credits',
@@ -290,7 +319,7 @@ module.exports = {
     { from: 'bd.atsPull', to: 'bd.closed', label: 'not in the feed', style: 'drop' },
 
     { from: 'sv.auth', to: 'sv.switch' },
-    ...['packs', 'board', 'report', 'llm', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    ...['packs', 'board', 'report', 'llm', 'judge', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
