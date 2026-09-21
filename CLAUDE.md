@@ -438,6 +438,8 @@ supabase/functions/api/index.ts     Deno edge function: search, scoring, payment
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
+scripts/pipeline-map.js             Data-pipeline map: resolves code anchors, writes Mermaid notes to an Obsidian vault.
+scripts/pipeline-map.spec.js        The declared topology — nodes, edges, anchors. Data only, hand-maintained.
 .claude/settings.json               Shared Claude Code config: the TypeSafe plugin. Committed on purpose.
 job-triage.tokens.json              ⚠ STALE v1 tokens. Not the source of truth.
 *.dc.html  canvas.json              ⚠ Superseded v1 artboards (ground #0E1411).
@@ -495,4 +497,4 @@ that skill with it rather than every machine being set up by hand.
 5. **Check the generated frame against the three colour rules** (§1). An accent on a score, or two accents on a row, is a design error to raise, not to implement.
 6. **A token change is three edits**: `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root` (both themes) — plus `legal.css` if it is one of the six tokens that file carries. Do it in one commit, then run `node scripts/selfcheck-tokens.js` (§1), which verifies exactly this.
 7. **Match the runtime you are in.** React + TS in `ui-kit/`; vanilla ES2020 with no dependencies in `index.html`. Never convert one into the other.
-8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and both `node scripts/selfcheck-tokens.js` and `node scripts/selfcheck-icon.js` must print `ALL PASS`. The icon check needs Obsidian running; `PASS (with skips)` means the rendered half did not run, so if you touched `icon.svg` or a token it names, start Obsidian and run it again.
+8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and `node scripts/selfcheck-tokens.js`, `node scripts/selfcheck-icon.js` and `node scripts/pipeline-map.js --check` must each print `ALL PASS`. The icon check needs Obsidian running; `PASS (with skips)` means the rendered half did not run, so if you touched `icon.svg` or a token it names, start Obsidian and run it again. The pipeline check needs **nothing but the repo** — it reads source only and never touches the vault, so it has no skip state and no excuse for a red one. Note the `--check`: the bare command writes notes, which is not a verification step.
