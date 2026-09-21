@@ -100,8 +100,20 @@ It diffs `index.html`, `ui-kit/src/v2/tokens.css` and `legal.css` against
 `design/jobtriage.tokens.json`, and separately asserts that every token
 `ui-kit/src/v2/components.css` reads is defined in **both** theme blocks — a
 token defined in only one silently falls through to the other theme's value.
-It does not cover `icon.svg`, whose values are hard-coded for a reason (§5), so
-still check that one by eye.
+It does not cover `icon.svg`, whose values are hard-coded for a reason (§5).
+That one has its own check, because it needs a renderer rather than a parser:
+
+```bash
+node scripts/selfcheck-icon.js       # must print ALL PASS
+```
+
+It rasterises the icon and asserts the rendered ground is `--ink` and the
+rendered rim is `--line`, that every hex literal in the file is still a token
+value, that no XML comment contains a `--`, and that no mark reaches past the
+maskable safe zone. It borrows Obsidian as a canvas (`obs eval`), since the
+repo has no rasteriser and adding one to check a 2KB file is the wrong trade —
+so if Obsidian is not running it prints a loud `SKIP` and runs the text checks
+only. **A `SKIP` is not a pass**: the geometry did not get checked.
 
 It was written because all four copies had drifted: `legal.css` was off on
 three of the seven tokens it carries, `index.html`'s light shadows used a
@@ -346,11 +358,12 @@ them, and whether the single-file property survives.
 There is **no icon library, no sprite sheet, and no naming convention** — because
 there are almost no icons.
 
-- `icon.svg` — the PWA app icon (a fit × reachability scatter plot). On the v2 palette, using the same colours as the plot it depicts: ground `--ink`, axes `--line`, an open role `--go`, a cold target `--cold`, an unopened one `--dim`. Values are hard-coded because an icon loads outside the document, so `var()` never resolves there — **so it is a fourth place a token change must reach.**
+- `icon.svg` — the PWA app icon (a fit × reachability scatter plot). On the v2 palette, using the same colours as the plot it depicts: ground `--ink`, axes `--line`, an open role `--go`, a cold target `--cold`, an unopened one `--dim`. Values are hard-coded because an icon loads outside the document, so `var()` never resolves there — **so it is a fourth place a token change must reach.** `node scripts/selfcheck-icon.js` now checks that it did.
+  One of those five is not in the source of truth: **`--cold` is defined only in `index.html`'s two `:root` blocks** (`index.html:53` dark, `:98` light) and appears in neither `design/jobtriage.tokens.json` nor `ui-kit/src/v2/tokens.css` nor §1's token vocabulary. A change to it has nothing upstream to drive it, so `selfcheck-icon.js` reads it from the app and says so. `--plot-fade` (`index.html:2944`) is in the same position. Promoting both is the real fix.
   Its comment must not contain a `--` sequence: XML forbids a double hyphen inside a comment, and it silently makes the whole file an unparseable broken image. Write token names without their leading dashes there.
   Two constraints on its geometry, both easy to undo by accident:
   - **The rim is load-bearing.** The ground is 1.27:1 against a black home screen and 1.03:1 against iOS dark, so without a `--line` rim the tile has no edge and dissolves into the wallpaper. Do not remove it. Inverting to a light ground is not the fix — it fails on a white background in exactly the same way.
-  - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off.
+  - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off. Measured: the scaled axes reach **203.7 against the 204.8 limit — a margin of 1.1px in 512**. Treat that as a floor, not as headroom; `selfcheck-icon.js` flags it even while passing.
 - Four inline `<svg>` in `index.html`: three 13×13 theme-toggle glyphs (`index.html:3451-3454`) and one `viewBox="0 0 640 420"` data plot (`index.html:3587`).
 
 The convention for the glyphs, if you add one:
@@ -424,6 +437,7 @@ schema.sql  billing.sql             Supabase tables, RLS, credit functions, usag
 supabase/functions/api/index.ts     Deno edge function: search, scoring, payments.
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
+scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
 .claude/settings.json               Shared Claude Code config: the TypeSafe plugin. Committed on purpose.
 job-triage.tokens.json              ⚠ STALE v1 tokens. Not the source of truth.
 *.dc.html  canvas.json              ⚠ Superseded v1 artboards (ground #0E1411).
@@ -481,4 +495,4 @@ that skill with it rather than every machine being set up by hand.
 5. **Check the generated frame against the three colour rules** (§1). An accent on a score, or two accents on a row, is a design error to raise, not to implement.
 6. **A token change is three edits**: `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root` (both themes) — plus `legal.css` if it is one of the six tokens that file carries. Do it in one commit, then run `node scripts/selfcheck-tokens.js` (§1), which verifies exactly this.
 7. **Match the runtime you are in.** React + TS in `ui-kit/`; vanilla ES2020 with no dependencies in `index.html`. Never convert one into the other.
-8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and `node scripts/selfcheck-tokens.js` must print `ALL PASS`.
+8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and both `node scripts/selfcheck-tokens.js` and `node scripts/selfcheck-icon.js` must print `ALL PASS`. The icon check needs Obsidian running; `PASS (with skips)` means the rendered half did not run, so if you touched `icon.svg` or a token it names, start Obsidian and run it again.
