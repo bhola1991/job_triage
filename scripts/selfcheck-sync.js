@@ -159,6 +159,25 @@ const profileRec = jobs => ({
     ok(KV2['triage:migrated'] === undefined, 'the migrated flag is not set when the count disagrees');
   }
 
+  // ---- a brand-new account, with nothing anywhere -----------------------
+  /* The first cloud sign-in: no blob to take apart and no rows to find. It
+     must still come out the far side migrated, or every save afterwards keeps
+     writing only the blob and none of this does anything. */
+  {
+    const SB3 = fakeSupabase(), KV3 = {};
+    const n = newTab(SB3, KV3);
+    await n.load();
+    await n.migrateRows();
+    ok(n.isMigrated(), 'an empty account migrates rather than getting stuck on a blob it does not have');
+    n.setDB({ profiles: { p_9: profileRec([job('First')]) }, current: 'p_9' });
+    await n.save();
+    const back = newTab(SB3, KV3);
+    await back.load();
+    ok(back.getDB().profiles.p_9 && back.getDB().profiles.p_9.jobs.length === 1,
+       'the first job saved after that comes back as a row');
+    ok(back.getDB().current === 'p_9', 'and so does the profile it belongs to');
+  }
+
   // ---- load reassembles what save wrote --------------------------------
   const c = newTab(SB, KV);
   await c.load();
