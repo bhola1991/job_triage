@@ -327,7 +327,7 @@ const PRICE_USD: Record<string, number> = {
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
   adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0,
 };
-const DEEPSEEK_USD_PER_M = { in: 0.27, in_cached: 0.07, out: 1.10 };   // deepseek-chat list price; verify
+const DEEPSEEK_USD_PER_M = { in: 1.32, in_cached: 0.044, out: 3.96 }; // deepseek-v4-pro peak list price; verify
 const inr = (usd: number) => Math.round(usd * USD_INR * 1000) / 1000;
 async function logUsage(rows: Record<string, unknown>[]) {
   if (!rows.length) return;
@@ -545,8 +545,9 @@ Deno.serve(async (req) => {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
             body: JSON.stringify({
-              model: "deepseek-chat", temperature: 0.2,
-              max_tokens: Math.min(Number(b.max_tokens) || 1400, 4000),
+              model: "deepseek-v4-pro",
+              reasoning_effort: "high", thinking: { type: "enabled" },
+              max_tokens: Math.min(Number(b.max_tokens) || 4000, 4000),
               messages: [{ role: "user", content: prompt }],
             }),
           }).catch(() => null);

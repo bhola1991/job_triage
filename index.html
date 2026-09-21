@@ -1664,8 +1664,9 @@ const LLM = {
     keyPrefix:"sk-",
     where:"platform.deepseek.com → API keys",
     headers:k=>({"Content-Type":"application/json","Authorization":"Bearer "+k}),
-    body:(prompt,mt)=>({model:"deepseek-chat",max_tokens:mt||1400,
-      messages:[{role:"user",content:prompt}],temperature:0.2}),
+    body:(prompt,mt)=>({model:"deepseek-v4-pro",max_tokens:mt||4000,
+      reasoning_effort:"high",thinking:{type:"enabled"},
+      messages:[{role:"user",content:prompt}]}),
     read:d=>((d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"").trim()
   },
   anthropic: {
