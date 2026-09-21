@@ -886,12 +886,348 @@ async function get(k){
   }catch(e){ cloudDown(e); console.warn('cloud read failed:', e && e.message); return getLocal(k); }   // offline: last known good
 }
 function syncNote(t){ const e=$('#syncInfo'); if(e){ e.textContent=t; e.style.display=t?'block':'none'; } }
-async function save(){ await put('triage:db', JSON.stringify(DB)); }
-async function load(){
+
+/* ═══ rows: profiles and jobs ═══
+   The blob above is one text field holding everything a person has. Saving it
+   is a full rewrite, so two tabs that both save lose whichever finished first,
+   and it is never the tab that was wrong -- just the slower one. Searching in
+   one tab while reading in another is the ordinary way to use this, so that is
+   not a rare race; it is the normal one.
+
+   Below, a job is a row. Two tabs editing two different jobs write two
+   different rows and neither is lost. Two tabs editing the SAME job still lose
+   one of them, and that is deliberate: the alternative is a version check on
+   every write and a conflict screen in an app that has nowhere to put one. The
+   trade is that the loser is now one field of one job instead of every job
+   added since the other tab loaded.
+
+   The blob does not go away. It is still written on every save, and it is
+   still the offline copy -- it just stops being READ once this account has
+   migrated. That is what makes a rollback a one-line change instead of a
+   restore from somebody's Downloads folder.
+
+   Types, and why there is an `extras` column. The app has no validation layer:
+   every field of every job is a string, ai_score is whatever the model said,
+   and the CSV door copies cells in untouched. A typed column would quietly
+   edit that data on the way in -- "12/03/2025" is not a date to Postgres, and
+   dropping it is a permanent change nobody asked for. So anything a typed
+   column cannot hold unchanged is kept verbatim in `extras` and laid back over
+   the row on read. Round trip in, round trip out, byte for byte. */
+
+const JOB_INT  = ['ai_score','ai_reachability'];
+const JOB_DATE = ['posted','posted_lo','posted_hi','date_applied','follow_up_date','last_touch'];
+const JOB_JSON = ['contacts','events'];
+/* `origin` is written by jsearchRow but is not in COLS, so it rides the blob
+   and is lost by a CSV round trip. It gets a column here rather than
+   inheriting that bug. */
+const JOB_TEXT = COLS.filter(c => !JOB_INT.includes(c) && !JOB_DATE.includes(c) && !JOB_JSON.includes(c))
+                     .concat('origin');
+const PROF_TEXT = ['name','headline','location','country','country_code','seniority','unusual_combination'];
+const PROF_JSON = ['domains','strengths','hard_skills','gaps','wrong_shapes','tracks'];
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+const chunks = (a,n) => { const o=[]; for(let i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o; };
+
+/* An integer column, unless the value is not one. 72 goes in as 72; 72.5 and
+   "about 5" go in as null with the original in extras, because half a point of
+   fit is still the person's data and "about 5" is still what the model said. */
+function intOut(v, extras, name){
+  const t = String(v==null?'':v).trim();
+  if(t==='') return null;
+  const n = Number(t);
+  if(Number.isFinite(n) && String(Math.trunc(n))===t) return Math.trunc(n);
+  extras[name] = t;
+  return Number.isFinite(n) ? Math.trunc(n) : null;
+}
+/* Strict ISO only. The app's own parseWhen is no help here: it refuses future
+   dates, and follow_up_date is legitimately in the future. */
+function dateOut(v, extras, name){
+  const t = String(v==null?'':v).trim();
+  if(t==='') return null;
+  if(ISO_DATE.test(t)) return t;
+  extras[name] = t;
+  return null;
+}
+/* contacts and events are JSON held in a string. Parse it into jsonb, but if
+   re-serialising it would not give back the exact same string, keep the
+   original too -- a backup export has to come out identical to what went in. */
+function jsonOut(v, extras, name){
+  if(v==null || v==='') return [];
+  if(typeof v!=='string') return v;
   try{
-    const v = await get('triage:db');
-    if(v){ const d=JSON.parse(v); DB.profiles=d.profiles||{}; DB.current=d.current||null; }
-  }catch(e){}
+    const parsed = JSON.parse(v);
+    if(JSON.stringify(parsed)!==v) extras[name]=v;
+    return parsed;
+  }catch(e){ extras[name]=v; return []; }
+}
+
+/* One job -> one row. */
+function jobRow(j){
+  const extras = {}, r = { job_key: keyOf(j) };
+  JOB_TEXT.forEach(c => { r[c] = (j[c]===undefined||j[c]===null) ? null : String(j[c]); });
+  JOB_INT .forEach(c => { r[c] = intOut (j[c], extras, c); });
+  JOB_DATE.forEach(c => { r[c] = dateOut(j[c], extras, c); });
+  JOB_JSON.forEach(c => { r[c] = jsonOut(j[c], extras, c); });
+  r.extras = extras;
+  return r;
+}
+
+/* One row -> one job, in exactly the shape blank() would have made. */
+function coerceJob(row){
+  const j = {};
+  COLS.forEach(c => j[c] = '');
+  JOB_TEXT.forEach(c => { if(row[c]!=null) j[c] = String(row[c]); });
+  JOB_INT .forEach(c => { if(row[c]!=null) j[c] = String(row[c]); });
+  JOB_DATE.forEach(c => { if(row[c]!=null) j[c] = String(row[c]).slice(0,10); });
+  JOB_JSON.forEach(c => { j[c] = JSON.stringify(row[c]==null ? [] : row[c]); });
+  const ex = row.extras || {};
+  Object.keys(ex).forEach(k => { j[k] = ex[k]; });   // last word, always
+  return j;
+}
+
+/* One profile record -> one row. A record is {profile, raw, track, jobs,
+   created}; `jobs` becomes rows of its own and the rest is spread flat. */
+function profileRow(localId, p){
+  const extras = {}, r = { local_id: localId };
+  /* A record with no .profile is broken -- usable() rejects it and the app
+     routes past it. It still gets stored verbatim rather than normalised into
+     something that would then look repaired. */
+  if(!usable(p)){
+    PROF_TEXT.forEach(c => r[c] = null);
+    PROF_JSON.forEach(c => r[c] = []);
+    r.years_experience = null; r.cv_text = null; r.track = null; r.created = null;
+    r.extras = { __raw: JSON.stringify(p) };
+    return r;
+  }
+  const pr = p.profile;
+  PROF_TEXT.forEach(c => { r[c] = (pr[c]===undefined||pr[c]===null) ? null : String(pr[c]); });
+  PROF_JSON.forEach(c => { r[c] = Array.isArray(pr[c]) ? pr[c] : (pr[c]===undefined ? [] : jsonOut(pr[c],extras,c)); });
+  r.years_experience = intOut(pr.years_experience, extras, 'years_experience');
+  r.cv_text = p.raw===undefined||p.raw===null ? null : String(p.raw);
+  r.track   = p.track===undefined||p.track===null ? null : String(p.track);
+  r.created = p.created===undefined||p.created===null ? null : String(p.created);
+  /* Anything the extraction prompt returned that has no column. Prefixed so it
+     cannot collide with a column name that arrives here for another reason. */
+  const known = new Set(PROF_TEXT.concat(PROF_JSON).concat(['years_experience']));
+  Object.keys(pr).forEach(k => { if(!known.has(k)) extras['profile.'+k] = pr[k]; });
+  /* The columns above are in this file's order, not the order the extraction
+     prompt happened to return. Keeping the original means an exported backup
+     comes back byte-identical, and "the two files are the same" is a much
+     stronger thing to be able to say about a migration than "the two files
+     mean the same". */
+  extras.__order = Object.keys(pr);
+  r.extras = extras;
+  return r;
+}
+
+function coerceProfile(row){
+  const ex = row.extras || {};
+  if(ex.__raw){ try{ return JSON.parse(ex.__raw); }catch(e){} }
+  const pr = {};
+  PROF_TEXT.forEach(c => { if(row[c]!=null) pr[c] = String(row[c]); });
+  PROF_JSON.forEach(c => { pr[c] = Array.isArray(row[c]) ? row[c] : []; });
+  if(row.years_experience!=null) pr.years_experience = row.years_experience;
+  Object.keys(ex).forEach(k => {
+    if(k==='__order') return;
+    if(k.indexOf('profile.')===0) pr[k.slice(8)] = ex[k];
+    else if(k==='years_experience') pr[k] = ex[k];
+    else if(PROF_JSON.includes(k)) pr[k] = ex[k];
+  });
+  let out = pr;
+  if(Array.isArray(ex.__order)){
+    out = {};
+    ex.__order.forEach(k => { if(k in pr) out[k] = pr[k]; });
+    Object.keys(pr).forEach(k => { if(!(k in out)) out[k] = pr[k]; });
+  }
+  return {
+    profile: out,
+    raw:     row.cv_text==null ? '' : String(row.cv_text),
+    track:   row.track  ==null ? '' : String(row.track),
+    jobs:    [],
+    created: row.created==null ? '' : String(row.created),
+  };
+}
+
+/* local_id -> profiles.id. A job row references the uuid, and the insert
+   policy checks that the profile behind it belongs to the same person, so
+   nothing can be filed under somebody else's list. */
+let PROFILE_IDS = {};
+/* What the server last agreed to hold. save() sends the difference, which is
+   the whole point: a keystroke in one job must not rewrite 400 rows. */
+let LAST_SAVED = null;
+/* Has this account moved off the blob? Until it has, the blob is still read. */
+let MIGRATED = false;
+
+/* Every row this browser would write, keyed so the two sides can be diffed. */
+function snapshot(){
+  const sigs = {}, rows = {};
+  Object.keys(DB.profiles).forEach(id => {
+    const p = DB.profiles[id]; if(!p) return;
+    const pk = 'p\u0000'+id;
+    rows[pk] = profileRow(id, p); sigs[pk] = JSON.stringify(rows[pk]);
+    /* Keyed by job_key, so a list that somehow holds the same posting twice
+       collapses here rather than at the database, where one upsert touching a
+       row twice is an error and the whole save would fail. */
+    ((usable(p)?p.jobs:null) || []).forEach(j => {
+      const r = jobRow(j);
+      const jk = 'j\u0000'+id+'\u0000'+r.job_key;
+      rows[jk] = { localId:id, row:r }; sigs[jk] = JSON.stringify(r);
+    });
+  });
+  return { sigs, rows };
+}
+
+async function saveRows(){
+  const now = new Date().toISOString();
+  const cur = snapshot(), prev = LAST_SAVED || {};
+
+  /* Profiles first. A job points at profiles.id and the insert policy checks
+     that reference, so a brand-new profile has to exist before its jobs can. */
+  const profUp = Object.keys(cur.rows)
+    .filter(k => k[0]==='p' && cur.sigs[k]!==prev[k])
+    .map(k => Object.assign({}, cur.rows[k], { user_id: USER.id, deleted: false, updated_at: now }));
+  for(const part of chunks(profUp, 100)){
+    const {data,error} = await withTimeout(
+      SB.from('profiles').upsert(part, {onConflict:'user_id,local_id'}).select('id,local_id'),
+      WRITE_MS, 'saving to your account');
+    if(error) throw error;
+    (data||[]).forEach(r => { PROFILE_IDS[r.local_id] = r.id; });
+  }
+
+  const jobUp = [];
+  Object.keys(cur.rows).forEach(k => {
+    if(k[0]!=='j' || cur.sigs[k]===prev[k]) return;
+    const pid = PROFILE_IDS[cur.rows[k].localId]; if(!pid) return;
+    jobUp.push(Object.assign({}, cur.rows[k].row,
+      { user_id: USER.id, profile_id: pid, deleted: false, updated_at: now }));
+  });
+  for(const part of chunks(jobUp, 200)){
+    const {error} = await withTimeout(
+      SB.from('jobs').upsert(part, {onConflict:'profile_id,job_key'}),
+      WRITE_MS, 'saving to your account');
+    if(error) throw error;
+  }
+
+  /* Gone from this browser's copy. Marked, not deleted: a tab that has been
+     offline still holds jobs somebody else removed, and without a tombstone it
+     would helpfully put them all back on its next save. */
+  const gone = Object.keys(prev).filter(k => !(k in cur.sigs));
+  const byProfile = {};
+  gone.filter(k => k[0]==='j').forEach(k => {
+    const bits = k.split('\u0000');
+    (byProfile[bits[1]] = byProfile[bits[1]] || []).push(bits[2]);
+  });
+  for(const lid of Object.keys(byProfile)){
+    const pid = PROFILE_IDS[lid]; if(!pid) continue;
+    for(const part of chunks(byProfile[lid], 200)){
+      const {error} = await withTimeout(
+        SB.from('jobs').update({deleted:true, updated_at:now}).eq('profile_id',pid).in('job_key',part),
+        WRITE_MS, 'saving to your account');
+      if(error) throw error;
+    }
+  }
+  const goneProf = gone.filter(k => k[0]==='p').map(k => k.split('\u0000')[1]);
+  for(const part of chunks(goneProf, 200)){
+    const {error} = await withTimeout(
+      SB.from('profiles').update({deleted:true, updated_at:now}).eq('user_id',USER.id).in('local_id',part),
+      WRITE_MS, 'saving to your account');
+    if(error) throw error;
+  }
+
+  LAST_SAVED = cur.sigs;
+}
+
+async function loadRows(){
+  const [pr, jr] = await Promise.all([
+    withTimeout(SB.from('profiles').select('*').eq('user_id',USER.id).eq('deleted',false),
+      READ_MS, 'reading your account'),
+    withTimeout(SB.from('jobs').select('*').eq('user_id',USER.id).eq('deleted',false),
+      READ_MS, 'reading your account'),
+  ]);
+  if(pr.error) throw pr.error;
+  if(jr.error) throw jr.error;
+  const profiles = {}, byId = {};
+  PROFILE_IDS = {};
+  (pr.data||[]).forEach(row => {
+    profiles[row.local_id] = coerceProfile(row);
+    byId[row.id] = row.local_id;
+    PROFILE_IDS[row.local_id] = row.id;
+  });
+  (jr.data||[]).forEach(row => {
+    const lid = byId[row.profile_id]; if(!lid) return;
+    const rec = profiles[lid]; if(!rec || !rec.jobs) return;
+    rec.jobs.push(coerceJob(row));
+  });
+  DB.profiles = profiles;
+  return Object.keys(profiles).length > 0 || (jr.data||[]).length > 0;
+}
+
+/* One account, one time: the blob becomes rows. Runs after load(), so DB is
+   already whatever the blob said. */
+async function migrateRows(){
+  if(!cloudNow() || MIGRATED) return;
+  const wantP = Object.keys(DB.profiles).length;
+  const wantJ = Object.keys(DB.profiles).reduce((n,id) =>
+    n + ((usable(DB.profiles[id]) ? DB.profiles[id].jobs : null) || []).length, 0);
+  LAST_SAVED = null;                 // nothing is known to be there: write it all
+  await saveRows();
+  /* Count it back before declaring victory. A migration that reports success
+     and did not run is how you lose everything in a single step, and the whole
+     reason the blob keeps being written is that this check might fail. */
+  const [cp, cj] = await Promise.all([
+    withTimeout(SB.from('profiles').select('id',{count:'exact',head:true})
+      .eq('user_id',USER.id).eq('deleted',false), READ_MS, 'reading your account'),
+    withTimeout(SB.from('jobs').select('id',{count:'exact',head:true})
+      .eq('user_id',USER.id).eq('deleted',false), READ_MS, 'reading your account'),
+  ]);
+  if(cp.error || cj.error) throw (cp.error || cj.error);
+  if(cp.count !== wantP || cj.count !== wantJ){
+    console.warn('migration count mismatch — staying on the blob',
+                 {wantP, wantJ, gotP: cp.count, gotJ: cj.count});
+    return;
+  }
+  MIGRATED = true;
+  await put('triage:current', DB.current||'');
+  await put('triage:migrated','1');
+}
+
+/* The blob is written on every save whether or not this account has migrated.
+   Once it has, nothing reads it -- it is the offline copy and the rollback,
+   and a rollback copy is only worth keeping if it is current. */
+async function save(){
+  await put('triage:db', JSON.stringify(DB));
+  if(!cloudNow() || !MIGRATED) return;
+  /* Which profile is open is the one thing in DB that is not a row. It rode
+     inside the blob, and once the blob stops being read it needs its own key
+     or every reload lands the person back in onboarding with all their data
+     apparently gone. */
+  try{ await saveRows(); await put('triage:current', DB.current||''); syncNote(''); }
+  catch(e){
+    cloudDown(e);
+    console.warn('row save failed:', e && e.message);
+    syncNote("Saved on this device \u2014 " + ((e&&e.message)||'could not reach the server')
+             + ". Your work is not lost.");
+  }
+}
+async function load(){
+  MIGRATED = (await get('triage:migrated')) === '1';
+  let fromRows = false;
+  if(cloudNow() && MIGRATED){
+    try{
+      await loadRows();
+      DB.current = (await get('triage:current')) || null;
+      fromRows = true;
+    }
+    catch(e){ cloudDown(e); console.warn('cloud row read failed:', e && e.message); }
+  }
+  if(!fromRows){
+    try{
+      const v = await get('triage:db');
+      if(v){ const d=JSON.parse(v); DB.profiles=d.profiles||{}; DB.current=d.current||null; }
+    }catch(e){}
+  }
+  /* What the server is now known to hold, so the next save sends only what
+     changed rather than every row the person has ever had. */
+  LAST_SAVED = (cloudNow() && MIGRATED) ? snapshot().sigs : null;
   KEY   = (await get('triage:key'))   || '';
   PROV  = (await get('triage:prov'))  || 'deepseek';
   APIFY = (await get('triage:apify')) || '';
@@ -3783,7 +4119,10 @@ function renderApp(){
       if(error) throw error;
     }catch(e){ alert("Couldn't delete: "+((e&&e.message)||'unknown error')); return; }
     try{ await putLocal('triage:db',''); }catch(e){}
-    DB={profiles:{},current:null}; VIEW='onb'; RANGE=null; render();
+    // delete_my_data has already emptied both tables; forget what they held so
+    // the next save does not open by trying to delete it all again.
+    DB={profiles:{},current:null}; LAST_SAVED=null; PROFILE_IDS={};
+    VIEW='onb'; RANGE=null; render();
   };
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
@@ -4752,6 +5091,12 @@ async function afterAuth(){
   // afterAuth also runs on a signed-out boot, so only a real session marks this browser as returning.
   if(USER){ try{ localStorage.setItem('triage:returning','1'); }catch(e){} }
   DB={profiles:{},current:null}; VIEW='onb';
+  /* Reset with DB, not separately. These two describe what the SERVER holds
+     for whoever was signed in a moment ago; carried into a different account
+     they would make the next save look like a mass deletion. Row-level
+     security would refuse it -- the ids belong to the other user -- but
+     "the database happened to stop us" is not where this should be decided. */
+  LAST_SAVED=null; PROFILE_IDS={}; MIGRATED=false;
   if(cloudNow()) splash('Loading your account\u2026');
   CREDITS=null; loadCredits();          // not awaited: a slow balance mustn't hold up the app
   try{
@@ -4797,6 +5142,11 @@ async function afterAuthInner(){
   }
   await load();
   if(cloudNow()) await migrateLocal();
+  /* After migrateLocal, not before: that one moves a local blob up to the
+     account, and this one takes whatever blob is there apart into rows. Run
+     them the other way round and a first-time cloud sign-in migrates nothing. */
+  try{ await migrateRows(); }
+  catch(e){ cloudDown(e); console.warn('row migration failed:', e && e.message); }
 }
 
 /* A reset link that's expired or was already used comes back with the
