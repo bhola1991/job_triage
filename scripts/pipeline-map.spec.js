@@ -32,7 +32,54 @@ module.exports = {
     { name: 'STRONG_FIT',          file: 'index.html' },
     { name: 'STRONG_REACH',        file: 'index.html' },
     { name: 'CLOSING_DAYS',        file: 'index.html' },
+    { name: 'TOK_CAP',             file: 'index.html' },
     { name: 'COST', file: 'supabase/functions/api/index.ts', object: true },
+    { name: 'LLM_TOK_CAP', file: 'supabase/functions/api/index.ts' },
+    { name: 'DS_MODELS',  file: 'index.html',                        strings: true },
+    { name: 'LLM_MODELS', file: 'supabase/functions/api/index.ts',   strings: true },
+    { name: 'FLAG_P',     file: 'index.html' },
+    { name: 'SPAN_FLOOR', file: 'index.html' },
+    { name: 'JUDGE_BATCH',     file: 'index.html' },
+    { name: 'MAX_JUDGE_BATCH', file: 'supabase/functions/api/index.ts' },
+    { name: 'FLAG_CODES',       file: 'index.html',                          keys:  true },
+    { name: 'JUDGE_FLAG_CODES', file: 'supabase/functions/_shared/judge.ts', array: true },
+  ],
+
+  /* ── invariants ──────────────────────────────────────────────────────────
+     Two constants in two runtimes that have to hold the same value, where
+     nothing in either file can tell. Unlike the rest of this spec these are not
+     about the diagram at all -- they are here because this is the one program
+     that already reads named constants out of every runtime, and a check with
+     no home does not get written. */
+  invariants: [
+    { equal: ['TOK_CAP', 'LLM_TOK_CAP'],
+      why: 'The browser sends max_tokens: TOK_CAP and the edge function clamps it to LLM_TOK_CAP.\n' +
+           '        If the server number is the smaller one every hosted call is silently trimmed below\n' +
+           '        what the app asked for, and the only symptom is truncated JSON that grabJSON throws on\n' +
+           '        -- after the credit was spent. If the app number is the smaller one the extra ceiling\n' +
+           '        on the server is dead. Move one, move both, in the same commit.' },
+
+    { equal: ['DS_MODELS', 'LLM_MODELS'],
+      why: 'The same tier name has to mean the same model on both paths. index.html picks the\n' +
+           '        model itself when the user brought their own key; the edge function picks it from\n' +
+           '        its own whitelist when we are paying. If the two maps drift, the same button scores\n' +
+           '        on a different model depending on whose key paid, and nothing anywhere says so --\n' +
+           '        the scores just stop being comparable between users.' },
+
+    { equal: ['JUDGE_BATCH', 'MAX_JUDGE_BATCH'],
+      why: 'The browser slices a search into batches of JUDGE_BATCH postings; the edge function\n' +
+           '        rejects any batch longer than MAX_JUDGE_BATCH. If the app number is the larger one\n' +
+           '        every full batch comes back 400 and a whole search goes unjudged -- and scoreAndCut\n' +
+           '        catches that by design, so the symptom is not an error but flags quietly missing\n' +
+           '        from every row. If the server number is the larger one its ceiling is dead.' },
+
+    { equal: ['FLAG_CODES', 'JUDGE_FLAG_CODES'],
+      why: 'The ten flag codes are written out twice: as keys in index.html, which decides what\n' +
+           '        DeepSeek may return and how each one is spelled in the UI, and as an array in\n' +
+           '        judge.ts, which decides what Jev is actually asked. Adding a code to one only is\n' +
+           '        silent in both directions -- a flag the model can raise that is never judged, or a\n' +
+           '        judgement whose answer nothing reads. Neither errors; both just quietly do less\n' +
+           '        than they look like they do.' },
   ],
 
   diagrams: [
@@ -43,13 +90,13 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-      intro: 'One POST, ten actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
+    intro: 'One POST, twelve actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
       neighbours: ['JT Credits', 'JT Storage'] },
     { id: 'storage', file: 'JT Storage', title: 'Storage and sync',
-      intro: 'Where a job actually lives: one JSON blob, one row, last writer wins.',
+      intro: 'Where a job actually lives: one row per job, last writer wins within a row \u2014 and the blob it used to live in, still written, no longer read.',
       neighbours: ['JT Render'] },
     { id: 'credits', file: 'JT Credits', title: 'Credits and the ledger',
       intro: 'Three places money is spent, four places it comes back, and what the usage ledger records about each.',
@@ -153,6 +200,12 @@ module.exports = {
     'sv.llm':     { diagram: 'server', group: 'actions', kind: 'credit', label: 'llm — {COST.llm} credit',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'llm' },
       note: 'The server sees an opaque prompt string. It does no scoring of its own and knows nothing about jobs.' },
+    'sv.judge':   { diagram: 'server', group: 'actions', kind: 'credit', label: 'judge — {COST.llm} credit',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'judge' },
+      note: 'The scoring prompt\'s c and f fields, moved off DeepSeek onto a typed System One judgment: one choice (confidence), two scores (capability and targeting) and one noul per flag. One credit, refunded if Jev fails.' },
+    'sv.judgeBatch': { diagram: 'server', group: 'actions', kind: 'credit', label: 'judge_batch — {COST.llm} credit',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'judge_batch' },
+      note: 'The same judgment for up to {MAX_JUDGE_BATCH} postings. Jev takes one state per request, so the server still makes one call per posting and only the round trip and the charge are batched -- which is what makes judging a whole search cost one credit instead of three hundred. A partial batch keeps the credit; a batch where every posting failed refunds.' },
     'sv.apStart': { diagram: 'server', group: 'actions', kind: 'credit', label: 'apify_start — {COST.apifyQuery} per query',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_start' } },
     'sv.apStat':  { diagram: 'server', group: 'actions', kind: 'net', label: 'apify_status',
@@ -173,8 +226,8 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'a5ec87',
-      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds.' },
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'e89c2a',
+      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
       note: 'Descriptions cut to 700 chars. A row that already has a trustworthy date sends it, so the model is never asked to guess one.' },
@@ -184,9 +237,9 @@ module.exports = {
     'sc.claude':  { diagram: 'scoring', group: 'browser', kind: 'branch', label: 'claude — own key, or ours?',
       anchor: { file: 'index.html', fn: 'claude' }, section: 'LLM',
       note: 'No local key plus cloud available means the hosted route and a credit. A local key goes direct to DeepSeek or Anthropic and costs nothing here.' },
-    'sc.deepseek': { diagram: 'scoring', group: 'server', kind: 'net', label: 'DeepSeek — deepseek-v4-pro',
-      anchor: { file: 'supabase/functions/api/index.ts', re: 'model: "deepseek-v4-pro"' },
-      note: 'The only model the server ever calls. Anthropic exists in this app but is client-side only, on the user\'s own key.' },
+    'sc.deepseek': { diagram: 'scoring', group: 'server', kind: 'net', label: 'DeepSeek — {LLM_MODELS.flash} here, {LLM_MODELS.pro} elsewhere',
+      anchor: { file: 'supabase/functions/api/index.ts', re: 'const model = LLM_MODELS\\[' },
+      note: 'The browser sends a tier name, never a model id -- our key pays, so the model is chosen server-side from a whitelist and an unknown tier falls back to pro. Board search is the one caller that asks for flash; every other feature is one call per click and stays on pro. Anthropic exists in this app but is client-side only, on the user\'s own key.' },
     'sc.refund':  { diagram: 'scoring', group: 'server', kind: 'credit', label: 'refund on empty or malformed',
       anchor: { file: 'supabase/functions/api/index.ts', fn: 'refund' },
       note: 'Charged first, so every failure path after the charge has to give it back. This was a real bug once: charged, then collapsed into "Server error".' },
@@ -198,13 +251,38 @@ module.exports = {
     'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}',
       anchor: { file: 'index.html', re: 'else below\\+\\+' },
       note: 'The one place a paid-for row is thrown away. It was judged and it lost.' },
+    'sc.rescore': { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'runScoring \u2014 the Score button, batches of 6',
+      anchor: { file: 'index.html', fn: 'runScoring' }, section: 'scoring run',
+      note: 'The other scoring path, and the small one: a rescore of what is already in the list, guarded by {AUTO_MAX}. Because it is small it can afford a judgement per job; board search cannot.' },
+    'sc.judge':   { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeInto \u2014 {COST.llm} credit per JOB',
+      anchor: { file: 'index.html', fn: 'judgeInto' }, section: 'scoring run',
+      note: 'Per job, where a whole DeepSeek batch of {SCORE_BATCH} is also {COST.llm} credit \u2014 so judging one job this way is about twelve times the price of scoring one. The rescore path can carry that because {AUTO_MAX} caps it; the search path pays once per batch through judgeMany instead. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe key is not reachable from the browser at all, and DeepSeek\'s own flags stand.' },
+    'sc.judgeMany': { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeMany \u2014 {COST.llm} credit per {JUDGE_BATCH}',
+      anchor: { file: 'index.html', fn: 'judgeMany' }, section: 'Credits',
+      note: 'What makes judging a whole search affordable: one charge and one round trip for {JUDGE_BATCH} postings, against one per job on the rescore path. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens.' },
+    'sc.merge':   { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'mergeJudgment \u2014 Jev fires, DeepSeek explains',
+      anchor: { file: 'index.html', fn: 'mergeJudgment' }, section: 'scoring run',
+      note: 'Jev decides which flags are true above {FLAG_P}; the fact behind each comes from DeepSeek. A flag Jev raises that DeepSeek never mentioned shows with no fact rather than borrowing one from its neighbour.' },
+    'sc.span':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'bestSentence \u2014 the quote, found not asked for',
+      anchor: { file: 'index.html', fn: 'bestSentence' }, section: 'scoring run',
+      note: 'The evidence span is located in the browser by matching the fact against the posting, so it costs nothing, works with no account, and is a substring of the posting by construction rather than by the model\'s good behaviour. Below {SPAN_FLOOR} it returns nothing: an unquoted flag is honest, a confidently wrong quote is not.' },
     'sc.unscored': { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept unscored',
       anchor: { file: 'index.html', re: 'unscored\\.push\\(\\.\\.\\.part\\)' },
       note: 'The batch failed, but those rows were already paid for, so they are kept unjudged rather than lost. "Score new jobs" picks them up later.' },
 
     /* ── storage ────────────────────────────────────────────────────────── */
     'st.save':    { diagram: 'storage', group: 'browser', kind: 'sync', label: 'save',
-      anchor: { file: 'index.html', fn: 'save' }, section: 'accounts and cloud sync' },
+      anchor: { file: 'index.html', fn: 'save' }, section: 'rows: profiles and jobs',
+      note: 'Writes the blob every time, and the rows as well once this account has migrated. The blob is no longer read at that point \u2014 it is the offline copy and the rollback, and a rollback copy is only worth keeping if it is current.' },
+    'st.saveRows': { diagram: 'storage', group: 'browser', kind: 'sync', label: 'saveRows \u2014 only what changed',
+      anchor: { file: 'index.html', fn: 'saveRows' }, section: 'rows: profiles and jobs',
+      note: 'Diffs this browser\'s rows against what the server was last known to hold and sends the difference. Profiles go first, because a job row references profiles.id and the insert policy checks it. A job that left the list is marked deleted, not removed: an offline tab still holds it and would otherwise add it back.' },
+    'st.coerce':  { diagram: 'storage', group: 'browser', kind: 'sync', label: 'jobRow / coerceJob \u2014 27 strings <-> a typed row',
+      anchor: { file: 'index.html', fn: 'jobRow' }, section: 'rows: profiles and jobs',
+      note: 'Every field of every job is a string in this app; a row is typed. Anything a column cannot hold unchanged \u2014 a CSV date of "12/03/2025", a fit of 72.5 \u2014 is kept verbatim in extras and laid back over the row on read, because dropping it would be a silent permanent edit to somebody\'s data. scripts/selfcheck-rows.js asserts the round trip.' },
+    'st.migrate': { diagram: 'storage', group: 'browser', kind: 'branch', label: 'migrateRows \u2014 blob to rows, once',
+      anchor: { file: 'index.html', fn: 'migrateRows' }, section: 'rows: profiles and jobs',
+      note: 'Counts the rows back before setting triage:migrated. A migration that reports success and did not run is how you lose everything in one step \u2014 on a mismatch it stays on the blob and says so.' },
     'st.put':     { diagram: 'storage', group: 'browser', kind: 'branch', label: 'put — local only, or sync too?',
       anchor: { file: 'index.html', fn: 'put' }, section: 'accounts and cloud sync', body: 'a1daa8',
       note: 'The local write always happens first, so a failed sync never loses work.' },
@@ -216,9 +294,15 @@ module.exports = {
     'st.down':    { diagram: 'storage', group: 'browser', kind: 'branch', label: 'CLOUD_DOWN latch',
       anchor: { file: 'index.html', const: 'cloudDown' }, section: 'accounts and cloud sync',
       note: 'Latches on the first timeout so one dead call does not become four serial 8-second hangs.' },
-    'st.blob':    { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'user_state — one row, one blob',
+    'st.blob':    { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'user_state \u2014 the blob, and the small keys',
       anchor: { file: 'schema.sql', sql: 'public.user_state' },
-      note: 'Every job for a user lives inside a single text column under one key. A new job is a full rewrite of the whole list, not a row insert — so two tabs searching at once silently lose one tab\'s work.' },
+      note: 'Was the only store: every job inside one text column, so a new job rewrote the whole list and two tabs searching at once lost one tab\'s work. Still written on every save as the offline copy and the rollback, and still the home of the keys that are not rows \u2014 triage:current, triage:auto, triage:migrated \u2014 but once an account has migrated, nothing reads the job blob.' },
+    'st.profiles': { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'profiles \u2014 one row per profile',
+      anchor: { file: 'schema.sql', sql: 'public.profiles' },
+      note: 'Keyed by the app\'s own p_... id as well as a uuid, because DB.profiles is keyed by that string and a uuid the app never sees could not rebuild it. Carries the role and discoverable stubs the employer side will need.' },
+    'st.jobs':    { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'jobs \u2014 one row per job',
+      anchor: { file: 'schema.sql', sql: 'public.jobs' },
+      note: 'Unique on (profile_id, job_key), where job_key is keyOf \u2014 the identity the app already used to mean "have I seen this posting". Two tabs editing two different jobs now write two different rows. Two tabs editing the same job still lose one: last writer wins, deliberately, because the alternative is a conflict screen in an app with nowhere to put one.' },
     'st.names':   { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'usernames',
       anchor: { file: 'schema.sql', sql: 'public.usernames' },
       note: 'Claimed by the only trigger in the schema, which fires on account creation and never on a job.' },
@@ -229,7 +313,7 @@ module.exports = {
       note: 'Free pot first, then paid balance, then null. Every pot check sits inside the UPDATE WHERE, so two parallel calls cannot both spend the last credit. When the free searches run out it also flips free_tier off — which is the moment free AI scoring ends.' },
     'cr.spendLlm':    { diagram: 'credits', group: 'spend', kind: 'credit', label: 'spend_llm',
       anchor: { file: 'billing.sql', sql: 'public.spend_llm' },
-      note: 'The free branch decrements by one regardless of the amount asked for. Harmless today because the cost is {COST.llm}, but it would undercharge for anything larger.' },
+      note: 'The free branch decrements by the amount asked for, never below zero; a call larger than the remaining free balance falls through to paid credits.' },
     'cr.refundFree':  { diagram: 'credits', group: 'give back', kind: 'credit', label: 'refund_free',
       anchor: { file: 'billing.sql', sql: 'public.refund_free' } },
     'cr.add':         { diagram: 'credits', group: 'give back', kind: 'credit', label: 'add_credits',
@@ -290,7 +374,7 @@ module.exports = {
     { from: 'bd.atsPull', to: 'bd.closed', label: 'not in the feed', style: 'drop' },
 
     { from: 'sv.auth', to: 'sv.switch' },
-    ...['packs', 'board', 'report', 'llm', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
@@ -302,11 +386,24 @@ module.exports = {
     { from: 'sc.grab', to: 'sc.keep', label: 'fit {MIN_FIT}+' },
     { from: 'sc.grab', to: 'sc.below', label: 'under {MIN_FIT}', style: 'drop' },
     { from: 'sc.batch', to: 'sc.unscored', label: 'batch threw', style: 'drop' },
+    { from: 'sc.rescore', to: 'sc.batch' },
+    { from: 'sc.rescore', to: 'sc.judge', label: 'one call per job' },
+    { from: 'sc.cut', to: 'sc.judgeMany', label: 'once for the whole search' },
+    { from: 'sc.judgeMany', to: 'sc.merge' },
+    { from: 'sc.judge', to: 'sc.merge' }, { from: 'sc.grab', to: 'sc.merge' },
+    { from: 'sc.merge', to: 'sc.span' },
 
     { from: 'st.save', to: 'st.put' }, { from: 'st.put', to: 'st.localOnly', label: 'a key?' },
     { from: 'st.put', to: 'st.putLocal', label: 'always, first' },
     { from: 'st.putLocal', to: 'st.blob', label: 'then sync' },
     { from: 'st.blob', to: 'st.down', label: 'timed out', style: 'drop' },
+    { from: 'st.save', to: 'st.saveRows', label: 'migrated' },
+    { from: 'st.saveRows', to: 'st.coerce' },
+    { from: 'st.coerce', to: 'st.profiles', label: 'changed profiles' },
+    { from: 'st.coerce', to: 'st.jobs', label: 'changed jobs' },
+    { from: 'st.migrate', to: 'st.saveRows', label: 'once, then counts it back' },
+    { from: 'st.blob', to: 'st.migrate', label: 'not migrated yet' },
+    { from: 'st.saveRows', to: 'st.down', label: 'timed out', style: 'drop' },
 
     { from: 'cr.spendSearch', to: 'cr.credits' }, { from: 'cr.spendLlm', to: 'cr.credits' },
     { from: 'cr.spendSearch', to: 'cr.refundFree', label: 'nothing came back' },

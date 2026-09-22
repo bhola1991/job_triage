@@ -200,3 +200,232 @@ end $$;
 
 revoke all on function public.delete_my_data() from public, anon;
 grant execute on function public.delete_my_data() to authenticated;
+
+
+-- ===========================================================================
+-- Per-row storage: profiles and jobs
+-- ===========================================================================
+--
+-- Everything above stores a user's whole world in one text blob under the
+-- 'triage:db' key. A save is a full rewrite of that blob, so two tabs that
+-- both save lose whichever finished first -- and it is never the tab that was
+-- wrong, just the slower one. Searching in one tab while editing in another is
+-- the ordinary way to use this app, so that is not a rare race.
+--
+-- These two tables take the blob apart. A job is a row, so two tabs editing
+-- two different jobs write two different rows and neither is lost. Within one
+-- row the policy is last-writer-wins, which is the honest trade: the loser is
+-- one field of one job rather than every job added since the other tab loaded.
+--
+-- The blob does not disappear when these arrive. 'triage:db' is written
+-- alongside the rows until 'triage:migrated' is set for that user, so a
+-- rollback is a one-line change rather than a restore.
+
+create table if not exists public.profiles (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  -- The app's own profile key ('p_mdx1k2' -- index.html mints it from the
+  -- clock). It is what DB.profiles is keyed by and what DB.current points at,
+  -- so it has to survive the round trip; a uuid the app never sees could not
+  -- rebuild either. Unique per user, not globally: two people importing the
+  -- same backup would otherwise collide.
+  local_id   text        not null,
+  name text, headline text, location text, country text,
+  -- Google's countryCode wants "in", not "India" and not "IN". The app
+  -- normalises to two lower-case letters and searches with it, so it is its
+  -- own column rather than something parsed back out of `country`.
+  country_code text,
+  seniority text, years_experience int,
+  domains      jsonb not null default '[]',
+  strengths    jsonb not null default '[]',
+  hard_skills  jsonb not null default '[]',
+  gaps         jsonb not null default '[]',
+  wrong_shapes jsonb not null default '[]',
+  unusual_combination text,
+  -- The CV as typed or extracted. This is the most personal column in the
+  -- database and the reason row-level security below is not optional.
+  cv_text    text,
+  tracks     jsonb not null default '[]',
+  -- Which track is selected right now: an id from tracks[], not an index.
+  track      text,
+  -- The app writes plain 'YYYY-MM-DD' strings and shows them unparsed.
+  created    text,
+  -- Anything a typed column above could not hold without changing it. The app
+  -- is one HTML file with no validation layer: years_experience is asked for
+  -- as a number but arrives from a language model, and a CSV import copies
+  -- whatever was in the cell. Dropping those on the way into an int column
+  -- would be a silent, permanent edit to somebody's data. They come here
+  -- instead, verbatim, and are laid back over the row on read.
+  extras     jsonb not null default '{}',
+  role       text        not null default 'candidate',   -- 'employer' reserved
+  discoverable boolean   not null default false,         -- visibility stub
+  deleted    boolean     not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (user_id, local_id)
+);
+
+create table if not exists public.jobs (
+  id         uuid        primary key default gen_random_uuid(),
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  profile_id uuid        not null references public.profiles(id) on delete cascade,
+  -- keyOf() in index.html: 'u:<lowercased url>', or 't:title|company|location'
+  -- when there is no url. This is already what "have I seen this job before"
+  -- means to the app, so it is the natural key here too -- a second identity
+  -- scheme would let the same posting exist twice, once per definition.
+  job_key    text        not null,
+  url text, title text, company text, location text, description text,
+  -- Provenance of the posting date. posted is the midpoint of lo..hi and the
+  -- only one sorted on; posted_src says whether a feed stated it, a listing
+  -- was parsed, or a model guessed.
+  posted date, posted_lo date, posted_hi date, posted_src text,
+  channel text, stage text, status text,
+  date_applied date, follow_up_date date, last_touch date,
+  pitch_sent text, notes text, source text, query text,
+  -- Which door this row came in through. Written by jsearchRow() but missing
+  -- from the app's own COLS list, so it survives the blob and is dropped by a
+  -- CSV round trip. Carried here because losing it silently would be worse.
+  origin text,
+  ai_score int, ai_reachability int, ai_confidence text,
+  -- Comma-joined long flag names, as the app writes them today. This becomes
+  -- jsonb in step 2, when the flags gain facts and evidence spans and the
+  -- shape actually changes. Changing it here as well would mean migrating the
+  -- column twice.
+  ai_flags text,
+  -- Jev's answers for this posting, whole and unthresholded: every flag's
+  -- probability, both fit score distributions, and the visibility choice.
+  -- The app derives fit, reachability and the rank weight from this in the
+  -- browser, so re-weighting any of them is free -- the evidence has not
+  -- changed, only what we do with it. text rather than jsonb for the same
+  -- reason as ai_flags above: both are JSON held in a string by the app, and
+  -- migrating them together once is better than migrating one of them twice.
+  ai_judgment text,
+  ai_reason text,
+  -- See profiles.extras. On a job this earns its keep at the CSV door, which
+  -- copies cells in untouched: a date_applied of "12/03/2025" is not a date
+  -- to Postgres, and follow_up_date is legitimately in the future, so the
+  -- app's own date parser cannot be used to rescue it either.
+  extras   jsonb not null default '{}',
+  contacts jsonb not null default '[]',
+  events   jsonb not null default '[]',
+  added    text,
+  -- A tombstone, not a row that vanishes. A tab that has been offline still
+  -- holds a job somebody else deleted; without this it would helpfully add it
+  -- back on its next save.
+  deleted    boolean     not null default false,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (profile_id, job_key)
+);
+
+create index if not exists jobs_user_updated on public.jobs (user_id, updated_at desc);
+create index if not exists jobs_profile      on public.jobs (profile_id);
+create index if not exists profiles_user     on public.profiles (user_id);
+
+-- Same four policies as user_state above, for the same reason: the anon key is
+-- public, so without them anyone could read every CV in the table. All four
+-- verbs, because the write path upserts (insert AND update) and soft-deletes.
+alter table public.profiles enable row level security;
+
+drop policy if exists "own rows: select" on public.profiles;
+create policy "own rows: select" on public.profiles
+  for select using (auth.uid() = user_id);
+
+drop policy if exists "own rows: insert" on public.profiles;
+create policy "own rows: insert" on public.profiles
+  for insert with check (auth.uid() = user_id);
+
+drop policy if exists "own rows: update" on public.profiles;
+create policy "own rows: update" on public.profiles
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own rows: delete" on public.profiles;
+create policy "own rows: delete" on public.profiles
+  for delete using (auth.uid() = user_id);
+
+alter table public.jobs enable row level security;
+
+drop policy if exists "own rows: select" on public.jobs;
+create policy "own rows: select" on public.jobs
+  for select using (auth.uid() = user_id);
+
+-- The insert check carries a second clause the others do not need: a job must
+-- point at a profile the same person owns. user_id alone would let a caller
+-- file their own job under somebody else's profile_id -- not a read of another
+-- user's data, but a write into their list, which is worse.
+drop policy if exists "own rows: insert" on public.jobs;
+create policy "own rows: insert" on public.jobs
+  for insert with check (
+    auth.uid() = user_id
+    and exists (select 1 from public.profiles p
+                 where p.id = profile_id and p.user_id = auth.uid())
+  );
+
+drop policy if exists "own rows: update" on public.jobs;
+create policy "own rows: update" on public.jobs
+  for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+drop policy if exists "own rows: delete" on public.jobs;
+create policy "own rows: delete" on public.jobs
+  for delete using (auth.uid() = user_id);
+
+-- "Delete my data" has to reach the new tables too. The cascade from
+-- auth.users only fires when the ACCOUNT goes; this function is the other
+-- case, where someone empties their data and keeps the login. Until these two
+-- lines existed it emptied the blob and left every job row in place, which
+-- would have been the worst possible version of a privacy control: it reports
+-- success and the data is still there.
+create or replace function public.delete_my_data()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  delete from public.jobs       where user_id = auth.uid();
+  delete from public.profiles   where user_id = auth.uid();
+  delete from public.user_state where user_id = auth.uid();
+end $$;
+
+revoke all on function public.delete_my_data() from public, anon;
+grant execute on function public.delete_my_data() to authenticated;
+
+
+-- ---------------------------------------------------------------------------
+-- The outcome loop
+-- ---------------------------------------------------------------------------
+--
+-- "Log the outcome when someone acts on a job" needs no log. The outcome was
+-- always recorded -- stage is new/sent/live/closed and setStage stamps the
+-- dates -- it just had nowhere to meet the prediction, because the prediction
+-- lived inside a JSON blob that no query could reach into.
+--
+-- Now they are columns on the same row, so the loop closes with a view and no
+-- new writes, no second ledger and no further copy of anybody's data. What it
+-- answers is the question the matcher has to be judged on: of the jobs where
+-- we raised a given flag, how many did this person actually act on, and how
+-- many came back?
+--
+-- security_invoker means it runs as the caller, so row-level security on jobs
+-- scopes it to one person's own rows -- the same arrangement the usage views
+-- in billing.sql use. Tombstoned rows are counted on purpose: a job someone
+-- deleted is an outcome, and quite an informative one.
+
+create or replace view public.matcher_outcomes with (security_invoker = on) as
+select
+  fl.el ->> 'code'                                             as flag,
+  count(*)                                                     as judged,
+  count(*) filter (where j.stage in ('sent', 'live', 'closed')) as applied,
+  count(*) filter (where j.stage = 'live')                     as replied,
+  count(*) filter (where j.deleted)                            as discarded,
+  round(avg(j.ai_score), 1)                                    as avg_fit,
+  round(avg(j.ai_reachability), 1)                             as avg_reach
+from public.jobs j
+cross join lateral jsonb_array_elements(
+  -- ai_flags is text: a JSON array since the flags gained facts, a comma-
+  -- joined list of long names before that. Only the first shape is readable
+  -- here, and the older rows simply do not contribute.
+  case when left(btrim(coalesce(j.ai_flags, '')), 1) = '['
+       then j.ai_flags::jsonb
+       else '[]'::jsonb end
+) as fl(el)
+group by 1;

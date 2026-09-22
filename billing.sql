@@ -75,8 +75,8 @@ begin
   insert into public.credits (user_id) values (p_user) on conflict (user_id) do nothing;
   select * into r from public.credits where user_id = p_user and unlimited;
   if found then return jsonb_build_object('used','unlimited','balance',r.balance,'free_search',r.free_search,'free_tier',r.free_tier,'unlimited',true); end if;
-  update public.credits set free_llm = free_llm - 1, updated_at = now()
-   where user_id = p_user and free_tier and free_llm > 0 returning * into r;
+  update public.credits set free_llm = free_llm - p_n, updated_at = now()
+   where user_id = p_user and free_tier and free_llm >= p_n returning * into r;
   if found then return jsonb_build_object('used','free','balance',r.balance,'free_search',r.free_search,'free_tier',r.free_tier); end if;
   update public.credits set balance = balance - p_n, updated_at = now()
    where user_id = p_user and balance >= p_n returning * into r;

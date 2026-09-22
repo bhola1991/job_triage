@@ -1,0 +1,12 @@
+{
+  "_note": "Written by scripts/eval-matcher.js --write-baseline. A drop against these fails the check; raising them is the point of working on the matcher.",
+  "recorded": "2026-09-21",
+  "metrics": {
+    "precision": 1,
+    "recall": 1,
+    "calibration": 1,
+    "factRate": 1,
+    "spanRate": 0.867,
+    "cases": 10
+  }
+}

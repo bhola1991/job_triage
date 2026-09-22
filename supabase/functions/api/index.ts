@@ -5,11 +5,12 @@
 // secrets. Nothing secret is ever returned to the browser.
 //
 // Secrets (supabase secrets set ...):
-//   DEEPSEEK_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+//   DEEPSEEK_API_KEY, TYPESAFE_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 //   optional job sources: ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { judge } from "../_shared/judge.ts";
 
 // Prices are server-side only; the browser sends just the pack id. paise: ₹1 = 100.
 // A credit sells for ₹0.80 (Pro) to ₹0.99 (Starter).
@@ -29,6 +30,16 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
 const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
 
+/* The ceiling on one hosted LLM call, reasoning included. deepseek-v4-pro
+   thinks before it answers and those tokens come out of this same number, so
+   this is not "how long may the reply be" -- it is the whole budget. It must
+   equal TOK_CAP in index.html: the browser sends max_tokens and this clamps it,
+   so if this were the smaller of the two every hosted call would be quietly
+   trimmed below what the app asked for and the only symptom would be truncated
+   JSON. scripts/pipeline-map.js asserts the two agree; keep the name, it is
+   read out of this file by that check. */
+const LLM_TOK_CAP = 4000;
+
 const secret = (k: string) => {
   const v = Deno.env.get(k);
   if (!v) throw new Error(`server is missing the ${k} secret`);
@@ -44,6 +55,27 @@ const cors = {
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 class Http extends Error { constructor(public status: number, msg: string) { super(msg); } }
+
+/* Jev takes one state per request, so a batch of postings cannot share a call --
+   and should not: unrelated postings in one state act as distractors for every
+   question the model is asked. So a batch fans out into one call per posting,
+   which is what these bound. MAX_JUDGE_BATCH must equal JUDGE_BATCH in
+   index.html, or the browser sends batches this rejects; pipeline-map asserts
+   it. JUDGE_FANOUT is well under the published 1,200 requests/minute; it exists
+   to keep one user's batch from being the whole rate limit. */
+const MAX_JUDGE_BATCH = 50;
+const JUDGE_FANOUT = 8;
+const JUDGE_BATCH_CHARS = 400_000;
+
+/** Runs `fn` over `xs` at most `n` at a time, answers in input order. */
+async function mapLimit<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(xs.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, xs.length) }, async () => {
+    while (i < xs.length) { const k = i++; out[k] = await fn(xs[k]); }
+  }));
+  return out;
+}
 
 const APIFY = "https://api.apify.com/v2";
 // The only actor the app uses. Anything else would let a user run arbitrary
@@ -327,7 +359,23 @@ const PRICE_USD: Record<string, number> = {
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
   adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0,
 };
-const DEEPSEEK_USD_PER_M = { in: 1.32, in_cached: 0.044, out: 3.96 }; // deepseek-v4-pro peak list price; verify
+/* Per tier, because the browser can now ask for either and they are not close:
+   flash is ~4x cheaper in, ~7x cheaper on a cache hit, ~3x cheaper out. Pricing
+   one at the other's rate would not fail anything -- it would just quietly make
+   every ₹ figure in the ledger wrong, which is the number this whole table
+   exists to get right. Peak list price, as before: DeepSeek halves these
+   off-peak (01:00-04:00 and 06:00-10:00 UTC Mon-Fri are peak), so a real bill
+   lands at or under what this records. Verify against yours. */
+const DEEPSEEK_USD_PER_M: Record<string, { in: number; in_cached: number; out: number }> = {
+  "deepseek-v4-pro": { in: 1.32, in_cached: 0.044, out: 3.96 },   // V4-Pro-0813
+  "deepseek-flash":  { in: 0.30, in_cached: 0.006, out: 1.20 },   // V4.1-Flash
+};
+
+/* The browser sends a tier name and never a model id -- our key pays for this
+   call, so the model is chosen here. An unknown or missing tier is pro: the
+   fallback has to be the one that answers well, because the failure mode of
+   guessing wrong is a worse score, not an error anyone sees. */
+const LLM_MODELS: Record<string, string> = { pro: "deepseek-v4-pro", flash: "deepseek-flash" };
 const inr = (usd: number) => Math.round(usd * USD_INR * 1000) / 1000;
 async function logUsage(rows: Record<string, unknown>[]) {
   if (!rows.length) return;
@@ -539,15 +587,16 @@ Deno.serve(async (req) => {
       case "llm": {
         const prompt = String(b.prompt || "");
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
+        const model = LLM_MODELS[String(b.tier || "pro")] || LLM_MODELS.pro;
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
           const r = await fetch("https://api.deepseek.com/chat/completions", {
             method: "POST",
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
             body: JSON.stringify({
-              model: "deepseek-v4-pro",
+              model,
               reasoning_effort: "high", thinking: { type: "enabled" },
-              max_tokens: Math.min(Number(b.max_tokens) || 4000, 4000),
+              max_tokens: Math.min(Number(b.max_tokens) || LLM_TOK_CAP, LLM_TOK_CAP),
               messages: [{ role: "user", content: prompt }],
             }),
           }).catch(() => null);
@@ -561,11 +610,31 @@ Deno.serve(async (req) => {
             await refund(user, s, "llm", COST.llm);
             throw new Http(502, "The model didn't answer. No credit was used — try again.");
           }
+          // Hit the ceiling: the reply is real but cut off mid-token, so its JSON
+          // will not parse and the caller keeps the batch unscored. That is the
+          // same worthless outcome as no answer at all, and it used to be the
+          // expensive one -- 200 OK, credit kept, nothing scored, and the only
+          // trace a grabJSON throw in the browser. Refund it and say so.
+          if (d?.choices?.[0]?.finish_reason === "length") {
+            await refund(user, s, "llm", COST.llm);
+            throw new Http(502, `The model ran past its ${LLM_TOK_CAP}-token ceiling and the answer was cut off. No credit was used — try again, or score fewer jobs at once.`);
+          }
           // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
           const u = d.usage || {}, cached = u.prompt_cache_hit_tokens || 0, tin = u.prompt_tokens || 0, tout = u.completion_tokens || 0;
+          // No price for a model is a gap in the table above, not a reason to fail
+          // a call the user already paid a credit for: record the tokens with a
+          // null ₹ so the hole is visible in the ledger instead of being filled
+          // with another model's rate.
+          const px = DEEPSEEK_USD_PER_M[model];
+          // source stays "deepseek" so source_yield keeps one row for it rather
+          // than one per tier; which model ran goes in note, which is otherwise
+          // only written on error rows and is free here. A real `model` column
+          // would be cleaner, but adding one means logUsage inserts a column a
+          // not-yet-migrated database does not have -- and logUsage swallows its
+          // own errors, so the ledger would stop recording llm calls silently.
           await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
-            kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout,
-            cost_inr: inr(((tin - cached) * DEEPSEEK_USD_PER_M.in + cached * DEEPSEEK_USD_PER_M.in_cached + tout * DEEPSEEK_USD_PER_M.out) / 1e6) }]);
+            kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout, note: model,
+            cost_inr: px ? inr(((tin - cached) * px.in + cached * px.in_cached + tout * px.out) / 1e6) : null }]);
           return json({ text, ...wallet(s) });
         } catch (e) {
           // Anything that throws after the credit was taken has to put it back.
@@ -573,6 +642,96 @@ Deno.serve(async (req) => {
           // refunds nothing, so an unexpected failure here used to be charged
           // for silently. The Http paths above refund themselves, so they are
           // deliberately left alone.
+          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          throw e;
+        }
+      }
+
+      // One job judged by TypeSafe's System One (Jev): confidence (how much of
+      // the posting is actually visible), the two fit scores, and the ten flag
+      // codes, each as its own yes/no. This replaces the `c`, `f`, `s` and `re`
+      // fields DeepSeek used to return inside the scoring JSON. Metered like an
+      // LLM call: one credit, refunded if Jev fails, payload capped against abuse.
+      case "judge": {
+        const posting = (b.posting || {}) as Record<string, unknown>;
+        if (!posting.title && !posting.description) throw new Http(400, "no posting");
+        if (JSON.stringify({ posting, candidate: b.candidate || {} }).length > 20000) throw new Http(400, "posting too large");
+        const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
+        try {
+          const out = await judge(posting, b.candidate || {});
+          /* Every other spend in this function writes a ledger row; this one
+             did not, so TypeSafe was the one vendor we paid with no record of
+             what for. `note` carries the model the call actually ran on --
+             the same trick as the DeepSeek rows, and the only way to find out
+             what "jev-latest" resolved to before pinning it.
+
+             No cost_inr: this is billed per judgment on a plan, not per token
+             at a list price we could multiply out, and a made-up number in a
+             column named cost is worse than an empty one. */
+          await logUsage([{
+            user_id: user, search_id: b.search_id ?? null,
+            kind: "llm", source: "typesafe", units: 1,
+            tokens_in: out.usage?.input_tokens ?? null,
+            tokens_out: out.usage?.output_tokens ?? null,
+            note: out.model,
+          }]);
+          return json(out);
+        } catch (e) {
+          /* Everything inside this try runs after the credit was taken and none
+             of it delivers a judgment, so every failure refunds. This used to
+             skip the refund for an Http thrown from inside judge() while still
+             telling the user no credit had been used. */
+          await refund(user, s, "llm", COST.llm);
+          throw new Http(502, "Judgment call failed. No credit was used.");
+        }
+      }
+
+      /* The same judgment, for many postings in one round trip. What batches is
+         the round trip and the meter, not the state: each posting still gets its
+         own Jev call (see MAX_JUDGE_BATCH). One credit for the batch -- the same
+         credit an `llm` call scoring twelve jobs costs -- which is what makes
+         judging a whole search affordable rather than 300 separate charges.
+
+         A partial batch keeps the credit and returns per-posting results: the
+         caller got answers for the rows that worked, and a row that failed comes
+         back as {ok:false} rather than vanishing. Only a batch where every
+         judgment failed is an upstream fault, and that one refunds. */
+      case "judge_batch": {
+        const postings = Array.isArray(b.postings) ? b.postings as Record<string, unknown>[] : [];
+        if (!postings.length) throw new Http(400, "no postings");
+        if (postings.length > MAX_JUDGE_BATCH) throw new Http(400, `at most ${MAX_JUDGE_BATCH} postings per batch`);
+        const candidate = b.candidate || {};
+        if (JSON.stringify({ postings, candidate }).length > JUDGE_BATCH_CHARS) throw new Http(400, "batch too large");
+        const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
+        try {
+          const out = await mapLimit(postings, JUDGE_FANOUT, async (p) => {
+            if (!p || (!p.title && !p.description)) return { ok: false, error: "no posting" };
+            try {
+              return { ok: true, ...(await judge(p, candidate)) };
+            } catch (e) {
+              // One posting Jev could not answer does not fail the other 49.
+              return { ok: false, error: String((e as Error)?.message ?? e) };
+            }
+          });
+          const done = out.filter((r) => r.ok) as Array<
+            { model?: string; usage?: { input_tokens?: number; output_tokens?: number } }
+          >;
+          if (!done.length) {
+            await refund(user, s, "llm", COST.llm);
+            throw new Http(502, "Judgment call failed. No credit was used.");
+          }
+          // units is how many postings were judged, so the ledger shows what one
+          // credit actually bought; the DeepSeek rows mean the same thing by 1.
+          const sum = (pick: (u: { input_tokens?: number; output_tokens?: number }) => number | undefined) =>
+            done.reduce((n, r) => n + (pick(r.usage ?? {}) ?? 0), 0);
+          await logUsage([{
+            user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
+            kind: "llm", source: "typesafe", units: done.length,
+            tokens_in: sum((u) => u.input_tokens), tokens_out: sum((u) => u.output_tokens),
+            note: done[0].model,
+          }]);
+          return json({ judgments: out, ...wallet(s) });
+        } catch (e) {
           if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
           throw e;
         }

@@ -152,21 +152,43 @@ function sectionOf(line, bs) {
    Read out of source so a label can say {MIN_FIT} and follow it. Anything that
    is not a flat literal fails: the diagram cannot honestly show the value of a
    computed expression, so it must not pretend to. */
-function readConst(name, file, isObject) {
+function readConst(name, file, opt) {
+  const isObject = opt.object, isStringMap = opt.strings;
   const text = src(file);
   if (text === null) { fail(`constant ${name} — cannot read ${file}`); return null; }
-  const hits = [...text.matchAll(new RegExp(`^[ \\t]*const\\s+[^;\\n]*\\b${esc(name)}\\s*=\\s*`, 'gm'))];
+  /* The optional `: ...` is a TypeScript type annotation -- `const X: Record<string, string> = {`.
+     It has to be anchored to a colon and not just "anything up to the next =": the loose
+     form also matched the name being READ inside some other const's initialiser, where the
+     next = belongs to a >= comparison (`const overBar = j => fitOf(j)>=WORK_FIT && ...>=`). */
+  const hits = [...text.matchAll(new RegExp(`^[ \\t]*(?:export\\s+)?const\\s+[^;\\n]*\\b${esc(name)}\\b\\s*(?::[^=;\\n]*)?=\\s*`, 'gm'))];
   if (hits.length !== 1) { fail(`constant ${name} — declaration matched ${hits.length} times in ${file}; want exactly 1`); return null; }
   const rest = text.slice(hits[0].index + hits[0][0].length);
-  if (isObject) {
+  /* A list of names rather than a value: the ten flag codes, spelled as an
+     object's keys in one runtime and an array's members in the other. Sorted,
+     because the two files agreeing on the SET is the thing worth asserting --
+     failing over the order they happen to be written in would be a check that
+     cries wolf, and those stop being read. */
+  if (opt.keys || opt.array) {
+    const m = rest.match(opt.keys ? /^\{([^}]*)\}/ : /^\[([^\]]*)\]/);
+    if (!m) { fail(`constant ${name} — expected a flat ${opt.keys ? 'object' : 'array'} literal in ${file}`); return null; }
+    const out = opt.keys
+      ? [...m[1].matchAll(/(\w+)\s*:/g)].map((x) => x[1])
+      : [...m[1].matchAll(/["']([^"']+)["']/g)].map((x) => x[1]);
+    if (!out.length) { fail(`constant ${name} — ${opt.keys ? 'object' : 'array'} literal held no names`); return null; }
+    return out.sort();
+  }
+  if (isObject || isStringMap) {
     const m = rest.match(/^\{([^}]*)\}/);
     if (!m) { fail(`constant ${name} — expected a flat object literal in ${file}`); return null; }
     const out = {};
-    for (const p of [...m[1].matchAll(/(\w+)\s*:\s*(\d+)/g)]) out[p[1]] = Number(p[2]);
-    if (!Object.keys(out).length) { fail(`constant ${name} — object literal held no numeric keys`); return null; }
+    if (isStringMap) for (const p of [...m[1].matchAll(/(\w+)\s*:\s*["']([^"']*)["']/g)]) out[p[1]] = p[2];
+    else for (const p of [...m[1].matchAll(/(\w+)\s*:\s*(\d+)/g)]) out[p[1]] = Number(p[2]);
+    if (!Object.keys(out).length) { fail(`constant ${name} — object literal held no ${isStringMap ? 'string' : 'numeric'} keys`); return null; }
     return out;
   }
-  const n = rest.match(/^(\d+)\s*[,;]/);
+  // Decimals as well as whole numbers: a probability threshold is a constant
+  // like any other, and rounding one to 0 in a diagram would be a lie.
+  const n = rest.match(/^(\d+(?:\.\d+)?)\s*[,;]/);
   if (n) return Number(n[1]);
   const s = rest.match(/^['"]([^'"]*)['"]\s*[,;]/);
   if (s) return s[1];
@@ -210,11 +232,24 @@ console.log(`pipeline map vs source${ROOT !== path.join(__dirname, '..') ? ` (ro
 // 1. constants
 const CONST = {};
 for (const c of spec.constants || []) {
-  const v = readConst(c.name, c.file, c.object);
+  const v = readConst(c.name, c.file, c);
   if (v !== null) CONST[c.name] = v;
 }
 const shown = Object.entries(CONST).map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`);
 if (shown.length) ok(`${shown.length} constants read from source — ${shown.join('  ')}`);
+
+/* Constants that must agree across runtimes. Nothing in either file can check
+   this: they are different languages, deployed separately, and both values look
+   perfectly reasonable on their own. */
+for (const inv of spec.invariants || []) {
+  const [a, b] = inv.equal;
+  if (!(a in CONST) || !(b in CONST)) continue;   // readConst already failed and said why
+  const norm = v => typeof v === 'object'
+    ? JSON.stringify(Object.fromEntries(Object.entries(v).sort(([x], [y]) => x < y ? -1 : 1)))
+    : String(v);
+  if (norm(CONST[a]) === norm(CONST[b])) ok(`${a} == ${b} (${norm(CONST[a])})`);
+  else fail(`${a} is ${norm(CONST[a])} but ${b} is ${norm(CONST[b])}; they must be equal.\n        ${inv.why}`);
+}
 
 const subst = (text, where) => String(text).replace(/\{([A-Za-z_][\w.]*)\}/g, (m, key) => {
   const [head, prop] = key.split('.');

@@ -63,3 +63,8 @@ worker-configuration.d.ts
 # Local-only secrets for `wrangler dev` (e.g. RESEND_API_KEY). Never commit --
 # the real value lives in the Cloudflare secret store via `wrangler secret put`.
 .dev.vars
+
+# Local API keys (DEEPSEEK_API_KEY, TYPESAFE_API_KEY) for test-judge.ts and other
+# local scripts. Production reads the same names from Supabase secrets.
+.env.local
+.env*.local
