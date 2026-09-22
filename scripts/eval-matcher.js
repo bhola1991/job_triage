@@ -31,7 +31,8 @@ const grab = re => { const m = h.match(re); if (!m) throw new Error('missing ' +
 const T = new Function(
   grab(/const FLAG_CODES = \{[\s\S]*?\nfunction addSpans[\s\S]*?\n}\n/) +
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
-  ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P};'
+  ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
+  + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE};'
 )();
 
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'eval', 'cases.json'), 'utf8'));
@@ -159,6 +160,62 @@ const spanRate = r3(withSpan / flagsTotal);
   else if (/"why"/.test(prompt[0])) fail('the scoring prompt still asks the model for a "why" sentence');
   else if (!/"fact"/.test(prompt[0])) fail('the scoring prompt no longer asks for a fact per flag');
   else ok('the classifier is asked for flags and facts, and for no prose at all');
+}
+
+// ── 8. composing a judgement into numbers ────────────────────────────────
+/* Constructed distributions, not recorded ones -- like section 6, this checks
+   the arithmetic the app does with an answer, not the answer. The recorded
+   cases still carry DeepSeek's numbers, and fit/reach still come from them; the
+   composition below is what 2e has to measure against those before the app can
+   switch over. Pinning it here means the weights cannot drift unnoticed in the
+   meantime, because every one of them is a policy choice that re-ranks lists. */
+{
+  const dist = o => ({ score: 99, probabilities: o });   // score: deliberately absurd
+  let bad = 0;
+  const eq = (got, want, what) => { if (got !== want) { fail(`${what}: got ${got}, expected ${want}`); bad++; } };
+
+  // The interpolated float is ignored on purpose: jev-1.13 is documented weak
+  // at numeric calibration, so a score of 99 next to a bottom-level
+  // distribution must read as the distribution, not as 99.
+  eq(T.scoreFromDist(dist({ '0': 1, '1': 0, '2': 0, '3': 0, '4': 0 })), 0, 'all mass on the bottom level');
+  eq(T.scoreFromDist(dist({ '0': 0, '1': 0, '2': 0, '3': 0, '4': 1 })), 100, 'all mass on the top level');
+  eq(T.scoreFromDist(dist({ '0': 0.5, '1': 0, '2': 0, '3': 0, '4': 0.5 })), 50, 'mass split across the ends');
+  eq(T.scoreFromDist(null), null, 'no answer composes to nothing rather than to zero');
+
+  // Capability outweighs targeting, so the one the candidate can do outranks
+  // the one they merely want.
+  const jv = (cap, tgt) => ({ scores: { fit_capability: dist(cap), fit_targeting: dist(tgt) } });
+  const top = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 1 }, bot = { '0': 1, '1': 0, '2': 0, '3': 0, '4': 0 };
+  if (!(T.fitFromJudgment(jv(top, bot)) > T.fitFromJudgment(jv(bot, top)))) {
+    fail('fit no longer weighs capability above targeting'); bad++;
+  }
+  eq(T.fitFromJudgment({ scores: {} }), null, 'a judgement with no scores composes to nothing');
+
+  /* Reachability is composed from four nouls rather than asked. Each has a
+     direction, and getting one backwards would be invisible in any single
+     number -- so the ordering is asserted, not the value. */
+  const rj = p => ({ flags: Object.keys(p).map(code => ({ code, probability: p[code] })) });
+  const clean = T.reachFromJudgment(rj({ comp: 0, cred: 0, sen_hi: 0, open: 0 }));
+  const gated = T.reachFromJudgment(rj({ comp: 1, cred: 1, sen_hi: 1, open: 0 }));
+  const openTo = T.reachFromJudgment(rj({ comp: 0, cred: 0, sen_hi: 0, open: 1 }));
+  eq(clean, T.REACH_BASE, 'a posting with none of the four obstacles sits at the base');
+  if (!(gated < clean)) { fail(`crowding, a credential gate and too high a bar should lower reach (${gated} vs ${clean})`); bad++; }
+  if (!(openTo > clean)) { fail(`openness to non-traditional candidates should raise reach (${openTo} vs ${clean})`); bad++; }
+  eq(T.reachFromJudgment({ flags: [] }), null, 'no flags composes to nothing rather than to the base');
+
+  /* rankOf's confidence weight: a row with no raw judgement has to keep the
+     exact weight it had, or every list in the app quietly reorders. */
+  const wOrd = T.confWeight({ ai_confidence: 'medium' });
+  const wDist = T.confWeight({ ai_judgment: JSON.stringify({ confidence_probabilities: { high: 0, medium: 1, low: 0 } }) });
+  if (Math.abs(wOrd - 0.9) > 1e-9) { fail(`an unjudged row no longer weighs medium at 0.9, got ${wOrd}`); bad++; }
+  if (Math.abs(wDist - 0.9) > 1e-9) { fail(`a peaked distribution should agree with the ordinal it replaces, got ${wDist}`); bad++; }
+  const wSplit = T.confWeight({ ai_judgment: JSON.stringify({ confidence_probabilities: { high: 0.5, medium: 0, low: 0.5 } }) });
+  if (!(wSplit > 0.78 && wSplit < 1)) { fail(`a split distribution should land between low and high, got ${wSplit}`); bad++; }
+  if (Math.abs(T.confWeight({ ai_judgment: '{oh no', ai_confidence: 'high' }) - 1) > 1e-9) {
+    fail('an unparseable judgement should fall back to the ordinal, not throw'); bad++;
+  }
+
+  if (!bad) ok('composition holds: the distribution decides (not the float), capability outweighs targeting, the four reach signs point the right way, and an unjudged row ranks exactly as it did');
 }
 
 // ── report ───────────────────────────────────────────────────────────────

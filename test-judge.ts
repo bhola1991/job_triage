@@ -3,7 +3,7 @@
 //
 //   deno run --node-modules-dir=none --env-file=.env.local --allow-env --allow-net test-judge.ts
 
-import { buildJudge, JUDGE_FLAG_CODES } from "./supabase/functions/_shared/judge.ts";
+import { buildJudge, JUDGE_FLAG_CODES, JUDGE_SCORE_DIMS } from "./supabase/functions/_shared/judge.ts";
 import { typesafe } from "./supabase/functions/_shared/api-clients.ts";
 
 const posting = {
@@ -26,6 +26,12 @@ const r = await typesafe().systemOne({ state, questions });
 
 console.log("model:", r.model);
 console.log("confidence:", r.answers.confidence.choice, JSON.stringify(r.answers.confidence.probabilities));
+// The distribution, not just the float: the float is the part index.html
+// deliberately ignores, so printing it alone would hide what is composed from.
+for (const dim of JUDGE_SCORE_DIMS) {
+  const a = r.answers[dim];
+  console.log(`score ${dim}: ${a.score.toFixed(2)} conf ${a.confidence.toFixed(2)} ${JSON.stringify(a.probabilities)}`);
+}
 for (const code of JUDGE_FLAG_CODES) {
   console.log(`flag ${code}: ${r.answers[code].noul.toFixed(3)}`);
 }

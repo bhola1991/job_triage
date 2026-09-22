@@ -56,6 +56,27 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } });
 class Http extends Error { constructor(public status: number, msg: string) { super(msg); } }
 
+/* Jev takes one state per request, so a batch of postings cannot share a call --
+   and should not: unrelated postings in one state act as distractors for every
+   question the model is asked. So a batch fans out into one call per posting,
+   which is what these bound. MAX_JUDGE_BATCH must equal JUDGE_BATCH in
+   index.html, or the browser sends batches this rejects; pipeline-map asserts
+   it. JUDGE_FANOUT is well under the published 1,200 requests/minute; it exists
+   to keep one user's batch from being the whole rate limit. */
+const MAX_JUDGE_BATCH = 50;
+const JUDGE_FANOUT = 8;
+const JUDGE_BATCH_CHARS = 400_000;
+
+/** Runs `fn` over `xs` at most `n` at a time, answers in input order. */
+async function mapLimit<T, R>(xs: T[], n: number, fn: (x: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(xs.length);
+  let i = 0;
+  await Promise.all(Array.from({ length: Math.min(n, xs.length) }, async () => {
+    while (i < xs.length) { const k = i++; out[k] = await fn(xs[k]); }
+  }));
+  return out;
+}
+
 const APIFY = "https://api.apify.com/v2";
 // The only actor the app uses. Anything else would let a user run arbitrary
 // (and arbitrarily expensive) actors on your Apify account.
@@ -627,10 +648,10 @@ Deno.serve(async (req) => {
       }
 
       // One job judged by TypeSafe's System One (Jev): confidence (how much of
-      // the posting is actually visible) plus the ten flag codes, each as its
-      // own yes/no. This replaces the `c` and `f` fields DeepSeek used to return
-      // inside the scoring JSON. Metered like an LLM call: one credit, refunded
-      // if Jev fails, with the payload size-capped against abuse.
+      // the posting is actually visible), the two fit scores, and the ten flag
+      // codes, each as its own yes/no. This replaces the `c`, `f`, `s` and `re`
+      // fields DeepSeek used to return inside the scoring JSON. Metered like an
+      // LLM call: one credit, refunded if Jev fails, payload capped against abuse.
       case "judge": {
         const posting = (b.posting || {}) as Record<string, unknown>;
         if (!posting.title && !posting.description) throw new Http(400, "no posting");
@@ -656,8 +677,63 @@ Deno.serve(async (req) => {
           }]);
           return json(out);
         } catch (e) {
-          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          /* Everything inside this try runs after the credit was taken and none
+             of it delivers a judgment, so every failure refunds. This used to
+             skip the refund for an Http thrown from inside judge() while still
+             telling the user no credit had been used. */
+          await refund(user, s, "llm", COST.llm);
           throw new Http(502, "Judgment call failed. No credit was used.");
+        }
+      }
+
+      /* The same judgment, for many postings in one round trip. What batches is
+         the round trip and the meter, not the state: each posting still gets its
+         own Jev call (see MAX_JUDGE_BATCH). One credit for the batch -- the same
+         credit an `llm` call scoring twelve jobs costs -- which is what makes
+         judging a whole search affordable rather than 300 separate charges.
+
+         A partial batch keeps the credit and returns per-posting results: the
+         caller got answers for the rows that worked, and a row that failed comes
+         back as {ok:false} rather than vanishing. Only a batch where every
+         judgment failed is an upstream fault, and that one refunds. */
+      case "judge_batch": {
+        const postings = Array.isArray(b.postings) ? b.postings as Record<string, unknown>[] : [];
+        if (!postings.length) throw new Http(400, "no postings");
+        if (postings.length > MAX_JUDGE_BATCH) throw new Http(400, `at most ${MAX_JUDGE_BATCH} postings per batch`);
+        const candidate = b.candidate || {};
+        if (JSON.stringify({ postings, candidate }).length > JUDGE_BATCH_CHARS) throw new Http(400, "batch too large");
+        const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
+        try {
+          const out = await mapLimit(postings, JUDGE_FANOUT, async (p) => {
+            if (!p || (!p.title && !p.description)) return { ok: false, error: "no posting" };
+            try {
+              return { ok: true, ...(await judge(p, candidate)) };
+            } catch (e) {
+              // One posting Jev could not answer does not fail the other 49.
+              return { ok: false, error: String((e as Error)?.message ?? e) };
+            }
+          });
+          const done = out.filter((r) => r.ok) as Array<
+            { model?: string; usage?: { input_tokens?: number; output_tokens?: number } }
+          >;
+          if (!done.length) {
+            await refund(user, s, "llm", COST.llm);
+            throw new Http(502, "Judgment call failed. No credit was used.");
+          }
+          // units is how many postings were judged, so the ledger shows what one
+          // credit actually bought; the DeepSeek rows mean the same thing by 1.
+          const sum = (pick: (u: { input_tokens?: number; output_tokens?: number }) => number | undefined) =>
+            done.reduce((n, r) => n + (pick(r.usage ?? {}) ?? 0), 0);
+          await logUsage([{
+            user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
+            kind: "llm", source: "typesafe", units: done.length,
+            tokens_in: sum((u) => u.input_tokens), tokens_out: sum((u) => u.output_tokens),
+            note: done[0].model,
+          }]);
+          return json({ judgments: out, ...wallet(s) });
+        } catch (e) {
+          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          throw e;
         }
       }
 

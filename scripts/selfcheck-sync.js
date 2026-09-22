@@ -112,7 +112,7 @@ const ok = (c, m) => { if (!c) { console.error('FAIL', m); process.exitCode = 1;
 const job = (title, extra) => Object.assign({
   title, company: 'Acme', location: 'Remote', url: 'https://x/' + title.toLowerCase(),
   description: 'd', status: 'New', date_applied: '', follow_up_date: '', pitch_sent: 'No',
-  notes: '', source: '', query: '', ai_score: '', ai_reason: '', ai_flags: '',
+  notes: '', source: '', query: '', ai_score: '', ai_reason: '', ai_flags: '', ai_judgment: '',
   ai_confidence: '', ai_reachability: '', channel: 'posted', stage: 'new', last_touch: '',
   contacts: '[]', events: '[]', added: '2026-09-01', posted: '', posted_lo: '',
   posted_hi: '', posted_src: '',

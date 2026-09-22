@@ -27,6 +27,14 @@ const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Err
 const claude=async(t)=>CLAUDE(t);
 let SCORES=null;
 const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); const o={}; batch.forEach(b=>{ const v=SCORES(b.j); if(v!=null) o[String(b.i)]={score:v,reach:50,conf:'high',flags:[{code:'fit',fact:'go and postgres'}],posted:null}; }); return o; };
+/* scoreAndCut judges what it scores now. Both of these live outside the slice:
+   cloudNow gates the call, judgeMany makes it. Neither is what this file
+   checks, but leaving them out is not neutral -- cloudNow is read outside the
+   try, so its absence is a hard ReferenceError, and judgeMany's would be
+   swallowed into "no flags" instead. */
+let CLOUD=false, JUDGED=async()=>[];
+const cloudNow=()=>CLOUD;
+const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
 const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
 eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts};');
@@ -67,6 +75,30 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  const kf=JSON.parse(sc.kept[0].ai_flags);
  ok(Array.isArray(kf) && kf[0].code==='fit' && kf[0].fact==='go and postgres','ai_flags carries code and fact '+sc.kept[0].ai_flags);
  ok(!sc.kept[0].ai_reason,'no prose is written to the row');
+
+ /* Judging at intake. The point of doing it after the scoring loop rather than
+    inside it is that a search pays once for the whole list instead of once per
+    batch of twelve, so the call count is the assertion that matters most. */
+ const mk=n=>[...Array(n)].map((_,i)=>J('https://j/'+i,'T'+i,'C','Q'));
+ CLOUD=true; SCORES=()=>60;
+ let calls=0, sizes=[];
+ JUDGED=async(postings)=>{ calls++; sizes.push(postings.length);
+   return postings.map(p=>({ok:true, confidence:'high', _title:p.title,
+     flags:[{code:'loc',probability:0.9},{code:'fit',probability:0.1}]})); };
+ const jg=await scoreAndCut(mk(20),{},'t');
+ ok(calls===1 && sizes[0]===20,'the whole intake is judged in one pass, got '+calls+' call(s) of '+sizes.join('/'));
+ const jf=JSON.parse(jg.kept[0].ai_flags);
+ ok(jf.length===1 && jf[0].code==='loc','Jev decides which flags fire at intake, got '+jg.kept[0].ai_flags);
+ ok(JSON.parse(jg.kept[0].ai_judgment)._title===jg.kept[0].title,'each judgement lands on the posting it was asked about');
+ // A judgement that fails costs the flags, never the scoring already paid for.
+ JUDGED=async()=>{ throw new Error('typesafe down'); };
+ const jd=await scoreAndCut(mk(3),{},'t');
+ ok(jd.kept.length===3 && jd.kept[0].ai_score==='60' && !jd.kept[0].ai_judgment,'a failed judgement keeps the scoring it already paid for');
+ calls=0; CLOUD=false;
+ const jo=await scoreAndCut(mk(3),{},'t');
+ ok(calls===0 && jo.kept.length===3,'with no cloud session nothing is judged and the scoring still lands');
+ CLOUD=false;
+
  SCORES='fail';
  const sf=await scoreAndCut(many.slice(0,3),{},'t');
  ok(sf.kept.length===0 && sf.unscored.length===3,'scoring failure keeps batch unscored');

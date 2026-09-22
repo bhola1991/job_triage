@@ -292,6 +292,14 @@ create table if not exists public.jobs (
   -- shape actually changes. Changing it here as well would mean migrating the
   -- column twice.
   ai_flags text,
+  -- Jev's answers for this posting, whole and unthresholded: every flag's
+  -- probability, both fit score distributions, and the visibility choice.
+  -- The app derives fit, reachability and the rank weight from this in the
+  -- browser, so re-weighting any of them is free -- the evidence has not
+  -- changed, only what we do with it. text rather than jsonb for the same
+  -- reason as ai_flags above: both are JSON held in a string by the app, and
+  -- migrating them together once is better than migrating one of them twice.
+  ai_judgment text,
   ai_reason text,
   -- See profiles.extras. On a job this earns its keep at the CSV door, which
   -- copies cells in untouched: a date_applied of "12/03/2025" is not a date

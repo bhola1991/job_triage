@@ -579,7 +579,7 @@ document.addEventListener('click', e => {
 
 const COLS = ["title","company","location","url","description","status","date_applied",
   "follow_up_date","pitch_sent","notes","source","query",
-  "ai_score","ai_reason","ai_flags","ai_confidence","ai_reachability","channel",
+  "ai_score","ai_reason","ai_flags","ai_judgment","ai_confidence","ai_reachability","channel",
   "stage","last_touch","contacts","events","added",
   "posted","posted_lo","posted_hi","posted_src"];
 
@@ -1499,12 +1499,33 @@ async function hosted(action, body){
   if(data && typeof data.balance==='number') showCredits(data);
   return data;
 }
-/* Jev (TypeSafe System One) judges confidence and the ten flag codes for one
-   job. DeepSeek still returns fit/reach/why/date; this is the `c` and `f`
-   part of the old scoring JSON. Not called from scoreBatch yet — that is the
-   next step; it exists so the server action has a browser caller. */
+/* Jev (TypeSafe System One) judges one job: how much of the posting is visible,
+   the two fit scores, and the ten flag codes. Called per job from runScoring. */
 async function judgeJob(posting, candidate){
   return hosted('judge', { posting, candidate });
+}
+/* The same judgement for a whole list, in one round trip and for one credit.
+   Jev takes one state per request, so the server still makes one call per
+   posting -- what is batched is the trip and the charge, which is the only
+   reason judging a search of hundreds is affordable at all.
+
+   Must equal MAX_JUDGE_BATCH in the edge function, which rejects anything
+   longer; scripts/pipeline-map.js asserts the two agree. */
+const JUDGE_BATCH = 50;
+async function judgeMany(postings, candidate){
+  const out = [];
+  for(let i=0;i<postings.length;i+=JUDGE_BATCH){
+    // search_id ties the charge to the board search it belongs to, as claude() does.
+    const r = await hosted('judge_batch', { postings: postings.slice(i,i+JUDGE_BATCH), candidate, search_id:SEARCH_ID });
+    const got = (r && r.judgments) || [];
+    // Short replies pad with nulls: index k of the answer must stay index k of
+    // the input, or every judgement lands on the wrong job.
+    for(let k=0;k<Math.min(JUDGE_BATCH, postings.length-i);k++){
+      const one = got[k];
+      out.push(one && one.ok ? one : null);
+    }
+  }
+  return out;
 }
 function loadScript(src){
   return new Promise((ok,no)=>{ if(document.querySelector(`script[src="${src}"]`)) return ok();
@@ -2537,9 +2558,33 @@ function addJobs(list){
 const isScored = j => String(j.ai_score||'').trim()!=='';
 const fitOf   = j => { const v=parseFloat(j.ai_score); return isNaN(v)?0:Math.max(0,Math.min(100,v)); };
 const reachOf = j => { const v=parseFloat(j.ai_reachability); return isNaN(v)?45:Math.max(0,Math.min(100,v)); };
+/* The raw judgement as stored on the row, or null. Every number derived from a
+   judgement goes through here, so a row judged before this existed simply falls
+   back to whatever it already had rather than being re-judged for it. */
+function judgmentOf(j){
+  const v = j && j.ai_judgment;
+  if(!v) return null;
+  if(typeof v === 'object') return v;
+  try{ return JSON.parse(String(v)); }catch(e){ return null; }
+}
+const CONF_W={high:1,medium:.9,low:.78};
+/* How much a posting's visibility discounts its rank. Jev answers this as a
+   choice over the same three words the old ordinal used, so a row with no raw
+   judgement keeps exactly the weight it had. With one, the whole distribution
+   is used rather than its winner: a posting the model reads as 60% full and 40%
+   snippet is not the same row as one it is certain about, and collapsing to
+   "high" threw that difference away. */
+function confWeight(j){
+  const jv=judgmentOf(j), pr=jv&&jv.confidence_probabilities;
+  if(pr){
+    let acc=0, mass=0;
+    Object.keys(CONF_W).forEach(k=>{ const p=Number(pr[k]); if(isNaN(p)) return; acc+=CONF_W[k]*p; mass+=p; });
+    if(mass) return acc/mass;
+  }
+  return CONF_W[String(j.ai_confidence||'low').toLowerCase()]||.78;
+}
 function rankOf(j){
-  const conf={high:1,medium:.9,low:.78}[String(j.ai_confidence||'low').toLowerCase()]||.78;
-  return Math.pow(fitOf(j),0.65)*Math.pow(reachOf(j),0.35)*conf;
+  return Math.pow(fitOf(j),0.65)*Math.pow(reachOf(j),0.35)*confWeight(j);
 }
 const isOpen = j => stOf(j)!=='closed';
 
@@ -2781,14 +2826,99 @@ function bestSentence(desc, fact){
    threshold rather than trusting one chosen elsewhere; this is ours. */
 const FLAG_P = 0.5;
 
-/* Jev is asked about one job at a time and charged for it, so it needs the
-   candidate in the same shape every time rather than the whole profile. */
-const candidateOf = prof => ({
-  name: prof.name || '', location: prof.location || '',
-  seniority: prof.seniority || '',
-  strengths: prof.strengths || [], gaps: prof.gaps || [],
-  wrong_shapes: prof.wrong_shapes || [],
-});
+/* ── composing a judgement into numbers ──────────────────────────────────
+   Jev answers questions; it does not hand back a fit score. These turn its
+   answers into the 0-100 pair the app ranks on, in the browser, for free.
+
+   That is the point of storing the raw answers rather than only the numbers:
+   every weight below is a policy choice, and changing one re-ranks a list
+   that has already been judged without spending another credit on it. The
+   model's evidence has not changed, so there is nothing to ask again. */
+
+/* Jev's score levels come back as a probability per level plus an interpolated
+   float. The float is NOT used: jev-1.13 is documented as weak at numerical
+   calibration and cannot be trusted to place a value between two levels. The
+   distribution is the calibrated part, so each level contributes its own
+   position weighted by its own probability. */
+function scoreFromDist(ans){
+  if(!ans || !ans.probabilities) return null;
+  const keys = Object.keys(ans.probabilities);
+  let top = 0;
+  keys.forEach(k => { const n = Number(k); if(n > top) top = n; });
+  if(!top) return null;
+  let acc = 0, mass = 0;
+  keys.forEach(k => {
+    const p = Number(ans.probabilities[k]);
+    if(isNaN(p)) return;
+    acc += (Number(k) / top) * p; mass += p;
+  });
+  return mass ? Math.max(0, Math.min(100, Math.round(acc / mass * 100))) : null;
+}
+
+/* Two questions, because "fit" was always two: whether the person can do the
+   work, and whether it is the work they want. Capability carries more weight —
+   a role someone can do but is not aiming at is still an application they could
+   win, while the reverse is a wish. */
+const FIT_W = {fit_capability:0.6, fit_targeting:0.4};
+function fitFromJudgment(jv){
+  if(!jv || !jv.scores) return null;
+  let acc = 0, w = 0;
+  Object.keys(FIT_W).forEach(d => {
+    const v = scoreFromDist(jv.scores[d]);
+    if(v === null) return;
+    acc += v * FIT_W[d]; w += FIT_W[d];
+  });
+  return w ? Math.round(acc / w) : null;
+}
+
+/* Reachability is deliberately not asked. Asking for it would mean one question
+   about competition, credential gates, the seniority bar and openness to
+   outsiders all at once -- four things Jev is already being asked separately,
+   whose probabilities were being thrown away at the flag threshold. So it is
+   composed from those four instead: no extra question, no extra token, and a
+   weighting that can be argued with later for free.
+
+   Signs are the direction each pushes: crowding, a hard gate and a bar above
+   the candidate all make a reply less likely; an employer open to unusual
+   routes makes it more likely. */
+const REACH_W = {comp:-0.30, cred:-0.30, sen_hi:-0.25, open:0.15};
+const REACH_BASE = 55;
+function reachFromJudgment(jv){
+  if(!jv || !Array.isArray(jv.flags)) return null;
+  const p = {};
+  jv.flags.forEach(f => { p[f.code] = Number(f.probability); });
+  let v = REACH_BASE, seen = 0;
+  Object.keys(REACH_W).forEach(c => {
+    if(isNaN(p[c])) return;
+    seen++; v += REACH_W[c] * p[c] * 100;
+  });
+  return seen ? Math.max(0, Math.min(100, Math.round(v))) : null;
+}
+
+/* The candidate, in the same shape every time, carrying exactly what the
+   questions ask about and no more -- Jev's accuracy falls as a state grows with
+   detail unrelated to the decision, so this is a whitelist rather than the
+   whole profile.
+
+   Every field here answers a question that is actually asked. `targeting` and
+   `target_titles` are what fit_targeting reads; without them that question has
+   nothing to work from and can only answer from wrong_shapes, which makes it
+   good at rejecting and blind to matching. `rare_combination` is the subject of
+   the `rare` noul, which was being asked about a combination never supplied.
+   sysPrompt has told DeepSeek all of this since the beginning; this had drifted
+   behind it. */
+const candidateOf = (prof, track) => {
+  const ts = prof.tracks || [];
+  const t = ts.find(x => x.id === track) || ts[0] || {};
+  return {
+    name: prof.name || '', location: prof.location || '',
+    seniority: prof.seniority || '', headline: prof.headline || '',
+    targeting: t.label || '', target_titles: t.titles || [],
+    rare_combination: prof.unusual_combination || '',
+    strengths: prof.strengths || [], gaps: prof.gaps || [],
+    wrong_shapes: prof.wrong_shapes || [],
+  };
+};
 
 /* One job, judged. Returns null rather than throwing: a judgement is an
    improvement on the DeepSeek flags, not a precondition for having any, and a
@@ -2870,14 +3000,13 @@ async function runScoring(all, auto){
     const batch=targets.slice(i,i+SIZE);
     try{
       const res=await scoreBatch(batch,p.profile,p.track);
-      /* One judgement per job, and one credit per judgement -- where a whole
-         batch of DeepSeek scoring is also one credit. This path is the small
-         one (a rescore, capped at AUTO_MAX) which is why it can carry that;
-         board search arrives with hundreds of rows at a time and is left on
-         DeepSeek's own flags deliberately. In parallel across the batch, not
-         across the run: SIZE calls in flight is enough to keep it quick
-         without turning a rescore into a burst of paid traffic. */
-      const cand=candidateOf(p.profile);
+      /* One judgement per job, and one credit per judgement. This is the small
+         path -- a rescore, capped at AUTO_MAX -- so it can carry that; the
+         search path judges through judgeMany instead, which pays once for a
+         whole batch. In parallel across the batch, not across the run: SIZE
+         calls in flight is enough to keep it quick without turning a rescore
+         into a burst of paid traffic. */
+      const cand=candidateOf(p.profile, p.track);
       const judged=await Promise.all(batch.map(b=>{
         const r=res[String(b.i)];
         return r ? judgeInto(p.jobs[b.i], cand) : null;
@@ -2891,6 +3020,11 @@ async function runScoring(all, auto){
            every unjudged job in the ranking. */
         j.ai_confidence = (jv && jv.confidence) || r.conf;
         j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
+        /* The whole judgement, kept. Every number the app derives from it --
+           the fit pair, reachability, the confidence weight in rankOf -- is
+           computed from this in the browser, so changing any of those weights
+           re-ranks what is already judged without paying to judge it again. */
+        if(jv) j.ai_judgment = JSON.stringify(jv);
         // Only ever fills a gap. A date from a feed outranks the model's
         // reading of the same posting, and re-scoring must not overwrite it.
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
@@ -3024,7 +3158,7 @@ function boardFilter(jobs, trk, seen){
 const SCORE_BATCH = 12;
 const MIN_FIT = 50;
 async function scoreAndCut(jobs, prof, track){
-  const kept=[], unscored=[]; let below=0;
+  const kept=[], unscored=[], scored=[]; let below=0;
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
@@ -3039,19 +3173,46 @@ async function scoreAndCut(jobs, prof, track){
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
-        /* No judgement call here on purpose. A search lands hundreds of rows
-           and Jev is charged per row, so judging this path would cost more
-           than the search that produced it. */
         j.ai_confidence=r.conf;
         j.ai_flags=JSON.stringify(addSpans(r.flags, j.description));
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
-        if(r.score>=MIN_FIT) kept.push(j); else below++;
+        scored.push({j, r});
       });
     }catch(e){
       console.warn('scoring failed for a batch, keeping it unscored:', e.message);
       unscored.push(...part);
     }
   }
+
+  /* Judged after the scoring loop, not inside it: Jev is charged per batch of
+     JUDGE_BATCH, and a whole search judged in one pass is a handful of calls
+     where one per DeepSeek batch of twelve would be dozens. This used to be
+     skipped entirely on the grounds that Jev was charged per row -- it is not,
+     and a search whose flags nobody checked was the thing that cost most.
+
+     Failing here costs the flags, not the search: the rows keep the scores and
+     the DeepSeek flags they already have, which is what they had before. */
+  if(scored.length && cloudNow()){
+    try{
+      const cand=candidateOf(prof, track);
+      const judged=await judgeMany(scored.map(({j})=>({
+        title:String(j.title||''), company:String(j.company||''),
+        location:String(j.location||''),
+        description:String(j.description||'').slice(0,4000),
+      })), cand);
+      scored.forEach(({j, r}, k)=>{
+        const jv=judged[k];
+        if(!jv) return;
+        j.ai_confidence=jv.confidence||r.conf;
+        j.ai_flags=JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
+        j.ai_judgment=JSON.stringify(jv);
+      });
+    }catch(e){ console.warn('judgement skipped for this search:', e && e.message); }
+  }
+
+  // The cut stays on the DeepSeek score until the eval set says the composed
+  // one ranks at least as well — see PLAN.md 2e, which is the gate for that.
+  scored.forEach(({j, r})=>{ if(r.score>=MIN_FIT) kept.push(j); else below++; });
   return {kept, unscored, below};
 }
 

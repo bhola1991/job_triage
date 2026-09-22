@@ -39,6 +39,8 @@ module.exports = {
     { name: 'LLM_MODELS', file: 'supabase/functions/api/index.ts',   strings: true },
     { name: 'FLAG_P',     file: 'index.html' },
     { name: 'SPAN_FLOOR', file: 'index.html' },
+    { name: 'JUDGE_BATCH',     file: 'index.html' },
+    { name: 'MAX_JUDGE_BATCH', file: 'supabase/functions/api/index.ts' },
     { name: 'FLAG_CODES',       file: 'index.html',                          keys:  true },
     { name: 'JUDGE_FLAG_CODES', file: 'supabase/functions/_shared/judge.ts', array: true },
   ],
@@ -64,6 +66,13 @@ module.exports = {
            '        on a different model depending on whose key paid, and nothing anywhere says so --\n' +
            '        the scores just stop being comparable between users.' },
 
+    { equal: ['JUDGE_BATCH', 'MAX_JUDGE_BATCH'],
+      why: 'The browser slices a search into batches of JUDGE_BATCH postings; the edge function\n' +
+           '        rejects any batch longer than MAX_JUDGE_BATCH. If the app number is the larger one\n' +
+           '        every full batch comes back 400 and a whole search goes unjudged -- and scoreAndCut\n' +
+           '        catches that by design, so the symptom is not an error but flags quietly missing\n' +
+           '        from every row. If the server number is the larger one its ceiling is dead.' },
+
     { equal: ['FLAG_CODES', 'JUDGE_FLAG_CODES'],
       why: 'The ten flag codes are written out twice: as keys in index.html, which decides what\n' +
            '        DeepSeek may return and how each one is spelled in the UI, and as an array in\n' +
@@ -81,7 +90,7 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-    intro: 'One POST, eleven actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
+    intro: 'One POST, twelve actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
@@ -193,7 +202,10 @@ module.exports = {
       note: 'The server sees an opaque prompt string. It does no scoring of its own and knows nothing about jobs.' },
     'sv.judge':   { diagram: 'server', group: 'actions', kind: 'credit', label: 'judge — {COST.llm} credit',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'judge' },
-      note: 'The scoring prompt\'s c and f fields, moved off DeepSeek onto a typed System One judgment: one choice (confidence) and one noul per flag. One credit, refunded if Jev fails.' },
+      note: 'The scoring prompt\'s c and f fields, moved off DeepSeek onto a typed System One judgment: one choice (confidence), two scores (capability and targeting) and one noul per flag. One credit, refunded if Jev fails.' },
+    'sv.judgeBatch': { diagram: 'server', group: 'actions', kind: 'credit', label: 'judge_batch — {COST.llm} credit',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'judge_batch' },
+      note: 'The same judgment for up to {MAX_JUDGE_BATCH} postings. Jev takes one state per request, so the server still makes one call per posting and only the round trip and the charge are batched -- which is what makes judging a whole search cost one credit instead of three hundred. A partial batch keeps the credit; a batch where every posting failed refunds.' },
     'sv.apStart': { diagram: 'server', group: 'actions', kind: 'credit', label: 'apify_start — {COST.apifyQuery} per query',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_start' } },
     'sv.apStat':  { diagram: 'server', group: 'actions', kind: 'net', label: 'apify_status',
@@ -214,8 +226,8 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '2ae7f9',
-      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores.' },
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'e89c2a',
+      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
       note: 'Descriptions cut to 700 chars. A row that already has a trustworthy date sends it, so the model is never asked to guess one.' },
@@ -244,7 +256,10 @@ module.exports = {
       note: 'The other scoring path, and the small one: a rescore of what is already in the list, guarded by {AUTO_MAX}. Because it is small it can afford a judgement per job; board search cannot.' },
     'sc.judge':   { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeInto \u2014 {COST.llm} credit per JOB',
       anchor: { file: 'index.html', fn: 'judgeInto' }, section: 'scoring run',
-      note: 'Per job, where a whole DeepSeek batch of {SCORE_BATCH} is also {COST.llm} credit \u2014 so judging is about twelve times the price of scoring, which is why only the rescore path does it. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe key is not reachable from the browser at all, and DeepSeek\'s own flags stand.' },
+      note: 'Per job, where a whole DeepSeek batch of {SCORE_BATCH} is also {COST.llm} credit \u2014 so judging one job this way is about twelve times the price of scoring one. The rescore path can carry that because {AUTO_MAX} caps it; the search path pays once per batch through judgeMany instead. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe key is not reachable from the browser at all, and DeepSeek\'s own flags stand.' },
+    'sc.judgeMany': { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeMany \u2014 {COST.llm} credit per {JUDGE_BATCH}',
+      anchor: { file: 'index.html', fn: 'judgeMany' }, section: 'Credits',
+      note: 'What makes judging a whole search affordable: one charge and one round trip for {JUDGE_BATCH} postings, against one per job on the rescore path. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens.' },
     'sc.merge':   { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'mergeJudgment \u2014 Jev fires, DeepSeek explains',
       anchor: { file: 'index.html', fn: 'mergeJudgment' }, section: 'scoring run',
       note: 'Jev decides which flags are true above {FLAG_P}; the fact behind each comes from DeepSeek. A flag Jev raises that DeepSeek never mentioned shows with no fact rather than borrowing one from its neighbour.' },
@@ -359,7 +374,7 @@ module.exports = {
     { from: 'bd.atsPull', to: 'bd.closed', label: 'not in the feed', style: 'drop' },
 
     { from: 'sv.auth', to: 'sv.switch' },
-    ...['packs', 'board', 'report', 'llm', 'judge', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
@@ -373,6 +388,8 @@ module.exports = {
     { from: 'sc.batch', to: 'sc.unscored', label: 'batch threw', style: 'drop' },
     { from: 'sc.rescore', to: 'sc.batch' },
     { from: 'sc.rescore', to: 'sc.judge', label: 'one call per job' },
+    { from: 'sc.cut', to: 'sc.judgeMany', label: 'once for the whole search' },
+    { from: 'sc.judgeMany', to: 'sc.merge' },
     { from: 'sc.judge', to: 'sc.merge' }, { from: 'sc.grab', to: 'sc.merge' },
     { from: 'sc.merge', to: 'sc.span' },
 
