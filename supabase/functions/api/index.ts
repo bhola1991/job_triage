@@ -37,8 +37,13 @@ const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
    so if this were the smaller of the two every hosted call would be quietly
    trimmed below what the app asked for and the only symptom would be truncated
    JSON. scripts/pipeline-map.js asserts the two agree; keep the name, it is
-   read out of this file by that check. */
-const LLM_TOK_CAP = 4000;
+   read out of this file by that check.
+
+   Raised 4000 -> 8000: the pro rescore path was measured at 3874 and 3552
+   output tokens against the old ceiling, so it was running at 97% of a budget
+   whose overrun is refunded and thrown away. Flash no longer reasons at all
+   (see the llm case), which is the other half of the same fix. */
+const LLM_TOK_CAP = 8000;
 
 const secret = (k: string) => {
   const v = Deno.env.get(k);
@@ -588,6 +593,19 @@ Deno.serve(async (req) => {
         const prompt = String(b.prompt || "");
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
         const model = LLM_MODELS[String(b.tier || "pro")] || LLM_MODELS.pro;
+        /* Reasoning on the pro tier only, and it has to be conditional rather
+           than always-on. Reasoning tokens come out of the same max_tokens
+           budget as the answer, so a flash batch of twelve jobs plus high
+           effort overruns LLM_TOK_CAP, finish_reason comes back "length", and
+           the refund below throws the whole batch away unscored -- twelve rows
+           at a time, with no ledger row to show for it because the refund
+           happens before logUsage. That is what the bulk search path was
+           quietly losing.
+
+           flash is only ever asked for a score against a fixed rubric, which is
+           the one job reasoning does not help with. pro answers the questions
+           anybody reads, and keeps it. */
+        const think = model === LLM_MODELS.pro;
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
           const r = await fetch("https://api.deepseek.com/chat/completions", {
@@ -595,7 +613,7 @@ Deno.serve(async (req) => {
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
             body: JSON.stringify({
               model,
-              reasoning_effort: "high", thinking: { type: "enabled" },
+              ...(think ? { reasoning_effort: "high", thinking: { type: "enabled" } } : {}),
               max_tokens: Math.min(Number(b.max_tokens) || LLM_TOK_CAP, LLM_TOK_CAP),
               messages: [{ role: "user", content: prompt }],
             }),
