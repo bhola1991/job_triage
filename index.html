@@ -701,9 +701,16 @@ const FOLLOWUP_DAYS = 7;
    is kept unscored, and the credit was already spent. max_tokens is a ceiling
    and not a reservation, so headroom costs nothing unless it is used; how long
    an answer should actually be is the prompt's job, not this number's. The
-   server caps at 4000 (supabase/functions/api/index.ts), so nothing larger has
-   any effect. These were 700-3000 when the model did not think. */
-const TOK_CAP = 4000;
+   server caps at the same number (LLM_TOK_CAP in supabase/functions/api/index.ts,
+   which pipeline-map asserts is equal), so nothing larger has any effect.
+   These were 700-3000 when the model did not think.
+
+   Raised 4000 -> 8000 after the pro rescore path was measured returning 3874
+   and 3552 output tokens against the old ceiling -- 97% and 89% of it. Nothing
+   had failed yet, but the margin was one longer posting wide, and the failure
+   is silent: the reply is cut mid-token, grabJSON throws, and the batch is
+   kept unscored. Headroom is free unless it is used. */
+const TOK_CAP = 8000;
 
 
 /* ═══ state ═══

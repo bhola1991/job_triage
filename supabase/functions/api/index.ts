@@ -37,8 +37,13 @@ const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
    so if this were the smaller of the two every hosted call would be quietly
    trimmed below what the app asked for and the only symptom would be truncated
    JSON. scripts/pipeline-map.js asserts the two agree; keep the name, it is
-   read out of this file by that check. */
-const LLM_TOK_CAP = 4000;
+   read out of this file by that check.
+
+   Raised 4000 -> 8000: the pro rescore path was measured at 3874 and 3552
+   output tokens against the old ceiling, so it was running at 97% of a budget
+   whose overrun is refunded and thrown away. Flash no longer reasons at all
+   (see the llm case), which is the other half of the same fix. */
+const LLM_TOK_CAP = 8000;
 
 const secret = (k: string) => {
   const v = Deno.env.get(k);
