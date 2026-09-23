@@ -39,11 +39,16 @@ const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
    JSON. scripts/pipeline-map.js asserts the two agree; keep the name, it is
    read out of this file by that check.
 
-   Raised 4000 -> 8000: the pro rescore path was measured at 3874 and 3552
-   output tokens against the old ceiling, so it was running at 97% of a budget
-   whose overrun is refunded and thrown away. Flash no longer reasons at all
-   (see the llm case), which is the other half of the same fix. */
-const LLM_TOK_CAP = 8000;
+   Raised 4000 -> 8000 -> 16000. The ledger cannot be used to size this: a
+   truncated reply is refunded above before logUsage runs, so only calls that
+   fit are ever recorded. At 4000 that made the pro path look like it was
+   using 97% of its budget; lifting the ceiling to 8000 immediately produced
+   replies of 7229, 5574 and 7353, all of which had been failing invisibly.
+
+   Sized on what the model generates instead: ~1000-1200 output tokens per job
+   on pro at SIZE 6 with reasoning, ~150 on flash without it. deepseek-v4-pro
+   accepts max_tokens up to 65536, and a ceiling is not a reservation. */
+const LLM_TOK_CAP = 16000;
 
 const secret = (k: string) => {
   const v = Deno.env.get(k);
