@@ -2070,9 +2070,18 @@ const LLM = {
     keyPrefix:"sk-",
     where:"platform.deepseek.com → API keys",
     headers:k=>({"Content-Type":"application/json","Authorization":"Bearer "+k}),
-    body:(prompt,mt,tier)=>({model:DS_MODELS[tier]||DS_MODELS.pro,max_tokens:mt||TOK_CAP,
-      reasoning_effort:"high",thinking:{type:"enabled"},
-      messages:[{role:"user",content:prompt}]}),
+    /* Reasoning on pro only, matching the hosted path in the edge function.
+       Reasoning tokens share the max_tokens budget, so asking flash to think
+       through a batch of twelve overruns TOK_CAP and the reply comes back cut
+       off mid-token -- grabJSON throws, scoreAndCut keeps the batch unscored,
+       and an own-key user pays for it. flash is only asked for a rubric score,
+       which is the one answer thinking does not improve. */
+    body:(prompt,mt,tier)=>{
+      const model=DS_MODELS[tier]||DS_MODELS.pro;
+      const o={model,max_tokens:mt||TOK_CAP,messages:[{role:"user",content:prompt}]};
+      if(model===DS_MODELS.pro){ o.reasoning_effort="high"; o.thinking={type:"enabled"}; }
+      return o;
+    },
     read:d=>((d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"").trim()
   },
   anthropic: {

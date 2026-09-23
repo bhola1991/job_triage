@@ -588,6 +588,19 @@ Deno.serve(async (req) => {
         const prompt = String(b.prompt || "");
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
         const model = LLM_MODELS[String(b.tier || "pro")] || LLM_MODELS.pro;
+        /* Reasoning on the pro tier only, and it has to be conditional rather
+           than always-on. Reasoning tokens come out of the same max_tokens
+           budget as the answer, so a flash batch of twelve jobs plus high
+           effort overruns LLM_TOK_CAP, finish_reason comes back "length", and
+           the refund below throws the whole batch away unscored -- twelve rows
+           at a time, with no ledger row to show for it because the refund
+           happens before logUsage. That is what the bulk search path was
+           quietly losing.
+
+           flash is only ever asked for a score against a fixed rubric, which is
+           the one job reasoning does not help with. pro answers the questions
+           anybody reads, and keeps it. */
+        const think = model === LLM_MODELS.pro;
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
           const r = await fetch("https://api.deepseek.com/chat/completions", {
@@ -595,7 +608,7 @@ Deno.serve(async (req) => {
             headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
             body: JSON.stringify({
               model,
-              reasoning_effort: "high", thinking: { type: "enabled" },
+              ...(think ? { reasoning_effort: "high", thinking: { type: "enabled" } } : {}),
               max_tokens: Math.min(Number(b.max_tokens) || LLM_TOK_CAP, LLM_TOK_CAP),
               messages: [{ role: "user", content: prompt }],
             }),
