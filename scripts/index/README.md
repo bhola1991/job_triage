@@ -17,6 +17,7 @@ once and serve to everyone is the only version that scales. That is the index.
 ## What is here
 
     sources.json    the crawl list — ATS boards and free feeds, all keyless
+    harvest-slugs.js grow that list from job URLs you already paid for
     ingest.js       crawl once, centrally, into one JSONL store
     embed.mjs       give every indexed job a meaning-vector (channel C)
     retrieve.js     stage one: cut the index to a few hundred candidates, free
@@ -37,7 +38,28 @@ ceiling, not the average — most of an index costs nothing to acquire.
 
 9 of 47 sources 404'd (companies change ATS or slug). A failed source is
 reported and skipped: a thin index is recoverable, a crawl that dies on one 404
-is not.
+is not. `harvest-slugs.js --verify` exists for the same reason at the other end:
+a slug that does not resolve is not a discovery, it is a future 404, so it is
+dropped before the list grows.
+
+## Growing the crawl list
+
+    node scripts/index/harvest-slugs.js <file...> [--verify] [--write]
+
+A paid row is not only a job. For anyone on an ATS it is a **company slug**, and
+a slug is that company's whole board, free, for as long as they keep hiring —
+~103 jobs each, on this seed list. So paid search is worth more as a discovery
+channel for free feeds than as a source of rows, and this turns one into the
+other. Input can be any JSON or JSONL with URLs in it; an app backup export
+works as-is.
+
+**Measured 2026-09-24, and the result was a negative one.** Run against all 167
+job rows in the live database it found **two** ATS URLs, both Ashby, one company.
+The reason is upstream: 135 of those 167 came from Upwork, LinkedIn and Indeed,
+and a portal links to itself, never to the employer's own board. The harvester
+is only as good as its input, so the next move is to make the Google run query
+ATS hosts on purpose (`site:boards.greenhouse.io`, `jobs.lever.co`,
+`jobs.ashbyhq.com`) rather than hoping a portal mentions one.
 
 **The whole index cannot be LLM-scored per user.** 4,838 jobs is ₹80 per person
 per refresh; 100k would be ₹1,667. Hence stage one.
