@@ -44,7 +44,11 @@ Company names are enough. It tries the slug forms companies actually use, then f
 
 ### One search path, reaching the portals and the field's own registries
 
-Every source is reached the same way: one Google `site:` query each, through one Apify actor. There is no per-portal scraper — no LinkedIn scraper, no Upwork scraper — because a scraper per portal is a maintenance and a billing cost per portal, and what it buys is coverage a `site:` query already gives.
+One charged search reaches three kinds of source at once. **Free job APIs** (Adzuna, Jooble, Careerjet, Remotive, Remote OK) are asked directly, one query per target title. **Sites with no public API** — LinkedIn, Indeed, Naukri, Instahyre/CutShort/Foundit and Upwork — are read by five Apify Store scrapers, each asked only for what is *new* since this track's last search and capped in both rows and dollars. Everything else, including the field's own registries, is one Google `site:` query each through a single Apify actor.
+
+The scrapers are routed from the cost ledger rather than from taste. Each one is `core`, `probe` or `off` per track mode, where a probe gets a quarter of the rows: enough that a job posted on one site only is never missed, cheap enough that a site this track was unlikely to want is not paid for at full price. `source_yield` reports rupees per exclusive 50+ job per source, and that number is what promotes or demotes a scraper — LinkedIn was demoted to a probe on 2026-09-24 for costing ₹7.66 per exclusive find against Indeed's ₹0.81.
+
+Above all of that sits **JSearch**, which reads Google for Jobs and so covers LinkedIn, Indeed, Glassdoor, ZipRecruiter, Monster and the rest in one request per title, with the full posting text rather than a two-line snippet. It is the cheapest row in the whole search and the reason the LinkedIn scraper is only a probe: the same postings, read from Google rather than from a site that does not want to be read. It does not cover Naukri, which is why Naukri stays a scraper.
 
 That uniformity is what makes the list long enough to be useful. A fixed baseline of general portals always goes in (LinkedIn, Upwork, Indeed, Glassdoor, Wellfound, ZipRecruiter), because that's where most advertised work sits whoever you are. On top of it, profile extraction returns **which registries this person's field actually posts on** — a linguist gets `linguistlist.org` and `academicjobsonline.org`, an engineer gets `ycombinator.com` and `ashbyhq.com`. The specialist registries are what make a niche search work at all, so they're *added* to the portals rather than made to compete with them for slots.
 
@@ -60,7 +64,9 @@ Scoring needs an API key — DeepSeek by default (cheap; a few hundred jobs cost
 
 An Apify token is optional, and only needed for board search and finding contacts. ATS pulls work without it.
 
-Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query and fourteen queries a run, and contact lookup is a single search run (about a cent) whose results are reused for a week. There is no deeper, per-profile fallback: if search finds nobody public, it says so instead of spending more. Typical use runs a few dollars a month.
+Apify bills per unit of work, so the app is built to ask for as little as it can: board search is one Google page per query and fourteen queries a run, each scraper is capped at 30 rows (8 as a probe) and $0.15, and contact lookup is a single search run (about a cent) whose results are reused for a week. There is no deeper, per-profile fallback: if search finds nobody public, it says so instead of spending more.
+
+What a search actually costs is measured, not guessed — every source writes a row to `usage_events`, and `search_cost` adds them up. Over the first nine searches a board search ran **₹0.36 to ₹17.69, median ₹1.87**, against the 25 credits it charges. Typical use runs a few dollars a month.
 
 Nothing is uploaded and there's no account. Data lives in browser storage, so use **Backup & transfer** to keep a copy.
 

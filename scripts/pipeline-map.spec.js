@@ -208,6 +208,9 @@ module.exports = {
       note: 'The same judgment for up to {MAX_JUDGE_BATCH} postings. Jev takes one state per request, so the server still makes one call per posting and only the round trip and the charge are batched -- which is what makes judging a whole search cost one credit instead of three hundred. A partial batch keeps the credit; a batch where every posting failed refunds.' },
     'sv.apStart': { diagram: 'server', group: 'actions', kind: 'credit', label: 'apify_start — {COST.apifyQuery} per query',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_start' } },
+    'sv.mantiks': { diagram: 'server', group: 'actions', kind: 'credit', label: 'mantiks_contact — one contact, refunded on a miss',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'mantiks_contact' },
+      note: 'Two calls: find the posting in Mantiks (free), then ask who owns the req (1 lead credit). Tried before the Google roster; a miss refunds the user and falls through, so the question is never billed twice.' },
     'sv.apStat':  { diagram: 'server', group: 'actions', kind: 'net', label: 'apify_status',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_status' } },
     'sv.apItems': { diagram: 'server', group: 'actions', kind: 'net', label: 'apify_items',
@@ -376,6 +379,7 @@ module.exports = {
     { from: 'sv.auth', to: 'sv.switch' },
     ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
+    { from: 'sv.mantiks', to: 'sv.apStart', label: 'miss → Google' },
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
     { from: 'sc.cut', to: 'sc.batch' }, { from: 'sc.batch', to: 'sc.prompt' },

@@ -2,8 +2,8 @@
 
 Guidance for working on this codebase, and for importing Figma designs through the
 Figma MCP server. Every claim below was checked against the files on
-2026-09-15, and §§1, 2, 7 and 8 again on 2026-09-18; file:line references are
-the authority, not this summary.
+2026-09-15, §§1, 2, 7 and 8 again on 2026-09-18, and §§7 and 8 again on
+2026-09-24; file:line references are the authority, not this summary.
 
 ---
 
@@ -435,7 +435,11 @@ pricing/terms/refund/privacy/contact.html
 sw.js  manifest.json  icon.svg      PWA shell.
 schema.sql  billing.sql             Supabase tables, RLS, credit functions, usage ledger.
 supabase/functions/api/index.ts     Deno edge function: search, scoring, payments.
+scripts/selfcheck-rows.js           Job/profile <-> typed row round trip.
+scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST stand-in.
 scripts/selfcheck-boards.js         Board-source check.
+scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
+scripts/eval/                       Recorded model answers + the committed baseline.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
 scripts/pipeline-map.js             Data-pipeline map: resolves code anchors, writes Mermaid notes to an Obsidian vault.
@@ -497,4 +501,151 @@ that skill with it rather than every machine being set up by hand.
 5. **Check the generated frame against the three colour rules** (§1). An accent on a score, or two accents on a row, is a design error to raise, not to implement.
 6. **A token change is three edits**: `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root` (both themes) — plus `legal.css` if it is one of the six tokens that file carries. Do it in one commit, then run `node scripts/selfcheck-tokens.js` (§1), which verifies exactly this.
 7. **Match the runtime you are in.** React + TS in `ui-kit/`; vanilla ES2020 with no dependencies in `index.html`. Never convert one into the other.
-8. **Before finishing**: `cd ui-kit && npm run build && npm run selfcheck` must print `17/17`, and `node scripts/selfcheck-tokens.js`, `node scripts/selfcheck-icon.js` and `node scripts/pipeline-map.js --check` must each print `ALL PASS`. The icon check needs Obsidian running; `PASS (with skips)` means the rendered half did not run, so if you touched `icon.svg` or a token it names, start Obsidian and run it again. The pipeline check needs **nothing but the repo** — it reads source only and never touches the vault, so it has no skip state and no excuse for a red one. Note the `--check`: the bare command writes notes, which is not a verification step.
+8. **Before finishing**, run the whole harness. There is no test framework and
+   no build for the app, so these scripts are the only proof a change works:
+
+   ```bash
+   node scripts/selfcheck-rows.js       # job/profile <-> typed row round trip
+   node scripts/selfcheck-sync.js       # save/load/migrate cycle, two-tab cases
+   node scripts/selfcheck-boards.js     # board search pipeline
+   node scripts/selfcheck-tokens.js     # token drift across the four consumers
+   node scripts/eval-matcher.js         # matcher metrics vs the committed baseline
+   node scripts/pipeline-map.js --check
+   node scripts/selfcheck-icon.js       # needs Obsidian; SKIP is not a pass
+   cd ui-kit && npm run build && npm run selfcheck   # must print 17/17
+   ```
+
+   Each must print `ALL PASS`. Three notes that have cost time before:
+   - The icon check needs Obsidian running. `PASS (with skips)` means the
+     rendered half did not run, so if you touched `icon.svg` or a token it
+     names, start Obsidian and run it again.
+   - `eval-matcher.js` **does not call a model**: `scripts/eval/cases.json`
+     carries recorded answers, so the metrics move only when this repo changes.
+     Re-record those fields from a live run to re-measure the model.
+   - The pipeline check needs **nothing but the repo** — it reads source only and
+     never touches the vault, so it has no skip state and no excuse for a red
+     one. Note the `--check`: the bare command writes notes, which is not a
+     verification step.
+
+   This list was four checks until 2026-09-24; `selfcheck-rows`, `selfcheck-sync`
+   and `eval-matcher` were added on 2026-09-22 and went unlisted here.
+
+---
+
+## 9. Parse MCP — how this project calls it
+
+Parse (<https://parse.bot>, docs <https://docs.parse.bot>) turns a website into a
+typed API. The account holds **"monsterindia.com API"** (slug
+`monsterindia-com-api`), whose first endpoint is `GET search_jobs` — full-text
+search over **foundit.in** listings, paginated by `offset`/`limit`, filtered by
+location, experience and freshness.
+
+**Registration is deliberately machine-local.** It was added with
+
+```bash
+claude mcp add --transport http parse "https://api.parse.bot/mcp"
+```
+
+which writes to `~/.claude.json` under this project, **not** to
+`.claude/settings.json`. That file is committed and §7 keeps it to plugin
+declarations only — no `env`, no servers, nothing that reaches everyone who
+clones. Anyone else working here runs that one command themselves.
+
+**Two ways in, two credentials.** The MCP server is account-wide: one connection
+exposes the platform tools (`search`, `build`, `inspect`, `call`, `revise`) plus
+every API in the account as a tool group. It authorises over OAuth — run `/mcp`,
+pick `parse`, approve in the browser. The REST API takes a key instead:
+
+```
+POST https://api.parse.bot/scraper/{scraper_id}/{endpoint_name}
+X-API-Key: pmx_...
+```
+
+**The key is read from `PARSE_API_KEY`, never hard-coded and never committed.**
+Locally it lives in `.env.local` beside `TYPESAFE_API_KEY` (gitignored by
+`.env*.local`); on a server it is an environment variable like any other secret.
+Keys are issued at <https://parse.bot/settings>.
+
+**Know the overlap before you wire it into search.** foundit.in is already
+covered by the `indiatech` scraper (`supabase/functions/api/index.ts`), whose
+`boards` are `["instahyre", "cutshort", "foundit"]`. Adding this as a search
+source would buy the same postings twice unless Foundit is dropped from that
+actor first. Its real value is as a *cheaper or richer* read of Foundit, not as
+a new site — measure it against `source_yield.inr_per_exclusive_50` like any
+other source before believing otherwise.
+
+---
+
+## 10. Mantiks — how this project calls it
+
+Mantiks (<https://mantiks.io>) tracks hiring activity: jobs aggregated by
+company, with contacts and reposting history attached. Base URL
+`https://dashboard.mantiks.io/api/v2`, auth header `X-API-KEY`.
+
+**The key is read from `MANTIKS_API_KEY`**, which lives in `.env.local` beside
+`TYPESAFE_API_KEY` and `PARSE_API_KEY` (gitignored by `.env*.local`). Never
+inline it — the snippet this was set up from carried the key in the source, and
+that key should be treated as burned.
+
+```bash
+set -a && . ./.env.local && set +a
+curl -s https://dashboard.mantiks.io/api/v2/credits/balance -H "X-API-KEY: $MANTIKS_API_KEY"
+# {"leads_credits":50}
+```
+
+### Credits
+
+| Endpoint | Credits |
+| --- | --- |
+| `POST /searches/preview`, `POST /searches` | **0** |
+| `GET /locations/search?query=` | 0 |
+| `GET /jobs/{id}`, `POST /companies/{id}/jobs`, `GET /jobs/{id}/history` | 1 |
+| `GET /jobs/{id}/best-fitting` | 1 **if a contact is found** |
+
+The account holds **50 leads credits**. That is ~50 contact lookups, so prototype
+against `/searches/preview`, which is free and returns real rows.
+
+### The request schema is undocumented — this was read off the validator
+
+There is no public spec (`/openapi.json` 404s, `/docs` redirects to login). The
+shape below was recovered by POSTing `{}` and reading the 400s back, which is
+also how to recover it again when it changes. **Every field is required**; there
+are no optionals, so a partial body is always a 400.
+
+```jsonc
+{ "job":     { "locations": [{ "id": "1269750", "radius": 0 }],  // id from /locations/search
+               "job_title_query": "data engineer",
+               "job_title_include": [], "job_title_exclude": [],
+               "description_include": [], "description_exclude": [], "description_query": "",
+               "published_date_window_days": 30,   // one of 1|7|15|30|90|180|360
+               "volume": { "gte": 1, "lte": 1000 }, "is_reposting": false },
+  "company": { "size": { "gte": 1, "lte": 100000 },
+               "sectors": [], "sectors_excluded": [], "websites": [], "websites_excluded": [],
+               "exclude_consulting_recruiting": false },
+  "people":  { "has_valid_email": false, "allow_missing_people": true,
+               "persona_strategy": "best",   // "all" | "best"
+               "phone": false } }
+```
+
+Locations are objects, never strings: resolve a name through
+`GET /locations/search?query=India` first and take the row whose `type` is
+`country`, `region` or `city` as appropriate.
+
+### What it is and is not, for this app
+
+It is **company-shaped, not seeker-shaped**: a preview returns companies with a
+representative job and a `matching_jobs` count, and the `people` block is about
+emails and phone numbers. It is a prospecting tool, so do not reach for it as
+another board in `searchAll`.
+
+Three parts of it are worth more to this app than its search is:
+
+- `GET /jobs/{id}/best-fitting` — one credit for the contact the HR finder
+  currently spends `COST.apifyQuery * 3` (~₹0.90) of Google queries to guess at.
+- `GET /jobs/{id}/history` and `job.is_reposting` — whether a posting has been
+  re-posted. Nothing else in this app can know that, and it speaks directly to
+  `--closing` and to reachability: a role advertised four times is either hard to
+  fill or not real.
+- `POST /searches` — a saved search with **scheduled exports**, which is the
+  daily new-jobs feed `scripts/index/` was written to prove. JSearch has no such
+  endpoint; this does.

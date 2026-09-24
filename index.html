@@ -705,12 +705,22 @@ const FOLLOWUP_DAYS = 7;
    which pipeline-map asserts is equal), so nothing larger has any effect.
    These were 700-3000 when the model did not think.
 
-   Raised 4000 -> 8000 after the pro rescore path was measured returning 3874
-   and 3552 output tokens against the old ceiling -- 97% and 89% of it. Nothing
-   had failed yet, but the margin was one longer posting wide, and the failure
-   is silent: the reply is cut mid-token, grabJSON throws, and the batch is
-   kept unscored. Headroom is free unless it is used. */
-const TOK_CAP = 8000;
+   Raised 4000 -> 8000 -> 16000, and the second raise is the instructive one.
+   At 4000 the pro path looked like it was running at 97% of its ceiling: the
+   ledger showed replies of 3874 and 3552. Those were the only calls that fit.
+   A truncated call is refunded before logUsage writes anything, so the ledger
+   records successes and nothing else, and any average taken from it is
+   survivorship bias. With the ceiling at 8000 the same path immediately
+   returned 7229, 5574 and 7353 -- every one of which had been failing
+   silently, and none of which the ledger could show.
+
+   So size this against what the model actually generates, not against what
+   the ledger survived: pro spends roughly 1000-1200 output tokens per job at
+   SIZE 6, reasoning included, and flash about 150 now that it does not reason.
+   16000 is a little over twice the worst seen. The model accepts 65536, and
+   max_tokens is a ceiling rather than a reservation, so the headroom is free
+   until something uses it. */
+const TOK_CAP = 16000;
 
 
 /* ═══ state ═══
@@ -1944,6 +1954,22 @@ async function findHrContacts(company, ctx, onStatus){
   if(hit){
     roster=hit.roster; domain=hit.domain||'';
     if(onStatus) onStatus(`reusing the ${roster.length} profiles already found at ${company}…`);
+  }
+
+  /* Mantiks first. It knows who owns the req; the Google path below guesses at
+     profiles and then pays a model to rank the guesses. A miss is silent and
+     free -- the action refunds its own credits -- so this is strictly an
+     attempt, and anything it cannot answer falls through unchanged. */
+  if(!roster && cloudNow()){
+    try{
+      const m=await hosted('mantiks_contact',{company, website:domain, title:(ctx&&ctx.title)||''});
+      if(m && m.person && m.person.name){
+        roster=[{name:m.person.name, role:m.person.role||'', linkedin:m.person.linkedin||'', why:m.person.why||''}];
+        domain=domain||m.domain||'';
+        if(onStatus) onStatus(`found ${m.person.name} at ${company}…`);
+        await storeRoster(company, roster, domain);
+      }
+    }catch(e){ /* MANTIKS_MISS, key unset, or down: the Google roster below is the answer */ }
   }
 
   if(!roster){
