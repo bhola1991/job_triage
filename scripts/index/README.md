@@ -205,6 +205,34 @@ Acquisition ₹0, stage one ₹0, and the pool that reaches the scorer costs ₹
 against ₹313.43 for the whole index. The recall property from 2026-09-15 holds
 on a corpus 4× larger than the seed crawl.
 
+### The posting date was in the url all along
+
+A Naukri job id is `DDMMYY` + a sequence, and it parses on **18,789 of 18,806
+(99.9%)**. That matters because the two obvious alternatives are worthless: the
+sitemap's `<lastmod>` is the same generation timestamp on every row, and the
+sitemap *lags* — the newest posting in a file generated 2026-09-24 was
+2026-09-17, a **seven-day delay**.
+
+So the sitemap is not a freshness source, and nothing will make it one. What the
+id buys is an age filter on the **first run**, with no diffing and no waiting:
+
+    node scripts/index/sitemap-jobs.js <sitemap> --max-age 30
+
+    posting date recovered from the id: 18789 (99.9%)
+    age: newest 8d · median 23d · oldest 1023d
+    over 90 days and still listed: 695 (3.7%)
+    --max-age 30: dropped 5373, kept 13433
+
+**695 postings (3.7%) have been listed over 90 days**, the oldest nearly three
+years. That is the ghost-listing problem, measured on day one, for free, without
+a single page fetch — and it is the argument for two lanes rather than one: the
+paid scrapers are a bad corpus but a good *freshness* signal, while this is a
+bad freshness signal but an excellent corpus.
+
+Any six digits parse as some date, so the read is bounded at three years;
+anything older is called undated rather than ancient, because a sequence number
+that happens to look like 2021 is likelier than a five-year-old live listing.
+
 ### What is NOT solved
 
 A Naukri job page is a client-rendered shell: 200 OK, ~36 KB, **no job text** —

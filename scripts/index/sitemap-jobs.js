@@ -45,6 +45,11 @@ if (!target) {
   process.exit(1);
 }
 const LIMIT = Number(opt('--limit', 0)) || 0;
+/* Drop anything posted longer ago than this. Off by default: the stale rows are
+   evidence too — 3.7% of the Pune board was over 90 days old and 115 rows were
+   over a year, which is the ghost-listing problem visible on the first run and
+   without a single fetch. Pass --max-age to filter once you have looked. */
+const MAX_AGE = Number(opt('--max-age', 0)) || 0;
 const OUT = opt('--out', path.join(__dirname, 'sitemap.jsonl'));
 
 /* Sitemaps are routinely gzipped (Naukri ships Mumbai as .xml.gz) and the
@@ -86,10 +91,40 @@ const SUFFIX = new Set(('ltd limited pvt private llp inc corp corporation incorp
 
 const deslug = (s) => s.replace(/-/g, ' ').trim();
 
+/* The posting date was in the url the whole time. A Naukri job id is DDMMYY
+   followed by a sequence — measured across the 18,806-row Pune sitemap, 18,786
+   of them (99%) parse as a plausible date, clustering in the weeks before the
+   crawl and tailing back to 2024.
+   This matters more than it looks. The sitemap itself carries a <lastmod>, but
+   it is the same generation timestamp on all 18,806 rows and therefore worth
+   nothing; and the sitemap lags — the newest posting in a file generated
+   2026-09-24 was 2026-09-17. So the id is the only per-row date available, it
+   is free, and it arrives on the first run rather than after a week of diffing.
+   A date that does not parse, or lands in the future, is left empty rather than
+   guessed: an absent date is handled everywhere, a wrong one silently reorders
+   a list. */
+function postedFromId(id) {
+  const s = String(id || '');
+  if (s.length < 6) return '';
+  const d = +s.slice(0, 2), m = +s.slice(2, 4), y = 2000 + +s.slice(4, 6);
+  if (!(d >= 1 && d <= 31 && m >= 1 && m <= 12 && y >= 2020)) return '';
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (dt.getUTCDate() !== d || dt.getUTCMonth() !== m - 1) return '';   // 31 Feb and friends
+  if (dt.getTime() > Date.now() + 864e5) return '';                      // a future date is not a date
+  /* Any six digits parse as some date, so an unbounded reading reports 100%
+     recovery and quietly invents a tail — this found "postings" from 2021,
+     5 years old and supposedly still listed, which is far likelier to be a
+     sequence number that looks like a date. Beyond three years the row is
+     called UNDATED rather than ancient. The ghost signal survives intact: the
+     interesting band is 90 days to a couple of years, and it is unaffected. */
+  if (Date.now() - dt.getTime() > 3 * 365 * 864e5) return '';
+  return dt.toISOString().slice(0, 10);
+}
+
 function naukriRow(url) {
   const slug = url.split('?')[0].split('#')[0].replace(/\/$/, '').split('/').pop();
   const m = NAUKRI.exec(slug);
-  if (!m) return { source: 'naukri-sitemap', partial: true, url, title: deslug(slug), company: '', location: '', description: deslug(slug), posted: '' };
+  if (!m) return { source: 'naukri-sitemap', partial: true, url, title: deslug(slug), company: '', location: '', description: deslug(slug), posted: '' };  // unparsed: no id, so no date
   const [, body, lo, hi, id] = m;
   const parts = body.split('-');
 
@@ -129,7 +164,7 @@ function naukriRow(url) {
     // tokens to weigh instead of an empty field. Named `description` only
     // because that is the field the index store already uses.
     description: deslug(body),
-    posted: '',
+    posted: postedFromId(id),
   };
 }
 
@@ -145,12 +180,23 @@ function naukriRow(url) {
     return;
   }
 
-  const jobs = (LIMIT ? urls.slice(0, LIMIT) : urls).map(naukriRow);
+  const all = (LIMIT ? urls.slice(0, LIMIT) : urls).map(naukriRow);
+  const ageOf = (j) => (j.posted ? Math.round((Date.now() - Date.parse(j.posted)) / 864e5) : null);
+  const jobs = MAX_AGE ? all.filter((j) => { const a = ageOf(j); return a === null || a <= MAX_AGE; }) : all;
   fs.writeFileSync(OUT, jobs.map((j) => JSON.stringify(j)).join('\n') + '\n');
 
   const named = jobs.filter((j) => j.company).length;
-  console.log(`${urls.length} url(s) in the sitemap${LIMIT ? `, took ${jobs.length}` : ''}`);
+  const dated = all.filter((j) => j.posted);
+  const ages = dated.map(ageOf).sort((a, b) => a - b);
+  const pct = (n) => `${n} (${Math.round(1000 * n / all.length) / 10}%)`;
+  console.log(`${urls.length} url(s) in the sitemap${LIMIT ? `, took ${all.length}` : ''}`);
   console.log(`  company parsed out of the slug: ${named}/${jobs.length}`);
+  console.log(`  posting date recovered from the id: ${pct(dated.length)}`);
+  if (ages.length) {
+    console.log(`  age: newest ${ages[0]}d · median ${ages[Math.floor(ages.length / 2)]}d · oldest ${ages[ages.length - 1]}d`);
+    console.log(`  over 90 days and still listed: ${pct(ages.filter((a) => a > 90).length)}`);
+  }
+  if (MAX_AGE) console.log(`  --max-age ${MAX_AGE}: dropped ${all.length - jobs.length}, kept ${jobs.length}`);
   console.log(`  wrote ${path.relative(path.join(__dirname, '..', '..'), OUT)}  — free, no key, no actor\n`);
   jobs.slice(0, 5).forEach((j) =>
     console.log(`  ${String(j.title).slice(0, 46).padEnd(48)} ${String(j.company).slice(0, 24).padEnd(26)} ${j.location} ${j.exp_min}-${j.exp_max}y`));
