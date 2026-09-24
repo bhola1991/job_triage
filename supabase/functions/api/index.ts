@@ -6,6 +6,7 @@
 //
 // Secrets (supabase secrets set ...):
 //   DEEPSEEK_API_KEY, TYPESAFE_API_KEY, APIFY_TOKEN, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+//   MANTIKS_API_KEY (contact finder)
 //   optional job sources: JSEARCH_API_KEY (OpenWeb Ninja — NOT a RapidAPI key, see below),
 //     ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
@@ -35,6 +36,11 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
 //                LinkedIn alone was ₹13.20, which is why it is a probe below.
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
 const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
+/* What one contact lookup costs the user. Expressed as the Google path's own
+   price -- three queries -- so that routing the question to Mantiks instead
+   changes what WE pay and not what THEY pay. The app prints this same
+   arithmetic in its credits dialog; keep the two in step. */
+const CONTACT_COST = COST.apifyQuery * 3;
 
 /* The ceiling on one hosted LLM call, reasoning included. deepseek-v4-pro
    thinks before it answers and those tokens come out of this same number, so
@@ -545,6 +551,66 @@ const sameString = (a: string, b: string) => {
   return d === 0;
 };
 
+/* ═══ Mantiks: who to contact about one posting ═══
+   The app's own HR finder spends three Google queries guessing at LinkedIn
+   profiles and then asks a model which of them matters. Mantiks answers the
+   question directly -- it knows who at the company owns the req -- so this runs
+   first and the Google path stays as the fallback for everything it misses.
+
+   The awkward part: `best-fitting` is keyed on a MANTIKS job id, and our rows
+   come from scrapers that have never heard of Mantiks. So a lookup is two
+   calls: find the posting in their index (`/searches/preview`, free), then ask
+   who to talk to about it (1 credit). The free half is what makes the paid half
+   worth attempting rather than a gamble.
+
+   Matching is by company WEBSITE where the app has one, because a name match on
+   "Acme" finds four companies and a domain match finds one. Without a domain it
+   falls back to title + name comparison, which is weaker and allowed to miss:
+   a miss costs the user nothing (the credit is refunded) and drops through to
+   the Google roster that was there before. */
+const MANTIKS = "https://dashboard.mantiks.io/api/v2";
+const mantiksHeaders = () => ({ "X-API-KEY": env("MANTIKS_API_KEY"), "Content-Type": "application/json" });
+const bareDomain = (u: string) =>
+  String(u || "").trim().replace(/^https?:\/\//, "").replace(/^www\./, "").split("/")[0].toLowerCase();
+
+/* Their validator rejects a partial body -- every field below is required, with
+   no optionals -- so this builds a complete search and narrows it, rather than
+   sending only what we care about. Recovered from the 400s; see CLAUDE.md §10. */
+function mantiksSearch(website: string, title: string) {
+  return {
+    job: { locations: [], job_title_query: title.slice(0, 120),
+      job_title_include: [], job_title_exclude: [],
+      description_include: [], description_exclude: [], description_query: "",
+      // Widest window their enum allows. A req that is open now may have been
+      // posted months ago, and we are identifying a posting, not judging it.
+      published_date_window_days: 360,
+      volume: { gte: 1, lte: 1_000_000 }, is_reposting: false },
+    company: { size: { gte: 1, lte: 1_000_000 }, sectors: [], sectors_excluded: [],
+      websites: website ? [website] : [], websites_excluded: [],
+      exclude_consulting_recruiting: false },
+    people: { has_valid_email: false, allow_missing_people: true, persona_strategy: "best", phone: false },
+  };
+}
+
+type MantiksHit = { jobId: string; domain: string };
+async function mantiksFindJob(company: string, website: string, title: string): Promise<MantiksHit | null> {
+  const r = await fetch(`${MANTIKS}/searches/preview`, {
+    method: "POST", headers: mantiksHeaders(), body: JSON.stringify(mantiksSearch(website, title)),
+    signal: AbortSignal.timeout(30000),
+  }).catch(() => null);
+  if (!r?.ok) return null;
+  const rows = await r.json().catch(() => null) as Any[] | null;
+  if (!Array.isArray(rows) || !rows.length) return null;
+  // With a domain the filter already did the work and the first row is the
+  // company. Without one, every row is a different employer, so the name has
+  // to be checked -- loosely, because "Acme, Inc." and "Acme" are one company.
+  const norm = (x: string) => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  const want = norm(company);
+  const hit = website ? rows[0] : rows.find((x) => want && norm(x?.company?.name) === want);
+  const jobId = hit?.job?.id;
+  return jobId ? { jobId: String(jobId), domain: bareDomain(hit?.company?.website || website) } : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -826,6 +892,52 @@ Deno.serve(async (req) => {
           return json({ judgments: out, ...wallet(s) });
         } catch (e) {
           if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          throw e;
+        }
+      }
+
+      /* One contact for one posting. Charged what the Google HR lookup charges,
+         so nothing the user sees changes -- and refunded whenever Mantiks has
+         nothing, because the app then pays for the Google path instead and
+         must not be billed twice for one question. */
+      case "mantiks_contact": {
+        const company = String(b.company || "").trim().slice(0, 120);
+        const website = bareDomain(String(b.website || ""));
+        const title = String(b.title || "").trim();
+        if (!company && !website) throw new Http(400, "no company");
+        if (!env("MANTIKS_API_KEY")) throw new Http(503, "MANTIKS_OFF");
+        const s = await spend("spend_search", { p_user: user, p_n: CONTACT_COST, p_board: false });
+        try {
+          const hit = await mantiksFindJob(company, website, title);
+          // Not an error: their index simply does not carry this employer. The
+          // caller reads 404 as "fall through to Google", so it must stay cheap
+          // and quiet rather than surfacing as a failure to the user.
+          if (!hit) { await refund(user, s, "search", CONTACT_COST); throw new Http(404, "MANTIKS_MISS"); }
+          const r = await fetch(`${MANTIKS}/jobs/${encodeURIComponent(hit.jobId)}/best-fitting`, {
+            headers: mantiksHeaders(), signal: AbortSignal.timeout(30000),
+          }).catch(() => null);
+          const d = r?.ok ? await r.json().catch(() => null) : null;
+          const p = d?.found ? d.people : null;
+          if (!p?.full_name) { await refund(user, s, "search", CONTACT_COST); throw new Http(404, "MANTIKS_MISS"); }
+          /* units is 1 because that is what Mantiks charged: their credit is
+             spent on a hit and not on a miss, which is the same rule this
+             action bills the user by. No cost_inr -- a lead credit is bought on
+             a plan, not at a per-call list price, and an invented number in a
+             column named cost is worse than an empty one (see the typesafe rows). */
+          await logUsage([{ user_id: user, search_id: null, kind: "api", source: "mantiks", units: 1, cost_inr: null,
+            note: hit.jobId }]);
+          return json({ person: {
+            name: String(p.full_name).slice(0, 120),
+            role: String(p.job_title || "").slice(0, 140),
+            linkedin: String(p.linkedin || ""),
+            // Their wording, carried through as the reason this person and not
+            // another. It comes back in the vendor's own language, which is not
+            // always English -- the app shows it as supporting text, never as
+            // something it parses.
+            why: String(p.explanation || "").slice(0, 400),
+          }, domain: hit.domain, ...wallet(s) });
+        } catch (e) {
+          if (!(e instanceof Http)) await refund(user, s, "search", CONTACT_COST);
           throw e;
         }
       }

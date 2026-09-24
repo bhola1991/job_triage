@@ -1956,6 +1956,22 @@ async function findHrContacts(company, ctx, onStatus){
     if(onStatus) onStatus(`reusing the ${roster.length} profiles already found at ${company}…`);
   }
 
+  /* Mantiks first. It knows who owns the req; the Google path below guesses at
+     profiles and then pays a model to rank the guesses. A miss is silent and
+     free -- the action refunds its own credits -- so this is strictly an
+     attempt, and anything it cannot answer falls through unchanged. */
+  if(!roster && cloudNow()){
+    try{
+      const m=await hosted('mantiks_contact',{company, website:domain, title:(ctx&&ctx.title)||''});
+      if(m && m.person && m.person.name){
+        roster=[{name:m.person.name, role:m.person.role||'', linkedin:m.person.linkedin||'', why:m.person.why||''}];
+        domain=domain||m.domain||'';
+        if(onStatus) onStatus(`found ${m.person.name} at ${company}…`);
+        await storeRoster(company, roster, domain);
+      }
+    }catch(e){ /* MANTIKS_MISS, key unset, or down: the Google roster below is the answer */ }
+  }
+
   if(!roster){
     if(onStatus) onStatus(`searching for who to contact at ${company}…`);
     const items=await googleFirst(hrQueries(company,ctx).join("\n"), onStatus,
