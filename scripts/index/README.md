@@ -18,6 +18,7 @@ once and serve to everyone is the only version that scales. That is the index.
 
     sources.json    the crawl list — ATS boards and free feeds, all keyless
     harvest-slugs.js grow that list from job URLs you already paid for
+    sitemap-jobs.js  read a board's own public sitemap into index rows
     ingest.js       crawl once, centrally, into one JSONL store
     embed.mjs       give every indexed job a meaning-vector (channel C)
     retrieve.js     stage one: cut the index to a few hundred candidates, free
@@ -155,3 +156,59 @@ Also unmeasured here: freshness (how often to re-crawl), storage at scale
 a server changes the privacy promise in README.md — today a local-mode user's
 CV never leaves the browser, and scoring index candidates client-side with the
 user's own key is what would keep that true.
+
+## The door the boards hold open
+
+Measured 2026-09-25.
+
+Every board needs Google for Jobs traffic, and Google requires a sitemap listing
+every job page. So boards publish their **complete index**, publicly and on
+purpose, for crawlers — while the search endpoint we have been paying Apify to
+squeeze through is the surface they defend.
+
+    node scripts/index/sitemap-jobs.js https://www.naukri.com/sitemap/sitemap.xml --list
+    node scripts/index/sitemap-jobs.js https://www.naukri.com/sitemap/jobDescPagesPune.xml
+
+| board | sitemap | result |
+| --- | --- | --- |
+| **Naukri** | `jobDescPagesPune.xml` | **200 — 18,806 job urls, 3.85 MB** |
+| Instahyre | `sitemap-jobs.xml` (paginated) | 200 |
+| Cutshort | `sitemap_index.xml` | 200 |
+| WeWorkRemotely | `remote-jobs.rss` | 200, full job content |
+| Foundit | advertises `todays-jobs-sitemap.xml` | **403** — Akamai, Googlebot only |
+
+18,806 jobs for one city, free. A paid LinkedIn pull is 30 rows for ₹13.20.
+
+All 18,806 Pune slugs matched one grammar, so it is parsed rather than guessed:
+
+    job-listings-<title><company><city…>-<a>-to-<b>-years-<id>
+
+Title, company, city and experience, before fetching anything. Company comes out
+of about **58%** of slugs — nothing in a slug marks where a company name begins,
+so the split is refused when it would eat the job title, and the words stay in
+`title`. That costs nothing: stage one matches titles by substring, so a title
+carrying an extra word still matches and a title missing one does not.
+
+### The funnel, end to end, at zero acquisition cost
+
+    node scripts/index/sitemap-jobs.js <pune sitemap> --out pune.jsonl
+    node scripts/index/retrieve.js --index pune.jsonl --titles "Operations Manager" \
+         --skills "operations,process,vendor,supply chain" --top 60
+
+    index 18806 jobs · 116ms · two channels
+    candidates 60: 34 title · 26 bm25 · 0 vector
+    literal title matches kept: 34/34
+    scoring cost: whole index ₹313.43 · this pool ₹1.00
+
+Acquisition ₹0, stage one ₹0, and the pool that reaches the scorer costs ₹1.00
+against ₹313.43 for the whole index. The recall property from 2026-09-15 holds
+on a corpus 4× larger than the seed crawl.
+
+### What is NOT solved
+
+A Naukri job page is a client-rendered shell: 200 OK, ~36 KB, **no job text** —
+no JSON-LD, no `__NEXT_DATA__`. So these rows carry no description, and every
+one is stamped `partial: true` rather than pretending otherwise. The sitemap
+gives a free, complete, filterable shortlist; fetching the ~60 survivors is a
+separate problem. Buying 60 rows you have already chosen is a different trade
+from buying 30 at random, which is the entire point.
