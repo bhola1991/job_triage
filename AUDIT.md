@@ -69,6 +69,42 @@ logging only.
 
 ## Cost & abuse
 
+### 🔴 The `llm` action now runs at a loss (measured 2026-09-24)
+`supabase/functions/api/index.ts` `COST.llm`. Against `usage_events`, a DeepSeek
+call costs **₹1.15-1.21**; one credit sells for **₹0.80-0.99**. It was ~₹0.07
+until 2026-09-22, when gating reasoning to `pro` and lifting `TOK_CAP` to 16000
+took average output from ~310 to ~3300 tokens — an 18x jump, correct in itself
+and the fix for a real truncation bug, but nobody repriced afterwards. Worse on
+the Pro pack than the Starter. 12 of 45 calls carry no `search_id`, so they are
+manual rescores and drafts, at ₹1.31 each. Either raise `COST.llm`, cut what a
+call is asked to generate, or route intake to `flash`.
+
+### 🟢 Sources re-cut from the ledger (2026-09-24)
+**LinkedIn** cost ₹13.20 of a ₹16-18 search for 5 exclusive 50+ jobs (₹7.66
+each) and was demoted `core` -> `probe`. `PRICE_USD.linkedin` is a **guess** —
+bebity publishes no price — so ₹7.66 is a floor, not a figure.
+
+**Naukri** had never completed a run: `Apify 400 Maximum cost per run is less
+than the allowed minimum of $0.40` against a global `SCRAPE_MAX_USD = 0.15`,
+for ten days, while `FREE_SCRAPERS` and `pricing.html` both sold the free tier
+as "LinkedIn, Indeed and Naukri". The cap is now per-scraper and Naukri's is
+`$0.40`. That is the actor's floor for the *ceiling*, not a charge: it bills a
+start fee plus ~$1/1,000 results. Read the real number off `usage_events`.
+
+**JSearch** was deleted and then restored the same day, on
+`api.openwebninja.com/jsearch/search-v2` (vendor-direct, ~30% under the RapidAPI
+listing) after the old `/search` path 404'd. It reads Google for Jobs, so it
+covers LinkedIn, Indeed, Glassdoor, ZipRecruiter and more in one request per
+title with full descriptions, at roughly a quarter of what the LinkedIn scraper
+cost. **It requires an OpenWeb Ninja key**; the old RapidAPI value in
+`JSEARCH_API_KEY` will 401. It does **not** cover Naukri.
+
+⚠ Two things here are unverified until a real key runs: whether `/search-v2`
+returns its jobs as a bare `data` array or wraps it (the mapper accepts both),
+and JSearch's actual yield, which has never been measured because it has never
+once succeeded.
+
+
 ### 🔴 New `judge` action is unmetered and unbounded
 `supabase/functions/api/index.ts:634`. I added it free on purpose, but as it
 stands any authenticated user can call it unlimited times and burn the
@@ -142,9 +178,28 @@ drift.
 
 ## Suggested order of attack
 
-1. Meter/bound the `judge` action (🔴).
-2. Fix `spend_llm` free-branch decrement (🟠).
+1. ~~Meter/bound the `judge` action~~ — done.
+2. ~~Fix `spend_llm` free-branch decrement~~ — done.
+2a. Reprice `COST.llm`, which has been selling ₹1.15-1.21 of DeepSeek for
+   ₹0.80-0.99 since 2026-09-22 (🔴).
 3. Move `confidence` + `flags` into `scoreBatch` from the Jev action, preserving
    the confidence→rank number mapping (🟡).
 4. Add an alert/counter for `logUsage` failures (🟡).
 5. Then tackle the last-writer-wins blob, which is the biggest piece of work (🔴).
+
+## Decisions & learnings (recall at the end)
+
+- **The matcher's "why" is keywords, not a sentence.** Classification output
+  should be structured: flags + extracted facts + evidence spans + numeric
+  scores. A human sentence is a UI/render concern only — templated from the
+  keywords, never returned by the model. Consequence: the whole classifier can
+  be typed (Jev for flags/confidence, numeric for fit/reach), and the free-text
+  `why` field drops out of the model output entirely. This is the last reason
+  DeepSeek stayed in the classification loop; removing it removes DeepSeek from
+  classification.
+- **Moat = evidence, not prose.** The anti-LinkedIn transparency is showing the
+  flag + the fact + the quoted span from the posting, in both directions
+  (candidate sees "why this job", employer sees "why this candidate").
+- **Product thesis: match on the work, not the network.** Fit (can they do it)
+  vs reach (will they actually get it), separated, with a shown reason. One
+  matcher, two client sides.
