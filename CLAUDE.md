@@ -529,3 +529,123 @@ that skill with it rather than every machine being set up by hand.
 
    This list was four checks until 2026-09-24; `selfcheck-rows`, `selfcheck-sync`
    and `eval-matcher` were added on 2026-09-22 and went unlisted here.
+
+---
+
+## 9. Parse MCP — how this project calls it
+
+Parse (<https://parse.bot>, docs <https://docs.parse.bot>) turns a website into a
+typed API. The account holds **"monsterindia.com API"** (slug
+`monsterindia-com-api`), whose first endpoint is `GET search_jobs` — full-text
+search over **foundit.in** listings, paginated by `offset`/`limit`, filtered by
+location, experience and freshness.
+
+**Registration is deliberately machine-local.** It was added with
+
+```bash
+claude mcp add --transport http parse "https://api.parse.bot/mcp"
+```
+
+which writes to `~/.claude.json` under this project, **not** to
+`.claude/settings.json`. That file is committed and §7 keeps it to plugin
+declarations only — no `env`, no servers, nothing that reaches everyone who
+clones. Anyone else working here runs that one command themselves.
+
+**Two ways in, two credentials.** The MCP server is account-wide: one connection
+exposes the platform tools (`search`, `build`, `inspect`, `call`, `revise`) plus
+every API in the account as a tool group. It authorises over OAuth — run `/mcp`,
+pick `parse`, approve in the browser. The REST API takes a key instead:
+
+```
+POST https://api.parse.bot/scraper/{scraper_id}/{endpoint_name}
+X-API-Key: pmx_...
+```
+
+**The key is read from `PARSE_API_KEY`, never hard-coded and never committed.**
+Locally it lives in `.env.local` beside `TYPESAFE_API_KEY` (gitignored by
+`.env*.local`); on a server it is an environment variable like any other secret.
+Keys are issued at <https://parse.bot/settings>.
+
+**Know the overlap before you wire it into search.** foundit.in is already
+covered by the `indiatech` scraper (`supabase/functions/api/index.ts`), whose
+`boards` are `["instahyre", "cutshort", "foundit"]`. Adding this as a search
+source would buy the same postings twice unless Foundit is dropped from that
+actor first. Its real value is as a *cheaper or richer* read of Foundit, not as
+a new site — measure it against `source_yield.inr_per_exclusive_50` like any
+other source before believing otherwise.
+
+---
+
+## 10. Mantiks — how this project calls it
+
+Mantiks (<https://mantiks.io>) tracks hiring activity: jobs aggregated by
+company, with contacts and reposting history attached. Base URL
+`https://dashboard.mantiks.io/api/v2`, auth header `X-API-KEY`.
+
+**The key is read from `MANTIKS_API_KEY`**, which lives in `.env.local` beside
+`TYPESAFE_API_KEY` and `PARSE_API_KEY` (gitignored by `.env*.local`). Never
+inline it — the snippet this was set up from carried the key in the source, and
+that key should be treated as burned.
+
+```bash
+set -a && . ./.env.local && set +a
+curl -s https://dashboard.mantiks.io/api/v2/credits/balance -H "X-API-KEY: $MANTIKS_API_KEY"
+# {"leads_credits":50}
+```
+
+### Credits
+
+| Endpoint | Credits |
+| --- | --- |
+| `POST /searches/preview`, `POST /searches` | **0** |
+| `GET /locations/search?query=` | 0 |
+| `GET /jobs/{id}`, `POST /companies/{id}/jobs`, `GET /jobs/{id}/history` | 1 |
+| `GET /jobs/{id}/best-fitting` | 1 **if a contact is found** |
+
+The account holds **50 leads credits**. That is ~50 contact lookups, so prototype
+against `/searches/preview`, which is free and returns real rows.
+
+### The request schema is undocumented — this was read off the validator
+
+There is no public spec (`/openapi.json` 404s, `/docs` redirects to login). The
+shape below was recovered by POSTing `{}` and reading the 400s back, which is
+also how to recover it again when it changes. **Every field is required**; there
+are no optionals, so a partial body is always a 400.
+
+```jsonc
+{ "job":     { "locations": [{ "id": "1269750", "radius": 0 }],  // id from /locations/search
+               "job_title_query": "data engineer",
+               "job_title_include": [], "job_title_exclude": [],
+               "description_include": [], "description_exclude": [], "description_query": "",
+               "published_date_window_days": 30,   // one of 1|7|15|30|90|180|360
+               "volume": { "gte": 1, "lte": 1000 }, "is_reposting": false },
+  "company": { "size": { "gte": 1, "lte": 100000 },
+               "sectors": [], "sectors_excluded": [], "websites": [], "websites_excluded": [],
+               "exclude_consulting_recruiting": false },
+  "people":  { "has_valid_email": false, "allow_missing_people": true,
+               "persona_strategy": "best",   // "all" | "best"
+               "phone": false } }
+```
+
+Locations are objects, never strings: resolve a name through
+`GET /locations/search?query=India` first and take the row whose `type` is
+`country`, `region` or `city` as appropriate.
+
+### What it is and is not, for this app
+
+It is **company-shaped, not seeker-shaped**: a preview returns companies with a
+representative job and a `matching_jobs` count, and the `people` block is about
+emails and phone numbers. It is a prospecting tool, so do not reach for it as
+another board in `searchAll`.
+
+Three parts of it are worth more to this app than its search is:
+
+- `GET /jobs/{id}/best-fitting` — one credit for the contact the HR finder
+  currently spends `COST.apifyQuery * 3` (~₹0.90) of Google queries to guess at.
+- `GET /jobs/{id}/history` and `job.is_reposting` — whether a posting has been
+  re-posted. Nothing else in this app can know that, and it speaks directly to
+  `--closing` and to reachability: a role advertised four times is either hard to
+  fill or not real.
+- `POST /searches` — a saved search with **scheduled exports**, which is the
+  daily new-jobs feed `scripts/index/` was written to prove. JSearch has no such
+  endpoint; this does.
