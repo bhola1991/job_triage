@@ -5,7 +5,7 @@
 // secrets. Nothing secret is ever returned to the browser.
 //
 // Secrets (supabase secrets set ...):
-//   DEEPSEEK_API_KEY, TYPESAFE_API_KEY, APIFY_TOKEN, JSEARCH_API_KEY (RapidAPI), RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
+//   DEEPSEEK_API_KEY, TYPESAFE_API_KEY, APIFY_TOKEN, RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET
 //   optional job sources: ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
 // SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
@@ -18,15 +18,20 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
   starter: { credits: 100, paise: 9900, label: "Starter" },
   pro: { credits: 500, paise: 39900, label: "Pro" },
 };
-// Credits per action. What each costs us, roughly:
-//   llm          1 DeepSeek call                                        ~₹0.10-0.30
-//   boardSearch  flat: up to 4 JSearch requests (₹0.44 each, pay-as-you-go),
-//                Adzuna/Jooble/Careerjet/Remotive/RemoteOK (free),
+// Credits per action. These are no longer estimates: the figures below are
+// measured from usage_events over 9 searches, 2026-09-14..23.
+//   llm          1 DeepSeek call                                        ~₹1.15-1.21
+//                Was ~₹0.07. Reasoning plus TOK_CAP 16000 took output from ~310
+//                to ~3300 tokens a call, an 18x jump on 2026-09-22. A credit
+//                sells for ₹0.80-0.99, so this action now runs at a LOSS. Left
+//                at 1 deliberately: repricing is a product call, not a cleanup.
+//   boardSearch  flat: Adzuna/Jooble/Careerjet/Remotive/RemoteOK (free),
 //                up to 14 Google queries (~₹0.30 each, specialist boards + fallback),
-//                5 Apify scrapers, new-since-last-search only, 30 rows and $0.15 max each,
-//                plus scoring every new job (~₹0.2-0.4 per call of 12)
-//                estimated ~₹25-40 per search; the usage ledger has the real figure.
-//                ponytail: 25 credits undercharges that; set once the ledger has ~20 searches.
+//                5 Apify scrapers, new-since-last-search only, $0.15 max each,
+//                plus scoring every new job.
+//                Ledger: ₹0.36-17.69 a search, median ₹1.87. The two most recent,
+//                with every source live, were ₹17.69 and ₹15.59 -- of which
+//                LinkedIn alone was ₹13.20, which is why it is a probe below.
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
 const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
 
@@ -94,41 +99,29 @@ const ACTOR = "apify~google-search-scraper";
 const MAX_QUERIES = 14;
 // How long after a search its yield report is still accepted.
 const REPORT_WINDOW_MS = 15 * 60_000;
-const MAX_REGISTRY_QUERIES = 8;   // the specialist boards a board search adds to JSearch
+const MAX_REGISTRY_QUERIES = 8;   // the specialist boards a board search adds to the Google run
 
-/* JSearch reads Google for Jobs, so one request covers LinkedIn, Indeed,
-   Glassdoor, Naukri and company sites at once, with full descriptions. One
-   request per target title, first page only (~10 jobs each). */
+/* How many of a track's titles one search fans out over, for the sources that
+   take one query per title (Adzuna, Jooble, Careerjet) and for the OR-ed query
+   the scrapers are given. */
 const MAX_TITLES = 4;
-async function jsearch(title: string, where: string, country: string, since: number) {
-  const q = new URLSearchParams({
-    query: where ? `${title} in ${where}` : title,
-    page: "1", num_pages: "1",
-    date_posted: since <= 1 ? "today" : since <= 3 ? "3days" : since <= 7 ? "week" : "month",
-  });
-  if (/^[a-z]{2}$/i.test(country)) q.set("country", country.toLowerCase());
-  const r = await fetch("https://jsearch.p.rapidapi.com/search?" + q, {
-    headers: { "X-RapidAPI-Key": secret("JSEARCH_API_KEY"), "X-RapidAPI-Host": "jsearch.p.rapidapi.com" },
-  });
-  if (!r.ok) throw new Error(`JSearch ${r.status}: ${(await r.text()).slice(0, 120)}`);
-  // deno-lint-ignore no-explicit-any
-  return ((await r.json()).data || []).map((x: any): Job => ({
-    title: x.job_title || "",
-    company: x.employer_name || "",
-    url: x.job_apply_link || x.job_google_link || "",
-    location: [x.job_city, x.job_state, x.job_country].filter(Boolean).join(", ") + (x.job_is_remote ? " (remote)" : ""),
-    description: String(x.job_description || "").slice(0, 4000),
-    posted: isoDay(x.job_posted_at_datetime_utc),
-    publisher: x.job_publisher || "JSearch",
-  }));
-}
 
+/* JSearch (jsearch.p.rapidapi.com) was removed on 2026-09-24, not disabled.
+   It read Google for Jobs and was meant to cover LinkedIn, Indeed, Glassdoor
+   and Naukri in one request per title. It returned nothing for the entire life
+   of the ledger: every call threw, first `429 Too many requests` -- the
+   RapidAPI Basic plan caps JSearch at ~200 requests a month -- and then
+   `404 Endpoint '/search' does not exist`, because the vendor retired that path
+   in favour of /search-v2 (cursor-paginated). Restoring it meant a new endpoint,
+   a new response shape and ~₹1.76 a search (4 titles x ₹0.44) for a source with
+   no measured yield at all, so it was cut. The Google run already reaches the
+   same big portals through `fallback` below. */
 /* ═══ more job sources ═══
    Every source returns the same Job shape, so the app treats them alike.
    A source whose key isn't set is skipped, not an error: each one is optional.
    All are free; none changes what a search costs the user. */
 // publisher: the site the posting is on (shown to the user). origin: which of
-// our sources delivered it (for the ledger), e.g. JSearch can deliver a LinkedIn posting.
+// our sources delivered it (for the ledger), e.g. the Google run can deliver a LinkedIn posting.
 type Job = { title: string; company: string; url: string; location: string; description: string; posted: string; publisher: string; origin?: string };
 // deno-lint-ignore no-explicit-any
 type Any = any;
@@ -278,10 +271,16 @@ const SCRAPERS: Record<string, {
   input: (c: Ctx, rows: number) => object;
 }> = {
   // publishedAt is LinkedIn's own r<seconds> filter (the Store page's example is "r604800").
-  // Salaried work's first stop. It carries contract roles too, so freelance
-  // probes it rather than skipping it; gig work is not advertised here at all.
+  // Demoted core -> probe on 2026-09-24 from the ledger, which is what `modes`
+  // is for: 3 searches, 87 rows, ₹38.28, and 5 jobs at 50+ that no other source
+  // found -- ₹7.66 each, against ₹0.81 for Indeed and ₹0.14 for Upwork. At
+  // PROBE_ROWS it costs ₹3.52 a search instead of ₹13.20 and still cannot become
+  // the blind spot that deleting it would create. Note ₹0.44/row is a GUESS
+  // (see PRICE_USD.linkedin), so the real figure can only be worse, never better.
+  // It carries contract roles too, so freelance probes it as well; gig work is
+  // not advertised here at all.
   linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
-    modes: { permanent: "core", freelance: "probe", gig: "off" },
+    modes: { permanent: "probe", freelance: "probe", gig: "off" },
     input: (c, rows) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows, companyProfile: false,
       publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
   // A search URL rather than position/location, because only the URL carries
@@ -323,7 +322,7 @@ const SCRAPERS: Record<string, {
 /* A FREE search runs only these, the paid sources that matter most per rupee.
    Paid and unlimited searches run every scraper. Sources that cost us nothing
    (Adzuna, Jooble, Careerjet, Remotive, Remote OK, company feeds) run either way;
-   JSearch and the Google run cost per request, so free searches skip them. */
+   the Google run costs per request, so a free search skips it. */
 const FREE_SCRAPERS = ["linkedin", "indeed", "naukri"];
 
 async function startScrapers(user: string, c: Ctx, only?: string[]) {
@@ -363,7 +362,6 @@ async function startScrapers(user: string, c: Ctx, only?: string[]) {
    against your real bills and update. Logging never fails a request. */
 const USD_INR = 88;
 const PRICE_USD: Record<string, number> = {
-  jsearch: 0.005,          // per request, RapidAPI pay-as-you-go
   google: 0.0035,          // per Google query page (Apify google-search-scraper)
   linkedin: 0.005,         // per row; bebity doesn't publish a price, so this is a cautious guess
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
@@ -415,11 +413,11 @@ function scrapedJob(x: Any, source: string): Job {
    with the origin that delivered it), one error line per source that failed,
    and how many requests each origin made, for the ledger. The remote feeds
    are cached, so they carry no date filter; the app's age filter covers them. */
-async function searchAll(titles: string[], where: string, country: string, since: number, req: Request, free = false) {
+async function searchAll(titles: string[], where: string, country: string, since: number, req: Request) {
   // A source whose key isn't set resolves to null: skipped, not a request, not logged.
-  // JSearch bills per request, so a free search resolves it to null rather than calling it.
+  // Every source left here is free, so a free search runs exactly the set a paid
+  // one does; what a free search skips is the Google run and the paid scrapers.
   const named: [string, Promise<Job[] | null>][] = [
-    ...titles.map((t) => ["jsearch", free ? Promise.resolve(null) : jsearch(t, where, country, since)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[] | null>]),
@@ -492,11 +490,13 @@ Deno.serve(async (req) => {
       case "packs":
         return json({ packs: PACKS, costs: COST });
 
-      // One board search, charged once: JSearch for the big portals, then a
-      // Google run over the track's specialist boards. If JSearch brings back
-      // nothing (down, bad key, or no matches), the Google run also covers the
-      // big portals (`fallback`), so a search never silently shrinks to niche
-      // boards alone. The run id is polled by the browser via apify_status/items.
+      // One board search, charged once: the free job APIs and the site scrapers,
+      // then a Google run over the track's specialist boards. If the APIs bring
+      // back nothing, the Google run also covers the big portals (`fallback`),
+      // so a search never silently shrinks to niche boards alone. That fallback
+      // was written for JSearch being down; with JSearch deleted it is what
+      // covers the big portals whenever the free feeds come back empty.
+      // The run id is polled by the browser via apify_status/items.
       case "board_search": {
         const lines = (v: unknown) => String(v || "").split("\n").map((q) => q.trim()).filter(Boolean);
         const list = (v: unknown, n: number) => (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean).slice(0, n);
@@ -519,7 +519,7 @@ Deno.serve(async (req) => {
           const free = s.used === "free";
 
           const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
-            searchAll(titles, where, country, since, req, free),
+            searchAll(titles, where, country, since, req),
             startScrapers(user, ctx, free ? FREE_SCRAPERS : undefined),
           ]);
           errors.push(...scrapeErrors);
@@ -527,7 +527,9 @@ Deno.serve(async (req) => {
           // A source that failed leaves NO other trace in the ledger: its cost row
           // is only written on success, so silence and "never ran" looked identical.
           // 5 searches ran JSearch and it logged nothing at all, because every call
-          // threw. One zero-unit row per failure makes that readable in SQL.
+          // threw -- which is how it stayed broken long enough to be deleted rather
+          // than repaired. One zero-unit row per failure makes that readable in SQL,
+          // and it is how naukri's "$0.40 minimum" failure is visible today.
           await logUsage(errors.slice(0, 20).map((e) => ({
             user_id: user, search_id: searchId, kind: "error",
             source: e.split(":")[0].trim().slice(0, 40), units: 0, note: e.slice(0, 300),
