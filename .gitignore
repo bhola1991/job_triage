@@ -51,6 +51,9 @@ claude --teleport*.txt
 # Index build output: crawl it, do not commit it (37 MB per 5k jobs).
 scripts/index/index.jsonl
 scripts/index/candidates.jsonl
+scripts/index/sitemap.jsonl
+scripts/index/checks.json
+scripts/index/suspect.jsonl
 scripts/index/vectors.bin
 scripts/index/vectors.json
 scripts/index/node_modules/

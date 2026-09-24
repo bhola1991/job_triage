@@ -19,6 +19,7 @@ once and serve to everyone is the only version that scales. That is the index.
     sources.json    the crawl list — ATS boards and free feeds, all keyless
     harvest-slugs.js grow that list from job URLs you already paid for
     sitemap-jobs.js  read a board's own public sitemap into index rows
+    verify.js        diff today's snapshot against yesterday's: what is still real
     ingest.js       crawl once, centrally, into one JSONL store
     embed.mjs       give every indexed job a meaning-vector (channel C)
     retrieve.js     stage one: cut the index to a few hundred candidates, free
@@ -212,3 +213,39 @@ one is stamped `partial: true` rather than pretending otherwise. The sitemap
 gives a free, complete, filterable shortlist; fetching the ~60 survivors is a
 separate problem. Buying 60 rows you have already chosen is a different trade
 from buying 30 at random, which is the entire point.
+
+## Is it still real?
+
+    node scripts/index/verify.js <snapshot.jsonl…> [--store f.json] [--report]
+
+Liveness is **not a fetch**. Measured 2026-09-25: every url in a sample of live
+Upwork and Remotive postings returned **403** to a datacentre IP, and Naukri's
+robots.txt names `claudebot`, `gptbot` and `perplexitybot` and disallows them
+the whole site. Asking each page "are you still open?" does not work and cannot
+be made to work.
+
+But the boards publish their complete current index every day, to be crawled.
+So membership answers it with no page fetch at all:
+
+| | |
+| --- | --- |
+| in today's snapshot, not yesterday's | new |
+| in both | still open, `runs++` |
+| in yesterday's, gone today | **closed**, and the date is known |
+| gone, then back | **reposted** |
+
+Proven on the 18,806-row Pune snapshot: 500 postings removed were reported
+`closed 500`; 50 of them returned and were reported `reposted 50`; a source the
+run did not cover is left strictly alone, so a partial run can never be read as
+a mass closure.
+
+### Suspects, not verdicts
+
+`verify.js` never asks Jev anything. Every signal it computes is a count or a
+date, and the house rule is that Jev is asked judgments, never dates or counts.
+So it marks what is **suspect** — continuously advertised ≥ 60 days, or taken
+down and reposted ≥ 3 times — and writes those rows out. That is the residue
+worth paying a judgment on. Everything else is left alone.
+
+A posting open 115 days is not evidence of fraud; it is evidence that it is not
+an opening anyone is filling, which is the thing a job seeker is never told.
