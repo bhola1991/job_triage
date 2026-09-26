@@ -38,6 +38,29 @@ const T = new Function(
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'eval', 'cases.json'), 'utf8'));
 const BASELINE_PATH = path.join(__dirname, 'eval', 'baseline.json');
 
+/* Which slice of the labelled set to run. Two different questions, so two
+   different sets, and conflating them is how a gate stops meaning anything:
+
+     --set all       every case. The REGRESSION gate, and the default, because
+                     that is what this file has always been and quietly
+                     narrowing a release gate is worse than not splitting.
+     --set tune      the 8 cases work happens on.
+     --set holdout   the 2 that are never tuned on. The only honest input to
+                     "did this change actually help", as opposed to "did I fit
+                     the cases I was staring at".
+
+   A case with no `set` counts as tune, so an unlabelled case is never silently
+   promoted into the holdout. Baselines are stored per set and never compared
+   across sets — 8 cases and 10 cases do not produce comparable numbers. */
+const SET = (() => {
+  const i = process.argv.indexOf('--set');
+  const v = i > -1 ? process.argv[i + 1] : 'all';
+  if (!['all', 'tune', 'holdout'].includes(v)) { console.error(`unknown --set ${v} (all|tune|holdout)`); process.exit(1); }
+  return v;
+})();
+if (SET !== 'all') CASES.cases = CASES.cases.filter(c => (c.set || 'tune') === SET);
+if (!CASES.cases.length) { console.error(`no cases in --set ${SET}`); process.exit(1); }
+
 let failed = 0;
 const fail = m => { console.error('  FAIL  ' + m); failed++; };
 const ok = m => console.log('  ok    ' + m);
@@ -221,7 +244,7 @@ const spanRate = r3(withSpan / flagsTotal);
 // ── report ───────────────────────────────────────────────────────────────
 const measured = { precision, recall, calibration, factRate, spanRate, cases: CASES.cases.length };
 
-console.log('\nmatcher, against ' + CASES.cases.length + ' labelled postings:');
+console.log('\nmatcher, against ' + CASES.cases.length + ` labelled postings (--set ${SET}):`);
 console.log(`  flag precision   ${precision}   (${tp} right, ${fp} raised that should not have been)`);
 console.log(`  flag recall      ${recall}   (${fn} missed)`);
 console.log(`  score bands      ${calibration}   (${inBand}/${CASES.cases.length} with both scores in range)`);
@@ -231,16 +254,29 @@ perCase.filter(c => c.missed.length || c.extra.length).forEach(c =>
   console.log(`    ${c.id}: missed [${c.missed.join(' ')}] extra [${c.extra.join(' ')}]`));
 outOfBand.forEach(s => console.log(`    ${s}`));
 
+/* A baseline written before the split is a flat `metrics` measured over every
+   case, so it is read as the `all` baseline and nothing else. It is not
+   silently reused for tune or holdout: those have fewer cases and would
+   compare as a phantom improvement. */
+const readBase = () => {
+  const b = fs.existsSync(BASELINE_PATH) ? JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')) : null;
+  if (!b) return null;
+  if (b.sets) return b;
+  return { ...b, sets: b.metrics ? { all: { metrics: b.metrics, recorded: b.recorded } } : {} };
+};
+
 if (process.argv.indexOf('--write-baseline') > -1) {
+  const b = readBase() || { sets: {} };
+  b.sets[SET] = { metrics: measured, recorded: new Date().toISOString().slice(0, 10) };
   fs.writeFileSync(BASELINE_PATH, JSON.stringify({
-    _note: 'Written by scripts/eval-matcher.js --write-baseline. A drop against these fails the check; raising them is the point of working on the matcher.',
-    recorded: new Date().toISOString().slice(0, 10),
-    metrics: measured,
+    _note: 'Written by scripts/eval-matcher.js --write-baseline [--set all|tune|holdout]. A drop against these fails the check; raising them is the point of working on the matcher. Sets are never compared against each other.',
+    sets: b.sets,
   }, null, 2) + '\n');
-  console.log('\nbaseline written to scripts/eval/baseline.json');
-} else if (fs.existsSync(BASELINE_PATH)) {
-  const base = JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')).metrics;
-  console.log(`\nagainst the baseline of ${JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')).recorded}:`);
+  console.log(`\nbaseline for --set ${SET} written to scripts/eval/baseline.json`);
+} else if (readBase() && readBase().sets[SET]) {
+  const entry = readBase().sets[SET];
+  const base = entry.metrics;
+  console.log(`\nagainst the ${SET} baseline of ${entry.recorded}:`);
   let moved = 0;
   ['precision', 'recall', 'calibration', 'factRate', 'spanRate'].forEach(k => {
     const d = r3(measured[k] - base[k]);
@@ -250,7 +286,8 @@ if (process.argv.indexOf('--write-baseline') > -1) {
   if (base.cases !== measured.cases) console.log(`  note  the set changed size: ${base.cases} → ${measured.cases}`);
   if (!moved) ok('every metric holds its baseline');
 } else {
-  console.log('\nno baseline yet — run with --write-baseline to record one');
+  console.log(`\nno baseline for --set ${SET} yet — run with --write-baseline --set ${SET} to record one.`);
+  if (SET === 'holdout') console.log('  (n=2 quantises every metric to halves: a smoke test against overfitting, not a measurement)');
 }
 
 console.log('\n' + (failed ? failed + ' FAILED' : 'ALL PASS'));
