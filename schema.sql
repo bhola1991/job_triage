@@ -482,3 +482,67 @@ alter table public.job_checks enable row level security;
 drop policy if exists "shared: select" on public.job_checks;
 create policy "shared: select" on public.job_checks
   for select to authenticated using (true);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- job_index — the shared corpus
+--
+-- Shared, like job_checks and for the same reason: acquiring a posting costs
+-- ~16x what deciding about it costs (scripts/index/README.md), so the row you
+-- buy once and serve to everyone is the only one that scales. public.jobs stays
+-- per-user and is what someone has CHOSEN to track; this is everything known.
+--
+-- Two tiers, and the distinction is load-bearing rather than cosmetic:
+--   full  an ATS board, RSS or JSON feed. Carries a real description, so it can
+--         be judged and scored.
+--   thin  a board sitemap. Title, company, city, experience and a date, and NO
+--         description -- a Naukri job page is a client-rendered shell. A thin
+--         row is a candidate for a shortlist, never an answer, and nothing
+--         should ask Jev to judge fit from one.
+--
+-- description is capped at 4,000 characters, which is the cap scrapedJob() and
+-- the JSearch mapper already apply. Uncapped, the measured median is 7,319 and
+-- the max 36,121; 4,840 crawled jobs are 37 MB on disk, so a six-figure corpus
+-- would not fit the database it lives in. The index is a filter, not a document
+-- store: whatever needs the full text can fetch it for the few rows that reach
+-- a person.
+create table if not exists public.job_index (
+  -- keyOf() in index.html, the same identity public.jobs and public.job_checks
+  -- use, so all three join without a translation layer.
+  job_key       text        primary key,
+  source        text        not null,
+  url           text        not null,
+  title         text        not null,
+  company       text,
+  location      text,
+  posted        date,
+  description   text,
+  tier          text        not null default 'thin' check (tier in ('full', 'thin')),
+  -- Naukri slugs carry a range; most sources carry neither.
+  exp_min       integer,
+  exp_max       integer,
+  -- The site the posting is on, which is not the source that delivered it:
+  -- the Google run can hand us a LinkedIn posting.
+  publisher     text,
+  first_indexed date        not null default current_date,
+  updated_at    timestamptz not null default now(),
+  -- The same role is posted to five boards under five urls, so job_key cannot
+  -- group them. Generated rather than written: a dedup key computed by each
+  -- caller is a dedup key that disagrees with itself. Title and company only --
+  -- adding location would split Bengaluru from Bangalore and undo the grouping.
+  dedup_key     text generated always as (
+    lower(regexp_replace(coalesce(title, '') || '|' || coalesce(company, ''), '[^a-zA-Z0-9|]', '', 'g'))
+  ) stored
+);
+
+create index if not exists job_index_dedup   on public.job_index (dedup_key);
+create index if not exists job_index_source  on public.job_index (source, posted desc nulls last);
+create index if not exists job_index_posted  on public.job_index (posted desc nulls last) where tier = 'full';
+
+-- Shared and non-personal, so the same policy shape as job_checks: readable by
+-- any signed-in user, written only by the service role, and the absence of the
+-- other three policies is the deny.
+alter table public.job_index enable row level security;
+
+drop policy if exists "shared: select" on public.job_index;
+create policy "shared: select" on public.job_index
+  for select to authenticated using (true);

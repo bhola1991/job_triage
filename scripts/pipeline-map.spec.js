@@ -306,6 +306,9 @@ module.exports = {
     'st.jobs':    { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'jobs \u2014 one row per job',
       anchor: { file: 'schema.sql', sql: 'public.jobs' },
       note: 'Unique on (profile_id, job_key), where job_key is keyOf \u2014 the identity the app already used to mean "have I seen this posting". Two tabs editing two different jobs now write two different rows. Two tabs editing the same job still lose one: last writer wins, deliberately, because the alternative is a conflict screen in an app with nowhere to put one.' },
+    'st.index':   { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'job_index \u2014 the shared corpus',
+      anchor: { file: 'schema.sql', sql: 'public.job_index' },
+      note: 'Shared for the same reason as job_checks: acquiring a posting costs ~16x what deciding about it costs, so the row bought once and served to everyone is the only one that scales. public.jobs is what a person has chosen to track; this is everything known. Two tiers -- a full row carries a real description and can be judged, a thin row comes from a board sitemap and carries none, so it is a shortlist candidate and never an answer. dedup_key is generated rather than written, because the same role posted to five boards has five urls and a key each caller computes is a key that disagrees with itself.' },
     'st.checks':  { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'job_checks \u2014 is the posting still listed',
       anchor: { file: 'schema.sql', sql: 'public.job_checks' },
       note: 'The one table here that is not per-user, and that is the point: whether a posting is still listed is a fact about the posting, so checking it once serves everyone who holds it. Written by scripts/index/verify.js through the service role; readable by any signed-in user and writable by none, since there is no user_id to scope by and a job_key is only a url. Liveness is a set difference over the boards\u2019 own daily indexes, never a fetch \u2014 every job url sampled returned 403, and naukri.com/robots.txt disallows AI crawlers outright.' },
@@ -382,6 +385,7 @@ module.exports = {
     { from: 'sv.auth', to: 'sv.switch' },
     ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
+    { from: 'st.index', to: 'st.checks', label: 'still listed?' },
     { from: 'sv.mantiks', to: 'sv.apStart', label: 'miss → Google' },
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
