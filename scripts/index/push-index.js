@@ -57,7 +57,9 @@ function row(r) {
   return {
     job_key: keyOf(r),
     source: clean(r.source, 80) || 'unknown',
-    url: String(r.url || '').slice(0, 2000),
+    // No url column: job_key IS 'u:' || lower(url) for every row, so storing it
+    // again cost 42 MB of exact duplication in the table whose key is already
+    // its largest consumer. Readers derive it with substring(job_key from 3).
     title: clean(r.title, 300) || '(untitled)',
     company: clean(r.company, 200),
     location: clean(r.location, 200),

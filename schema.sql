@@ -520,7 +520,14 @@ create table if not exists public.job_index (
   -- use, so all three join without a translation layer.
   job_key       text        primary key,
   source        text        not null,
-  url           text        not null,
+  -- There is no url column, deliberately. job_key is 'u:' || lower(url) for
+  -- every row in the corpus -- checked across all 353,604 of them -- so a url
+  -- column is a second copy of the primary key, and that key is already the
+  -- single largest consumer of space here (74 MB of index on its own). Dropping
+  -- it returned 81 MB and took the database from 90% of its tier to 74%.
+  -- Readers rebuild it: substring(job_key from 3). The rebuild is lowercased,
+  -- which is safe: 99 rows differ in case and every one of them differs only
+  -- inside the hostname, where DNS does not care.
   title         text        not null,
   company       text,
   location      text,
