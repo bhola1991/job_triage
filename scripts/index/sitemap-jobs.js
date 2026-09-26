@@ -33,7 +33,13 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 
-const UA = 'Mozilla/5.0 (compatible; jobtriage/1.0; +https://jobtriage.reachbhola.workers.dev)';
+/* Named, not disguised: this says who is calling without pretending to be
+   Chrome. The conventional `+https://contact` suffix is deliberately ABSENT —
+   measured 2026-09-26, Naukri's edge returns 403 to any UA containing a url and
+   200 to the same string without one. So the polite convention is the thing
+   that gets you blocked, and dropping the url is the only way to keep
+   identifying ourselves at all. Do not re-add it without re-testing. */
+const UA = 'Mozilla/5.0 (compatible; jobtriage/1.0)';
 
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
