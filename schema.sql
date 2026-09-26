@@ -429,3 +429,56 @@ cross join lateral jsonb_array_elements(
        else '[]'::jsonb end
 ) as fl(el)
 group by 1;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- job_checks — is this posting still real?
+--
+-- The one table here that is NOT per-user, and that is the point. Whether a
+-- posting is still listed is a fact about the posting, not about anyone's copy
+-- of it: `jobs` is unique on (profile_id, job_key), so the same role held by
+-- ten people would otherwise be checked ten times to learn one thing. Checked
+-- once, read by everyone — the same argument scripts/index/README.md makes for
+-- acquiring a row once and serving it to everyone.
+--
+-- Liveness is a set difference, never a fetch. Every job url sampled on
+-- 2026-09-25 returned 403 to a datacentre IP, and naukri.com/robots.txt names
+-- claudebot, gptbot and perplexitybot and disallows them the whole site. But
+-- the boards publish their complete current index daily to be crawled, so
+-- membership answers the question: present today and absent tomorrow is a
+-- closure, with a date. scripts/index/verify.js computes exactly these columns.
+--
+-- One row per posting, carrying the derived facts rather than one row per
+-- observation. A full event log is 18,806 rows a day for one city; these
+-- counters are what the render and the suspect rules actually read, and a
+-- job_check_events table can be added the day something needs the history.
+create table if not exists public.job_checks (
+  -- keyOf() in index.html, same identity scheme as public.jobs.job_key.
+  job_key    text        primary key,
+  -- Which index this was last seen in, so a run that covered only Pune can
+  -- never be read as closing Mumbai. verify.js enforces the same rule.
+  source     text        not null,
+  first_seen date        not null,
+  last_seen  date        not null,
+  runs       integer     not null default 1 check (runs >= 0),
+  -- Taken down and listed again. A role advertised four times is either hard
+  -- to fill or was never being filled; either way it is not what it appears.
+  reposts    integer     not null default 0 check (reposts >= 0),
+  -- Null means still listed. Set on the first run that covered its source and
+  -- did not find it.
+  closed_on  date,
+  checked_at timestamptz not null default now()
+);
+
+create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
+create index if not exists job_checks_open        on public.job_checks (closed_on) where closed_on is null;
+
+-- Readable by every signed-in user, writable by nobody through the API.
+-- There is no user_id to scope by and nothing personal in the table: a job_key
+-- is a url or a title/company/location triple. The writer is verify.js through
+-- the service role, which bypasses RLS -- so select is the only policy, and its
+-- absence for the other verbs is the deny.
+alter table public.job_checks enable row level security;
+
+drop policy if exists "shared: select" on public.job_checks;
+create policy "shared: select" on public.job_checks
+  for select to authenticated using (true);

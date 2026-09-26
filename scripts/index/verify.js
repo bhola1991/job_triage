@@ -27,9 +27,10 @@
 // the facts and marks what is SUSPECT; judging "is this a genuine opening or a
 // pipeline ad" is a later, cheaper pass over the residue.
 //
-// It also does no network at all. Snapshots come from the tools that already
-// exist (`sitemap-jobs.js`, `ingest.js`), which keeps the diff pure, offline
-// and testable, and keeps the fetching policy in one place rather than two.
+// It also does no network in the diff path. Snapshots come from the tools that
+// already exist (`sitemap-jobs.js`, `ingest.js`), which keeps the diff pure,
+// offline and testable, and keeps the fetching policy in one place. The only
+// network here is the optional `--push`, which is a write and nothing else.
 'use strict';
 const fs = require('fs');
 const path = require('path');
@@ -141,6 +142,55 @@ if (first) {
   console.log('\nFirst run: everything is "new" and nothing can be closed yet. That is not a');
   console.log('result — the value is in the second run and every one after it. Run it daily.');
 }
+
+/* ── push ──
+   `public.job_checks` is deliberately not per-user: whether a posting is still
+   listed is a fact about the posting, so one check serves everyone holding it.
+   Which is why this writes through the SERVICE ROLE and why the table has a
+   select policy and no others — there is no user to scope a write by.
+   Off unless asked, and a no-op without credentials, so the diff stays runnable
+   by anyone with no keys at all. */
+async function push() {
+  const url = process.env.SUPABASE_URL, key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    console.log('\n--push: SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set, nothing sent.');
+    console.log('  The service role key is a server secret and is not in .env.local by design.');
+    return;
+  }
+  /* The store is keyed by url; `job_checks.job_key` is keyOf() — the identity
+     `public.jobs` already uses. Pushing the raw url would produce a table that
+     looks right and joins to nothing, which is the worst of both. keyOf is
+     mirrored rather than imported because this file is offline by design and
+     index.html is a browser IIFE; selfcheck-boards.js keeps the real one
+     honest, and the shape is fixed by schema.sql's comment on the column. */
+  const keyOf = (j) => {
+    const u = String(j.url || '').trim();
+    if (u && u !== 'nan') return 'u:' + u.toLowerCase();
+    return 't:' + [j.title, j.company, j.location].map((x) => String(x || '').trim().toLowerCase()).join('|');
+  };
+  const rows = Object.entries(store.jobs).map(([url, j]) => ({
+    job_key: keyOf({ ...j, url }), source: j.source, first_seen: j.first_seen, last_seen: j.last_seen,
+    runs: j.runs, reposts: j.reposts, closed_on: j.closed_on, checked_at: new Date().toISOString(),
+  }));
+  // PostgREST takes an array, but not 18,806 of them in one body.
+  const CHUNK = 1000;
+  let sent = 0;
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const body = rows.slice(i, i + CHUNK);
+    const r = await fetch(`${url}/rest/v1/job_checks?on_conflict=job_key`, {
+      method: 'POST',
+      headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(body),
+    }).catch((e) => ({ ok: false, status: 0, text: async () => e.message }));
+    if (!r.ok) { console.error(`  push failed at row ${i}: ${r.status} ${(await r.text()).slice(0, 200)}`); return; }
+    sent += body.length;
+    process.stdout.write(`\r  pushed ${sent}/${rows.length}`);
+  }
+  console.log(`\r  pushed ${sent} row(s) into public.job_checks     `);
+}
+
+if (has('push')) push();
 if (has('report')) {
   const byAge = Object.values(store.jobs).filter((j) => j.closed_on)
     .map((j) => j.open_days).filter((n) => Number.isFinite(n)).sort((a, b) => a - b);
