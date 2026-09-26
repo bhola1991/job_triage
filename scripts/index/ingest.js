@@ -54,8 +54,62 @@ const FEED = {
     description: strip(x.description), posted: day(x.publication_date) })),
 };
 
+/* ── paged sources ──────────────────────────────────────────────────────────
+   The feeds above hand back one page and stop. These two hand back a cursor,
+   and they are large: Himalayas reports 96,023 postings and Singapore's
+   MyCareersFuture 91,026, both keyless.
+
+   Which is exactly why they are CAPPED. Those are full rows carrying real
+   descriptions -- the thing that makes a row judgeable and also the thing that
+   costs space. At the 4,000-character cap push-index.js applies, 187k of them
+   is roughly 750 MB against a 500 MB database. PAGE_CAP keeps a run bounded
+   and honest; raising it is a decision to make after thin rows stop carrying a
+   description they do not have, which is where the space actually went. */
+/* Page size is the SOURCE's choice, not ours. Himalayas caps at 20 a page
+   whatever `limit` says -- 96,023 postings would be 4,800 requests, so it is a
+   drip rather than a crawl and the cap below is what one polite run takes.
+   job_index upserts on job_key, so successive runs accumulate rather than
+   repeat. MyCareersFuture honours 100. */
+async function paged(urlFor, rowsOf, map, cap) {
+  const out = [];
+  for (let i = 0; i < cap; i++) {
+    const d = await get(urlFor(i, out.length));
+    const rows = rowsOf(d) || [];
+    if (!rows.length) break;
+    out.push(...rows.map(map));
+  }
+  return out;
+}
+
+const PAGED = {
+  // pubDate is unix seconds. locationRestrictions is an array and often empty,
+  // which for a remote board means "anywhere" rather than "unknown".
+  himalayas: () => paged(
+    (_i, n) => `https://himalayas.app/jobs/api?limit=100&offset=${n}`,
+    (d) => d.jobs,
+    (x) => ({ title: x.title || '', company: x.companyName || '',
+      url: x.applicationLink || x.guid || '',
+      location: ((x.locationRestrictions || []).join(', ') || 'Anywhere') + ' (remote)',
+      description: strip(x.description), posted: day((x.pubDate || 0) * 1000) }), 50),
+
+  // Singapore's government board. Offset paging, and the posting url is built
+  // from the uuid rather than returned.
+  mycareersfuture: () => paged(
+    (i) => `https://api.mycareersfuture.gov.sg/v2/jobs?limit=100&page=${i}`,
+    (d) => d.results,
+    (x) => ({ title: x.title || '', company: (x.postedCompany || {}).name || (x.hiringCompany || {}).name || '',
+      url: x.uuid ? `https://www.mycareersfuture.gov.sg/job/${x.uuid}` : '',
+      location: [(x.address || {}).building, (x.address || {}).district, 'Singapore'].filter(Boolean).join(', '),
+      description: strip(x.description),
+      posted: ((x.metadata || {}).newPostingDate || '').slice(0, 10) }), 20),
+};
+
 const get = async (url) => {
-  const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index'   // no url: see sitemap-jobs.js — an edge that 403s any UA containing one },
+  // No url in the user agent: see sitemap-jobs.js — an edge that 403s any UA
+  // containing one. (This comment sat INSIDE the object literal for one commit
+  // and silently ate the closing brace; ingest.js is not covered by any check,
+  // so it stayed broken until the next crawl.)
+  const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index' },
                                signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
@@ -72,6 +126,8 @@ async function main() {
                    run: () => get(ATS[platform].url(slug)).then(d => ATS[platform].rows(d, slug)) });
   for (const [name, url] of Object.entries(SRC.feeds || {}))
     tasks.push({ name, publisher: name, run: () => get(url).then(FEED[name]) });
+  for (const [name, run] of Object.entries(PAGED))
+    tasks.push({ name, publisher: name, run });
 
   const seen = new Set(), rows = [], failed = [];
   let dupes = 0;

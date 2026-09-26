@@ -1,0 +1,43 @@
+id,source,region,access_method,cost,url
+1,Greenhouse Job Board API,Global,Official public API (no key),Free,https://developers.greenhouse.io/job-board.html
+2,Lever Postings API,Global,Official public API (no key),Free,https://github.com/lever/postings-api
+3,Ashby Job Posting API,Global,Official public API (no key),Free,https://developers.ashbyhq.com/docs/public-job-posting-api
+4,Workday CXS JSON,Global,Public JSON behind career sites,Free,
+5,SmartRecruiters Posting API,Global,Official public API,Free,https://developers.smartrecruiters.com/
+6,Adzuna API,"US, CA, UK, EU, SG, IN",API key,Free tier,https://developer.adzuna.com/
+7,JSearch (OpenWeb Ninja),Global except China,API key,Free tier then paid,https://www.openwebninja.com/api/jsearch
+8,SerpApi Google Jobs,Global except China,API key,100 free searches/mo,https://serpapi.com/google-jobs-api
+9,TheirStack,Global,API,200 free credits/mo,https://theirstack.com/en/job-posting-api
+10,Techmap (jobdatafeeds.com),Per country,API or daily S3 files,Free tier; ~$400/mo per country feed,https://jobdatafeeds.com/
+11,Coresignal,Global,API,From $49/mo,https://coresignal.com/
+12,Bright Data,Global,Scraper API,Pay per record,https://brightdata.com/
+13,Hirebase,Global,API,Paid,https://hirebase.org/
+14,Job-alert email parsing,Any,Gmail parsing,Free,
+15,Himalayas / Remotive / RemoteOK,Remote,Open APIs,Free,https://remotive.com/api
+16,HN Who's Hiring (Algolia),Global tech,Open API,Free,https://hn.algolia.com/api
+17,Telegram job channels,"India, South Asia",Telethon library,Free,https://docs.telethon.dev/
+18,Company sitemaps + JobPosting JSON-LD,Global,Crawl,Free,
+19,Common Crawl,Global,Monthly dumps,Free,https://commoncrawl.org/
+20,NCS portal,India,Scrape,Free,https://www.ncs.gov.in/
+21,"Employment News, UPSC, SSC, state PSCs",India,Scrape HTML/PDF,Free,https://employmentnews.gov.in/
+22,"Naukri, foundit, Shine, Apna, Internshala",India,Alert emails or vendor,,
+23,USAJOBS API,USA (federal),API key,Free,https://developer.usajobs.gov/
+24,NLx Research Hub,USA (state job banks),Apply for access,Free,https://nlxresearchhub.org/
+25,Job Bank,Canada,Open datasets,Free,https://open.canada.ca/
+26,EURES,EU,Portal,Free,https://eures.europa.eu/
+27,Bundesagentur Jobsuche API,Germany,Unofficial documented API,Free,https://github.com/bundesAPI/jobsuche-api
+28,France Travail API,France,Official API (register),Free,https://francetravail.io/
+29,Reed API,UK,API key,Free,https://www.reed.co.uk/developers
+30,UK Find a job,UK,Scrape,Free,https://findajob.dwp.gov.uk/
+31,Arbeitnow API,"Germany, remote",Open API,Free,https://www.arbeitnow.com/api/job-board-api
+32,Worknet (data.go.kr),South Korea,Official API,Free,https://www.data.go.kr/
+33,Saramin API,South Korea,Official API,Free,https://oapi.saramin.co.kr/
+34,Hello Work,Japan,Scrape,Free,https://www.hellowork.mhlw.go.jp/
+35,MyCareersFuture,Singapore,Undocumented JSON,Free,https://www.mycareersfuture.gov.sg/
+36,104.com.tw,Taiwan,Scrape or vendor,,https://www.104.com.tw/
+37,JobsDB,Hong Kong,Scrape or vendor,,https://hk.jobsdb.com/
+38,Rozee.pk,Pakistan,Scrape or vendor,,https://www.rozee.pk/
+39,Bdjobs,Bangladesh,Scrape or vendor,,https://www.bdjobs.com/
+40,topjobs.lk,Sri Lanka,Scrape or vendor,,https://www.topjobs.lk/
+41,merojob,Nepal,Scrape or vendor,,https://merojob.com/
+42,"BOSS Zhipin, 51job, Zhaopin, Liepin",China,Vendor only (legal risk),,
