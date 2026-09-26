@@ -466,11 +466,21 @@ create table if not exists public.job_checks (
   -- Null means still listed. Set on the first run that covered its source and
   -- did not find it.
   closed_on  date,
+  -- How we know, because the two ways are not equally good. 'inferred' means it
+  -- was in yesterday's snapshot and not today's, and that signal carries real
+  -- noise: 20.8% of the Naukri index vanished in two days on 2026-09-26, with an
+  -- age gradient (16.6% at 8-14 days rising to 42.8% at 61-90) saying part is
+  -- expiry and part is the index rotating. 'declared' means the board published
+  -- it as dead -- Naukri ships sitemap-expired-jd-pages.xml -- and has no such
+  -- floor under it. A render that says "gone from the board" should be able to
+  -- tell knowing from guessing.
+  closed_src text        check (closed_src is null or closed_src in ('declared', 'inferred')),
   checked_at timestamptz not null default now()
 );
 
 create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
 create index if not exists job_checks_open        on public.job_checks (closed_on) where closed_on is null;
+create index if not exists job_checks_closed_src  on public.job_checks (closed_src) where closed_on is not null;
 
 -- Readable by every signed-in user, writable by nobody through the API.
 -- There is no user_id to scope by and nothing personal in the table: a job_key

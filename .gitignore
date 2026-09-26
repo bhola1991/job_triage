@@ -54,6 +54,8 @@ scripts/index/candidates.jsonl
 scripts/index/sitemap.jsonl
 scripts/index/checks.json
 scripts/index/suspect.jsonl
+scripts/index/naukri.jsonl
+scripts/index/expired.jsonl
 scripts/index/vectors.bin
 scripts/index/vectors.json
 scripts/index/node_modules/

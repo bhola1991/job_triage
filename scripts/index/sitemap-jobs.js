@@ -44,7 +44,9 @@ const UA = 'Mozilla/5.0 (compatible; jobtriage/1.0)';
 const args = process.argv.slice(2);
 const flag = (f) => args.includes(f);
 const opt = (f, d) => { const i = args.indexOf(f); return i >= 0 && args[i + 1] ? args[i + 1] : d; };
-const target = args.find((a) => !a.startsWith('--') && args[args.indexOf(a) - 1] !== '--limit' && args[args.indexOf(a) - 1] !== '--out');
+const VALUED = new Set(['--limit', '--out', '--max-age']);
+const targets = args.filter((a, i, all) => !a.startsWith('--') && !VALUED.has(all[i - 1]));
+const target = targets[0];
 if (!target) {
   console.error('usage: node scripts/index/sitemap-jobs.js <sitemap-url|file> [--list] [--limit N] [--out f.jsonl]');
   console.error('  --list  print the child sitemaps of an index and stop (sitemaps of sitemaps are normal)');
@@ -174,19 +176,48 @@ function naukriRow(url) {
   };
 }
 
-(async () => {
-  const xml = await load(target);
+/* An index whose children are all sitemaps is followed rather than reported,
+   unless --list says otherwise. Naukri's top-level index mixes job sitemaps
+   with web stories, recruiter pages and code360, so only the ones that carry
+   postings are taken: the per-city jobDescPages files and the latest-jd feed.
+   That second one matters more than it looks -- the city files lag about seven
+   days and carry nothing newer than that, while latest-jd is a day old at the
+   head and three at the median. The corpus and the fresh lane come from the
+   same publisher, through different files. */
+const JOB_SITEMAP = /jobDescPages|latest-jd-pages|incremental-jd-pages/i;
+
+async function rowsFrom(src, depth = 0) {
+  const xml = await load(src);
   const urls = locs(xml);
   const children = urls.filter((u) => /\.xml(\.gz)?(\?|$)/i.test(u));
+  if (children.length && children.length === urls.length) {
+    if (depth > 2) return [];                       // an index that indexes itself
+    const wanted = children.filter((u) => JOB_SITEMAP.test(u));
+    const out = [];
+    for (const c of wanted) {
+      try {
+        const rows = await rowsFrom(c, depth + 1);
+        console.log(`  ${String(rows.length).padStart(7)}  ${c.split('/').pop()}`);
+        out.push(...rows);
+      } catch (e) { console.error(`  skipped ${c.split('/').pop()}: ${e.message}`); }
+    }
+    return out;
+  }
+  return urls.map(naukriRow);
+}
 
-  if (flag('--list') || (children.length && children.length === urls.length)) {
-    console.log(`${children.length} child sitemap(s) — this is an index, not a job list:\n`);
-    children.slice(0, 60).forEach((u) => console.log('  ' + u));
-    if (!flag('--list')) console.log('\nPick one and run it directly.');
+(async () => {
+  if (flag('--list')) {
+    const kids = locs(await load(target)).filter((u) => /\.xml(\.gz)?(\?|$)/i.test(u));
+    console.log(`${kids.length} child sitemap(s):\n`);
+    kids.forEach((u) => console.log(`  ${JOB_SITEMAP.test(u) ? 'jobs ' : '     '} ${u}`));
     return;
   }
 
-  const all = (LIMIT ? urls.slice(0, LIMIT) : urls).map(naukriRow);
+  const byUrl = new Map();                          // the same posting is in a city file and in latest-jd
+  for (const t of targets) for (const r of await rowsFrom(t)) byUrl.set(r.url, r);
+  const urls = [...byUrl.keys()];
+  const all = (LIMIT ? [...byUrl.values()].slice(0, LIMIT) : [...byUrl.values()]);
   const ageOf = (j) => (j.posted ? Math.round((Date.now() - Date.parse(j.posted)) / 864e5) : null);
   const jobs = MAX_AGE ? all.filter((j) => { const a = ageOf(j); return a === null || a <= MAX_AGE; }) : all;
   fs.writeFileSync(OUT, jobs.map((j) => JSON.stringify(j)).join('\n') + '\n');

@@ -65,7 +65,7 @@ const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
    named --store and --suspect inline, so adding --asof silently turned its
    date into an input filename and the failure was `ENOENT: open '2026-09-24'`.
    Any new value-taking flag goes here and nowhere else. */
-const VALUED = new Set(['--store', '--suspect', '--asof']);
+const VALUED = new Set(['--store', '--suspect', '--asof', '--expired']);
 const files = process.argv.slice(2).filter((a, i, all) =>
   !a.startsWith('--') && !VALUED.has(all[i - 1]));
 if (!files.length) {
@@ -111,10 +111,40 @@ for (const [url, row] of seen) {
   } else {
     // Back after an absence. The gap is the interesting part: a role taken down
     // and re-advertised is either hard to fill or was never being filled.
-    if (j.closed_on) { j.reposts++; j.closed_on = null; reposted++; }
+    if (j.closed_on) { j.reposts++; j.closed_on = null; j.closed_src = null; reposted++; }
     j.last_seen = now; j.runs++;
     open++;
   }
+}
+
+/* ── declared closures ──
+   Some boards publish the dead list themselves. Naukri's
+   sitemap-expired-jd-pages.xml is 4,334 postings it says are over, and that is
+   a different KIND of fact from the one below. Absence from a snapshot is an
+   inference, and a noisy one: the 2026-09-26 run measured 20.8% of the index
+   disappearing in two days, with an age gradient saying part is real expiry
+   and part is the index rotating. A board saying "this is expired" has no such
+   floor under it.
+   So both are recorded and which one closed a row is kept, because a render
+   that says "gone from the board" should be able to tell knowing from
+   guessing. Declared wins: it can close a row this run still saw. */
+const declared = new Set();
+const expiredFile = arg('expired', '');
+if (expiredFile) {
+  for (const line of fs.readFileSync(expiredFile, 'utf8').split('\n')) {
+    const t = line.trim(); if (!t) continue;
+    try { const r = JSON.parse(t); if (r && r.url) declared.add(r.url); } catch { /* skip */ }
+  }
+  console.log(`  read ${declared.size} declared-expired url(s) from ${path.relative(ROOT, expiredFile)}`);
+}
+let expired = 0;
+for (const url of declared) {
+  const j = store.jobs[url];
+  if (!j) continue;                      // never indexed; nothing to close
+  if (j.closed_on && j.closed_src === 'declared') continue;
+  j.closed_on = now; j.closed_src = 'declared';
+  j.open_days = days(j.first_seen, now);
+  expired++;
 }
 
 /* Absent today, and today's run covered its source: that is a closure, not a
@@ -122,7 +152,7 @@ for (const [url, row] of seen) {
    left strictly alone. */
 for (const [url, j] of Object.entries(store.jobs)) {
   if (seen.has(url) || j.closed_on || !sources.has(j.source)) continue;
-  j.closed_on = now;
+  j.closed_on = now; j.closed_src = 'inferred';
   j.open_days = days(j.first_seen, now);
   closed++;
 }
@@ -148,7 +178,8 @@ const live = Object.values(store.jobs).filter((j) => !j.closed_on).length;
 console.log(`\nrun ${store.runs} · ${now}${arg('asof','') ? ' (--asof)' : ''} · sources: ${[...sources].join(', ')}`);
 console.log(`  new        ${fresh}`);
 console.log(`  still open ${open}`);
-console.log(`  closed     ${closed}`);
+console.log(`  closed     ${closed}${declared.size ? ' (inferred from absence)' : ''}`);
+if (declared.size) console.log(`  expired    ${expired} (declared by the board)`);
 console.log(`  reposted   ${reposted}`);
 console.log(`\nstore: ${total} job(s) known, ${live} currently listed`);
 console.log(`suspect: ${suspects.length} (open >= ${EVERGREEN_DAYS}d, or reposted >= ${REPOST_MIN}x) -> ${path.relative(ROOT, SUSPECT_OUT)}`);
@@ -184,7 +215,8 @@ async function push() {
   };
   const rows = Object.entries(store.jobs).map(([url, j]) => ({
     job_key: keyOf({ ...j, url }), source: j.source, first_seen: j.first_seen, last_seen: j.last_seen,
-    runs: j.runs, reposts: j.reposts, closed_on: j.closed_on, checked_at: new Date().toISOString(),
+    runs: j.runs, reposts: j.reposts, closed_on: j.closed_on, closed_src: j.closed_src ?? null,
+    checked_at: new Date().toISOString(),
   }));
   // PostgREST takes an array, but not 18,806 of them in one body.
   const CHUNK = 1000;
