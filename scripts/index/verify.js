@@ -65,7 +65,7 @@ const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
    named --store and --suspect inline, so adding --asof silently turned its
    date into an input filename and the failure was `ENOENT: open '2026-09-24'`.
    Any new value-taking flag goes here and nowhere else. */
-const VALUED = new Set(['--store', '--suspect', '--asof', '--expired']);
+const VALUED = new Set(['--store', '--suspect', '--asof', '--expired', '--prune']);
 const files = process.argv.slice(2).filter((a, i, all) =>
   !a.startsWith('--') && !VALUED.has(all[i - 1]));
 if (!files.length) {
@@ -234,6 +234,25 @@ async function push() {
     process.stdout.write(`\r  pushed ${sent}/${rows.length}`);
   }
   console.log(`\r  pushed ${sent} row(s) into public.job_checks     `);
+
+  /* Pruning belongs here because this file owns the closure lifecycle: it is
+     the thing that decided a posting was dead, so it is the thing that should
+     eventually forget it. A board's LIVE inventory does not grow -- Naukri
+     holds ~350k and takes in ~10,088 a day while a comparable number expire --
+     so deleting what has been dead a month keeps the corpus a constant size
+     rather than a monotonic one. Without this the measured intake fills a
+     500 MB tier in about two weeks and the cron has an expiry date.
+     The function refuses to touch a posting anyone is tracking. */
+  const days = Number(arg('prune', '')) || 0;
+  if (!days) return;
+  const pr = await fetch(`${url}/rest/v1/rpc/prune_index`, {
+    method: 'POST',
+    headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ p_days: days }),
+  }).catch(() => null);
+  if (!pr?.ok) { console.error(`  prune failed: ${pr ? pr.status : 'network'}`); return; }
+  const out = await pr.json().catch(() => null);
+  console.log(`  pruned ${out?.index_deleted ?? '?'} corpus row(s) and ${out?.checks_deleted ?? '?'} check(s) closed over ${out?.older_than_days ?? days}d ago`);
 }
 
 if (has('push')) push();

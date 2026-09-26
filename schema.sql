@@ -563,3 +563,45 @@ alter table public.job_index enable row level security;
 drop policy if exists "shared: select" on public.job_index;
 create policy "shared: select" on public.job_index
   for select to authenticated using (true);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- prune_index — keep the corpus steady-state instead of monotonic
+--
+-- A board's LIVE inventory does not grow. Naukri carries ~350k postings and
+-- takes in ~10,088 a day while a comparable number expire, so a corpus that
+-- deletes what is dead sits at a constant size forever. Only the graveyard
+-- grows, and the graveyard is what would have filled a 500 MB tier in about
+-- two weeks: measured 2026-09-27, a job costs ~607 bytes in job_index and
+-- ~443 in job_checks, so ten days of intake is ~128 MB against ~131 MB free.
+--
+-- What is NEVER pruned, and it is the only rule that matters here: a posting
+-- someone is tracking. public.jobs is a person's own list, and the day they
+-- open a row to find out what happened is exactly the day this would have
+-- deleted the answer. The closure history of a tracked job is the most
+-- valuable row in the table, not the most expendable.
+--
+-- Closed rows only. A posting with no closed_on has not been shown to be dead,
+-- and 'not checked' must never be read as 'gone' -- the same rule liveOf
+-- follows in the app, where null is never false.
+create or replace function public.prune_index(p_days integer default 30)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_index integer; v_checks integer;
+begin
+  with gone as (
+    select c.job_key
+      from public.job_checks c
+     where c.closed_on is not null
+       and c.closed_on < current_date - greatest(p_days, 7)
+       and not exists (select 1 from public.jobs j where j.job_key = c.job_key)
+  ),
+  di as (delete from public.job_index  i using gone g where i.job_key = g.job_key returning 1),
+  dc as (delete from public.job_checks c using gone g where c.job_key = g.job_key returning 1)
+  select (select count(*) from di), (select count(*) from dc) into v_index, v_checks;
+  return jsonb_build_object('index_deleted', v_index, 'checks_deleted', v_checks,
+                            'older_than_days', greatest(p_days, 7));
+end $$;
+
+-- Service role only: this deletes, and nothing reachable from the browser
+-- should be able to.
+revoke all on function public.prune_index(integer) from public, anon, authenticated;
+grant execute on function public.prune_index(integer) to service_role;

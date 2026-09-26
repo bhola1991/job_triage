@@ -59,8 +59,11 @@ node scripts/index/push-index.js \
 say "5/5  What is still real"
 # --expired marks declared closures; absence from today's snapshot marks
 # inferred ones. Both land in job_checks with closed_src saying which.
+# --prune 30 is what makes this safe to leave running. A posting dead for a
+# month has already given up its decay statistics, and anything a user tracks
+# is exempt. Without it the measured intake fills the tier in about two weeks.
 node --max-old-space-size=4096 scripts/index/verify.js \
   scripts/index/naukri.jsonl scripts/index/index.jsonl \
-  --expired scripts/index/expired.jsonl $PUSH
+  --expired scripts/index/expired.jsonl --prune 30 $PUSH
 
 say "done"
