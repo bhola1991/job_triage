@@ -77,7 +77,20 @@ export function buildJudge(posting: unknown, candidate: unknown) {
       cred:   noul("Is the role gated by a hard credential `candidate` is not shown to hold?"),
       shape:  noul("Is this one of the role shapes `candidate` was told to rule out?"),
       loc:    noul("Does the role's location make `candidate` ineligible (no remote allowance where it matters)?"),
-      thin:   noul("Is there too little data here to judge fit or reachability?"),
+      /* The abstention. Reworded 2026-09-26; three things were wrong with
+         "is there too little data here to judge fit or reachability?".
+         "Here" does not say which part of the state. "Too little data" invites
+         a reading about LENGTH, when the thing that matters is whether the
+         decisive facts are present — a two-line posting naming the stack and
+         the level is answerable, a thousand words of culture copy is not.
+         And it is framed as an absence, while this file's own rule is that Jev
+         reads scoping words and negations at face value, so a question should
+         assert what IS true of the posting.
+         Reachability is dropped from the wording on purpose: it composes from
+         comp, cred, sen_hi and open, which are their own questions and can each
+         be low-information independently. One question, one claim; the host
+         decides what a high probability suppresses. */
+      thin:   noul("Does `posting` leave the actual work and its requirements unstated, so that any judgement of fit would be a guess?"),
       comp:   noul("Is competition for this role unusually high?"),
       open:   noul("Is this role friendly to non-traditional candidates?"),
       rare:   noul("Does this role reward `candidate`'s rare combination of skills?"),
