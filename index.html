@@ -4046,7 +4046,14 @@ function jobCard(j,i){
     : details + btn('reopen','Reopen');
 
   const fact=(k,v,cls)=>`<div class="qfact"><div class="eyebrow">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
-  const fitReach = scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
+  /* Gone from the index it was found in -- public.job_checks saw it yesterday
+     and not today. Only ever false when something actually looked: liveOf
+     returns null for a posting nobody has checked, and null is not false.
+     A rank on a posting that no longer exists is not a low score, it is a
+     wrong one, so the number goes rather than shrinking. */
+  const gone = liveOf(j) === false;
+  const fitReach = gone ? fact('listing', 'gone from the board', 'quiet')
+                 : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
@@ -4060,10 +4067,10 @@ function jobCard(j,i){
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
   const rankCls = st!=='new' ? 'quiet' : '';
 
-  return `<div class="qitem ${acc} ${open?'open':''}" data-jobidx="${i}">
+  return `<div class="qitem ${acc} ${gone?'closed':''} ${open?'open':''}" data-jobidx="${i}">
     <div class="qrow">
       <i class="qbar"></i>
-      <span class="qrank ${rankCls}">${scored?Math.round(rankOf(j)):'—'}</span>
+      <span class="qrank ${rankCls}">${gone?'—':(scored?Math.round(rankOf(j)):'—')}</span>
       <div style="min-width:0"><div class="qt">${esc(j.title||'(untitled)')}</div><div class="qs">${sub}</div></div>
       <div class="qfacts">${facts}</div>
       <div class="qacts">${acts}</div>
