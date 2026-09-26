@@ -1585,7 +1585,12 @@ async function buyDialog(){
   try{
     const {packs,costs}=await hosted('packs',{});
     if(costs) d.querySelector('#packs').insertAdjacentHTML('beforebegin',
-      `<p class="hint" style="margin:0 0 12px">Job board search: ${costs.boardSearch} credits · AI scoring or a draft: ${costs.llm} credit · Finding HR contacts: ${costs.apifyQuery*3} credits</p>`);
+      /* Two prices for scoring because there are two models and they differ 4x.
+         A board search scores its own intake on the fast one; asking for a
+         re-score or a draft uses the thorough one, which costs us ~Rs 1.68 a
+         call against a credit worth Rs 0.80-0.99. The dialog says both rather
+         than averaging them into a number that is wrong for each. */
+      `<p class="hint" style="margin:0 0 12px">Job board search: ${costs.boardSearch} credits · Scoring a batch: ${costs.llmFlash??costs.llm} credit fast, ${costs.llmPro??costs.llm} thorough · A draft: ${costs.llmPro??costs.llm} credits · Finding HR contacts: ${costs.apifyQuery*3} credits</p>`);
     d.querySelector('#packs').innerHTML=Object.entries(packs).map(([id,p])=>
       `<button class="btn-go btn-sm" data-pack="${esc(id)}">${esc(p.label)} — ${p.credits} credits, ₹${(p.paise/100).toLocaleString('en-IN')}</button>`).join('')
       || 'No packs for sale yet.';

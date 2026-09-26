@@ -36,6 +36,27 @@ const PACKS: Record<string, { credits: number; paise: number; label: string }> =
 //                LinkedIn alone was ₹13.20, which is why it is a probe below.
 //   apifyQuery   per Google query, for everything else (HR lookup = 3)  ~₹0.30
 const COST = { llm: 1, boardSearch: 25, apifyQuery: 3 };
+/* One price for two models that differ 4x was the actual defect, not the price
+   being low. Measured over 38 calls on usage_events, 2026-09-22..26:
+
+     deepseek-v4-pro    median ₹1.368  mean ₹1.680  p90 ₹2.750
+     deepseek-flash     median ₹0.291  mean ₹0.425  p90 ₹1.038
+
+   A credit sells for ₹0.798 (Pro pack) to ₹0.99 (Starter). So flash at one
+   credit already carries ~47% margin and does not move. Pro at one credit sold
+   ₹1.68 of DeepSeek for ₹0.99, and goes to three: ₹2.39-2.97 against a mean of
+   ₹1.68, which is ~30-43% -- the same band boardSearch runs at. Not four: that
+   would be 90% margin on the median, and pro is the deliberate "score this
+   properly" path rather than the bulk one, which is flash.
+
+   COST.llm stays 1 and is now only the Jev actions. A judge_batch of fifty
+   costs ₹0.22 of TypeSafe, so one credit there is ~72% margin already.
+
+   Raising this was blocked on the meter, not on the decision: the live
+   spend_llm decremented the free pot by a hardcoded 1 and refund_free had no
+   amount at all, so any price above 1 would have undercharged free users and
+   under-refunded failures. Both were fixed in the database first. */
+const LLM_COST: Record<string, number> = { pro: 3, flash: 1 };
 /* What one contact lookup costs the user. Expressed as the Google path's own
    price -- three queries -- so that routing the question to Mantiks instead
    changes what WE pay and not what THEY pay. The app prints this same
@@ -540,7 +561,10 @@ async function spend(fn: string, args: Record<string, unknown>) {
 // Our upstream call failed, so it shouldn't cost them: put it back where it came from.
 async function refund(user: string, s: Spent, kind: "llm" | "search", n: number) {
   if (s.used === "unlimited") return;          // nothing was taken
-  if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind });
+  // p_n matters now that a call can cost more than one. free_llm counts
+  // credits so it gets p_n back; free_search counts searches, and refund_free
+  // returns exactly one of those however many credits the search cost.
+  if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind, p_n: n });
   else await admin.rpc("add_credits", { p_user: user, p_n: n });
 }
 async function ownRun(user: string, id: string) {
@@ -634,7 +658,7 @@ Deno.serve(async (req) => {
     const b = await req.json().catch(() => ({}));
     switch (b.action) {
       case "packs":
-        return json({ packs: PACKS, costs: COST });
+        return json({ packs: PACKS, costs: { ...COST, llmPro: LLM_COST.pro, llmFlash: LLM_COST.flash } });
 
       // One board search, charged once: the free job APIs and the site scrapers,
       // then a Google run over the track's specialist boards. If the APIs bring
@@ -745,7 +769,9 @@ Deno.serve(async (req) => {
       case "llm": {
         const prompt = String(b.prompt || "");
         if (!prompt || prompt.length > 200_000) throw new Http(400, "bad prompt");
-        const model = LLM_MODELS[String(b.tier || "pro")] || LLM_MODELS.pro;
+        const tier = LLM_MODELS[String(b.tier || "pro")] ? String(b.tier || "pro") : "pro";
+        const model = LLM_MODELS[tier];
+        const cost = LLM_COST[tier] ?? LLM_COST.pro;
         /* Reasoning on the pro tier only, and it has to be conditional rather
            than always-on. Reasoning tokens come out of the same max_tokens
            budget as the answer, so a flash batch of twelve jobs plus high
@@ -759,7 +785,7 @@ Deno.serve(async (req) => {
            the one job reasoning does not help with. pro answers the questions
            anybody reads, and keeps it. */
         const think = model === LLM_MODELS.pro;
-        const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
+        const s = await spend("spend_llm", { p_user: user, p_n: cost });
         try {
           const r = await fetch("https://api.deepseek.com/chat/completions", {
             method: "POST",
@@ -778,7 +804,7 @@ Deno.serve(async (req) => {
           const d = r && r.ok ? await r.json().catch(() => null) : null;
           const text = (d?.choices?.[0]?.message?.content || "").trim();
           if (!text) {                       // their call failed, so it shouldn't cost them
-            await refund(user, s, "llm", COST.llm);
+            await refund(user, s, "llm", cost);
             throw new Http(502, "The model didn't answer. No credit was used — try again.");
           }
           // Hit the ceiling: the reply is real but cut off mid-token, so its JSON
@@ -787,7 +813,7 @@ Deno.serve(async (req) => {
           // expensive one -- 200 OK, credit kept, nothing scored, and the only
           // trace a grabJSON throw in the browser. Refund it and say so.
           if (d?.choices?.[0]?.finish_reason === "length") {
-            await refund(user, s, "llm", COST.llm);
+            await refund(user, s, "llm", cost);
             throw new Http(502, `The model ran past its ${LLM_TOK_CAP}-token ceiling and the answer was cut off. No credit was used — try again, or score fewer jobs at once.`);
           }
           // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
@@ -813,7 +839,7 @@ Deno.serve(async (req) => {
           // refunds nothing, so an unexpected failure here used to be charged
           // for silently. The Http paths above refund themselves, so they are
           // deliberately left alone.
-          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          if (!(e instanceof Http)) await refund(user, s, "llm", cost);
           throw e;
         }
       }

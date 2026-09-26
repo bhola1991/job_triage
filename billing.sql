@@ -106,10 +106,21 @@ begin
   return null;
 end $$;
 
-create or replace function public.refund_free(p_user uuid, p_what text)
+-- The two pots are denominated differently, and that is not a wart -- it is
+-- what each one counts. free_llm counts CREDITS: spend_llm decrements it by
+-- p_n, so a refund returns p_n. free_search counts SEARCHES: spend_search
+-- decrements it by one however many credits the search cost, so a refund
+-- returns one and never p_n. Refunding p_n there would hand back 25 free
+-- searches every time a board search failed.
+-- p_n defaults to 1 so two-argument callers are unaffected; the old
+-- two-argument function must be dropped rather than left alongside, or the
+-- call becomes ambiguous instead of compatible.
+drop function if exists public.refund_free(uuid, text);
+
+create or replace function public.refund_free(p_user uuid, p_what text, p_n integer default 1)
 returns void language sql security definer set search_path = public as $$
   update public.credits
-     set free_llm    = free_llm    + (p_what = 'llm')::int,
+     set free_llm    = free_llm    + (case when p_what = 'llm' then p_n else 0 end),
          free_search = free_search + (p_what = 'search')::int,
          updated_at  = now()
    where user_id = p_user;
@@ -140,10 +151,10 @@ end $$;
 
 revoke all on function public.spend_llm(uuid, integer)      from public, anon, authenticated;
 revoke all on function public.spend_search(uuid, integer, boolean) from public, anon, authenticated;
-revoke all on function public.refund_free(uuid, text)       from public, anon, authenticated;
+revoke all on function public.refund_free(uuid, text, integer) from public, anon, authenticated;
 grant execute on function public.spend_llm(uuid, integer)   to service_role;
 grant execute on function public.spend_search(uuid, integer, boolean) to service_role;
-grant execute on function public.refund_free(uuid, text)    to service_role;
+grant execute on function public.refund_free(uuid, text, integer) to service_role;
 revoke all on function public.add_credits(uuid, integer)    from public, anon, authenticated;
 revoke all on function public.mark_order_paid(text, text)   from public, anon, authenticated;
 grant execute on function public.add_credits(uuid, integer)   to service_role;
