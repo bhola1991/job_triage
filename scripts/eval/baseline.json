@@ -1,12 +1,38 @@
 {
-  "_note": "Written by scripts/eval-matcher.js --write-baseline. A drop against these fails the check; raising them is the point of working on the matcher.",
-  "recorded": "2026-09-21",
-  "metrics": {
-    "precision": 1,
-    "recall": 1,
-    "calibration": 1,
-    "factRate": 1,
-    "spanRate": 0.867,
-    "cases": 10
+  "_note": "Written by scripts/eval-matcher.js --write-baseline [--set all|tune|holdout]. A drop against these fails the check; raising them is the point of working on the matcher. Sets are never compared against each other.",
+  "sets": {
+    "all": {
+      "metrics": {
+        "precision": 1,
+        "recall": 1,
+        "calibration": 1,
+        "factRate": 1,
+        "spanRate": 0.867,
+        "cases": 10
+      },
+      "recorded": "2026-09-21"
+    },
+    "tune": {
+      "metrics": {
+        "precision": 1,
+        "recall": 1,
+        "calibration": 1,
+        "factRate": 1,
+        "spanRate": 0.833,
+        "cases": 8
+      },
+      "recorded": "2026-09-26"
+    },
+    "holdout": {
+      "metrics": {
+        "precision": 1,
+        "recall": 1,
+        "calibration": 1,
+        "factRate": 1,
+        "spanRate": 1,
+        "cases": 2
+      },
+      "recorded": "2026-09-26"
+    }
   }
 }

@@ -55,7 +55,7 @@ const FEED = {
 };
 
 const get = async (url) => {
-  const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index (jobtriage.reachbhola.workers.dev)' },
+  const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index'   // no url: see sitemap-jobs.js — an edge that 403s any UA containing one },
                                signal: AbortSignal.timeout(30000) });
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();

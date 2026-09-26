@@ -30,13 +30,48 @@ const grab = re => { const m = h.match(re); if (!m) throw new Error('missing ' +
    not see each other's consts. */
 const T = new Function(
   grab(/const FLAG_CODES = \{[\s\S]*?\nfunction addSpans[\s\S]*?\n}\n/) +
+  /* The three actionability legs sit between isScored and rankOf, so the grab
+     below already carries them — but not what they call. keyOf, listOf,
+     dayDiff and the saneDate/ageOf pair all live outside that range, and
+     without them the legs define fine and throw the moment they are called,
+     which is the failure mode worth avoiding in a file whose whole job is
+     catching that. */
+  grab(/const today = [^\n]*\n/) +
+  grab(/function saneDate[\s\S]*?\nfunction ageOf[\s\S]*?\n}\n/) +
+  grab(/function keyOf[\s\S]*?\n}\n/) +
+  grab(/const dayDiff = [^\n]*\n/) +
+  grab(/const listOf = [^\n]*\n/) +
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
-  + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE};'
+  + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
+  + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
 
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'eval', 'cases.json'), 'utf8'));
 const BASELINE_PATH = path.join(__dirname, 'eval', 'baseline.json');
+
+/* Which slice of the labelled set to run. Two different questions, so two
+   different sets, and conflating them is how a gate stops meaning anything:
+
+     --set all       every case. The REGRESSION gate, and the default, because
+                     that is what this file has always been and quietly
+                     narrowing a release gate is worse than not splitting.
+     --set tune      the 8 cases work happens on.
+     --set holdout   the 2 that are never tuned on. The only honest input to
+                     "did this change actually help", as opposed to "did I fit
+                     the cases I was staring at".
+
+   A case with no `set` counts as tune, so an unlabelled case is never silently
+   promoted into the holdout. Baselines are stored per set and never compared
+   across sets — 8 cases and 10 cases do not produce comparable numbers. */
+const SET = (() => {
+  const i = process.argv.indexOf('--set');
+  const v = i > -1 ? process.argv[i + 1] : 'all';
+  if (!['all', 'tune', 'holdout'].includes(v)) { console.error(`unknown --set ${v} (all|tune|holdout)`); process.exit(1); }
+  return v;
+})();
+if (SET !== 'all') CASES.cases = CASES.cases.filter(c => (c.set || 'tune') === SET);
+if (!CASES.cases.length) { console.error(`no cases in --set ${SET}`); process.exit(1); }
 
 let failed = 0;
 const fail = m => { console.error('  FAIL  ' + m); failed++; };
@@ -218,10 +253,44 @@ const spanRate = r3(withSpan / flagsTotal);
   if (!bad) ok('composition holds: the distribution decides (not the float), capability outweighs targeting, the four reach signs point the right way, and an unjudged row ranks exactly as it did');
 }
 
+// ── actionability: three legs, and unknown is never dead ─────────────────
+{
+  const { actionableOf, liveOf, reachableOf, CHECKS, ageOf } = T;
+  let bad = 0;
+  const no = (c, m) => { if (!c) { fail(m); bad++; } };
+  const row = (extra) => Object.assign({ url: 'https://x/1', title: 't', company: 'c', location: 'l', contacts: '[]' }, extra);
+
+  CHECKS.clear();
+  /* The invariant this whole axis exists for. We have checked almost nothing,
+     and an unchecked posting is not a dead one -- if null ever collapses to
+     false, every row we never looked at renders as closed. */
+  no(liveOf(row()) === null, 'an unchecked posting is unknown, not dead');
+  no(reachableOf(row()) === null, 'a posting with no contacts found yet is unknown, not unreachable');
+
+  CHECKS.set('u:https://x/1', { closed_on: null });
+  no(liveOf(row()) === true, 'a posting still in the index is live');
+  CHECKS.set('u:https://x/1', { closed_on: '2026-09-26' });
+  no(liveOf(row()) === false, 'a posting gone from the index is not live');
+  CHECKS.clear();
+
+  no(reachableOf(row({ contacts: '[{"name":"A"}]' })) === true, 'a posting with a contact is reachable');
+  no(reachableOf(row({ contacts: 'not json' })) === null, 'unparseable contacts are unknown, not reachable');
+
+  const a = actionableOf(row({ posted: '' }));
+  no(a && 'live' in a && 'fresh' in a && 'reach' in a, 'actionableOf returns all three legs');
+  no(a.fresh === null, 'a posting with no date has unknown age');
+  /* Kept apart on purpose: the legs must never be multiplied into one number,
+     which is what confWeight does to confidence and why an unknown row sinks
+     among bad ones instead of standing apart. */
+  no(typeof a !== 'number', 'actionability is three legs, never a single score');
+
+  if (!bad) ok('actionability: three legs, each null when unknown, and unknown never reads as dead or unreachable');
+}
+
 // ── report ───────────────────────────────────────────────────────────────
 const measured = { precision, recall, calibration, factRate, spanRate, cases: CASES.cases.length };
 
-console.log('\nmatcher, against ' + CASES.cases.length + ' labelled postings:');
+console.log('\nmatcher, against ' + CASES.cases.length + ` labelled postings (--set ${SET}):`);
 console.log(`  flag precision   ${precision}   (${tp} right, ${fp} raised that should not have been)`);
 console.log(`  flag recall      ${recall}   (${fn} missed)`);
 console.log(`  score bands      ${calibration}   (${inBand}/${CASES.cases.length} with both scores in range)`);
@@ -231,16 +300,29 @@ perCase.filter(c => c.missed.length || c.extra.length).forEach(c =>
   console.log(`    ${c.id}: missed [${c.missed.join(' ')}] extra [${c.extra.join(' ')}]`));
 outOfBand.forEach(s => console.log(`    ${s}`));
 
+/* A baseline written before the split is a flat `metrics` measured over every
+   case, so it is read as the `all` baseline and nothing else. It is not
+   silently reused for tune or holdout: those have fewer cases and would
+   compare as a phantom improvement. */
+const readBase = () => {
+  const b = fs.existsSync(BASELINE_PATH) ? JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')) : null;
+  if (!b) return null;
+  if (b.sets) return b;
+  return { ...b, sets: b.metrics ? { all: { metrics: b.metrics, recorded: b.recorded } } : {} };
+};
+
 if (process.argv.indexOf('--write-baseline') > -1) {
+  const b = readBase() || { sets: {} };
+  b.sets[SET] = { metrics: measured, recorded: new Date().toISOString().slice(0, 10) };
   fs.writeFileSync(BASELINE_PATH, JSON.stringify({
-    _note: 'Written by scripts/eval-matcher.js --write-baseline. A drop against these fails the check; raising them is the point of working on the matcher.',
-    recorded: new Date().toISOString().slice(0, 10),
-    metrics: measured,
+    _note: 'Written by scripts/eval-matcher.js --write-baseline [--set all|tune|holdout]. A drop against these fails the check; raising them is the point of working on the matcher. Sets are never compared against each other.',
+    sets: b.sets,
   }, null, 2) + '\n');
-  console.log('\nbaseline written to scripts/eval/baseline.json');
-} else if (fs.existsSync(BASELINE_PATH)) {
-  const base = JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')).metrics;
-  console.log(`\nagainst the baseline of ${JSON.parse(fs.readFileSync(BASELINE_PATH, 'utf8')).recorded}:`);
+  console.log(`\nbaseline for --set ${SET} written to scripts/eval/baseline.json`);
+} else if (readBase() && readBase().sets[SET]) {
+  const entry = readBase().sets[SET];
+  const base = entry.metrics;
+  console.log(`\nagainst the ${SET} baseline of ${entry.recorded}:`);
   let moved = 0;
   ['precision', 'recall', 'calibration', 'factRate', 'spanRate'].forEach(k => {
     const d = r3(measured[k] - base[k]);
@@ -250,7 +332,8 @@ if (process.argv.indexOf('--write-baseline') > -1) {
   if (base.cases !== measured.cases) console.log(`  note  the set changed size: ${base.cases} → ${measured.cases}`);
   if (!moved) ok('every metric holds its baseline');
 } else {
-  console.log('\nno baseline yet — run with --write-baseline to record one');
+  console.log(`\nno baseline for --set ${SET} yet — run with --write-baseline --set ${SET} to record one.`);
+  if (SET === 'holdout') console.log('  (n=2 quantises every metric to halves: a smoke test against overfitting, not a measurement)');
 }
 
 console.log('\n' + (failed ? failed + ' FAILED' : 'ALL PASS'));

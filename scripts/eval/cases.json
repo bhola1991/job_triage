@@ -1,6 +1,5 @@
 {
-  "_note": "Labelled set for scripts/eval-matcher.js. One profile, ten postings, each with the flags a correct matcher should raise and the band its two scores should land in. `recorded` is a model answer captured once and committed, so the offline run is deterministic and measures THIS repository's flag handling, span finding and ranking rather than today's weather at DeepSeek. Re-record with --live when the prompt changes.",
-
+  "_note": "Labelled set for scripts/eval-matcher.js. One profile, ten postings, each with the flags a correct matcher should raise and the band its two scores should land in. `recorded` is a model answer captured once and committed, so the offline run is deterministic and measures THIS repository's flag handling, span finding and ranking rather than today's weather at DeepSeek. Re-record with --live when the prompt changes.\n\nEvery case carries `set`. The holdout is never tuned on and is the only honest input to a final comparison; the tune set is where work happens. The two holdout cases were chosen mechanically, not by taste: they are the only pair that can be removed while leaving all ten flag codes still represented in tune (shape survives in shape-frontend, sen_hi and cred in sen-hi-principal). With n=10 a holdout of 2 quantises every metric to halves, so treat it as a smoke test that the tune set has not been overfitted -- not as a measurement. It becomes one when the set grows.",
   "profile": {
     "name": "Alex Rao",
     "location": "Bengaluru, India",
@@ -9,13 +8,23 @@
     "headline": "backend engineer, payments and platform",
     "years_experience": 9,
     "seniority": "senior",
-    "domains": ["fintech", "developer platforms"],
+    "domains": [
+      "fintech",
+      "developer platforms"
+    ],
     "strengths": [
       "designing and running Go services on Postgres",
       "payment rails and reconciliation systems",
       "taking a service from prototype to production ownership"
     ],
-    "hard_skills": ["go", "postgres", "kafka", "terraform", "aws", "grpc"],
+    "hard_skills": [
+      "go",
+      "postgres",
+      "kafka",
+      "terraform",
+      "aws",
+      "grpc"
+    ],
     "unusual_combination": "deep payments domain knowledge alongside hands-on platform engineering",
     "gaps": [
       "no Kubernetes operations experience",
@@ -28,12 +37,24 @@
       "data science and ML research"
     ],
     "tracks": [
-      { "id": "be", "label": "Backend engineering", "difficulty": "easy", "why": "direct match",
-        "mode": "permanent", "titles": ["Backend Engineer", "Senior Backend Engineer", "Platform Engineer"],
-        "boards": ["greenhouse.io", "lever.co"] }
+      {
+        "id": "be",
+        "label": "Backend engineering",
+        "difficulty": "easy",
+        "why": "direct match",
+        "mode": "permanent",
+        "titles": [
+          "Backend Engineer",
+          "Senior Backend Engineer",
+          "Platform Engineer"
+        ],
+        "boards": [
+          "greenhouse.io",
+          "lever.co"
+        ]
+      }
     ]
   },
-
   "cases": [
     {
       "id": "loc-onsite-berlin",
@@ -43,10 +64,31 @@
         "location": "Berlin, Germany",
         "description": "We build settlement infrastructure for European banks in Go and Postgres. You will own services end to end, from design through to production. This is a Berlin office role and we do not offer remote or relocation support. Five or more years of backend experience required."
       },
-      "expect": { "flags": ["loc"], "fit": [0, 35], "reach": [0, 45] },
-      "recorded": { "s": 18, "re": 25, "c": "h", "f": [
-        { "code": "loc", "fact": "Berlin office role, no remote or relocation" }
-      ] }
+      "expect": {
+        "flags": [
+          "loc"
+        ],
+        "fit": [
+          0,
+          35
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "recorded": {
+        "s": 18,
+        "re": 25,
+        "c": "h",
+        "f": [
+          {
+            "code": "loc",
+            "fact": "Berlin office role, no remote or relocation"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "shape-frontend",
@@ -56,10 +98,31 @@
         "location": "Remote (India)",
         "description": "Own our design system and component library. You will work in React and TypeScript every day, partnering with designers to ship polished interfaces. No backend work is involved in this role."
       },
-      "expect": { "flags": ["shape"], "fit": [0, 25], "reach": [0, 60] },
-      "recorded": { "s": 8, "re": 40, "c": "h", "f": [
-        { "code": "shape", "fact": "React and TypeScript, no backend work involved" }
-      ] }
+      "expect": {
+        "flags": [
+          "shape"
+        ],
+        "fit": [
+          0,
+          25
+        ],
+        "reach": [
+          0,
+          60
+        ]
+      },
+      "recorded": {
+        "s": 8,
+        "re": 40,
+        "c": "h",
+        "f": [
+          {
+            "code": "shape",
+            "fact": "React and TypeScript, no backend work involved"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "shape-management",
@@ -69,11 +132,36 @@
         "location": "Bengaluru, India",
         "description": "Lead a team of eight engineers building payment rails. You will be responsible for hiring, performance reviews and career growth across the group. Prior people management experience is essential."
       },
-      "expect": { "flags": ["shape", "sen_hi"], "fit": [0, 30], "reach": [0, 40] },
-      "recorded": { "s": 15, "re": 22, "c": "h", "f": [
-        { "code": "shape", "fact": "hiring, performance reviews and career growth" },
-        { "code": "sen_hi", "fact": "prior people management experience is essential" }
-      ] }
+      "expect": {
+        "flags": [
+          "shape",
+          "sen_hi"
+        ],
+        "fit": [
+          0,
+          30
+        ],
+        "reach": [
+          0,
+          40
+        ]
+      },
+      "recorded": {
+        "s": 15,
+        "re": 22,
+        "c": "h",
+        "f": [
+          {
+            "code": "shape",
+            "fact": "hiring, performance reviews and career growth"
+          },
+          {
+            "code": "sen_hi",
+            "fact": "prior people management experience is essential"
+          }
+        ]
+      },
+      "set": "holdout"
     },
     {
       "id": "cred-degree",
@@ -83,10 +171,31 @@
         "location": "Remote (India)",
         "description": "Go and Postgres services handling ledger balances at scale. A bachelor's degree in computer science is a firm requirement for this position and cannot be waived. Seven years of experience preferred."
       },
-      "expect": { "flags": ["cred"], "fit": [55, 95], "reach": [0, 45] },
-      "recorded": { "s": 82, "re": 25, "c": "h", "f": [
-        { "code": "cred", "fact": "bachelor's degree in computer science is a firm requirement" }
-      ] }
+      "expect": {
+        "flags": [
+          "cred"
+        ],
+        "fit": [
+          55,
+          95
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "recorded": {
+        "s": 82,
+        "re": 25,
+        "c": "h",
+        "f": [
+          {
+            "code": "cred",
+            "fact": "bachelor's degree in computer science is a firm requirement"
+          }
+        ]
+      },
+      "set": "holdout"
     },
     {
       "id": "sen-lo-junior",
@@ -96,10 +205,31 @@
         "location": "Remote (India)",
         "description": "A graduate role for someone in their first or second year of work. You will write Go services with close mentorship from the platform team. No prior professional experience is required."
       },
-      "expect": { "flags": ["sen_lo"], "fit": [20, 65], "reach": [40, 100] },
-      "recorded": { "s": 40, "re": 70, "c": "h", "f": [
-        { "code": "sen_lo", "fact": "graduate role, first or second year of work" }
-      ] }
+      "expect": {
+        "flags": [
+          "sen_lo"
+        ],
+        "fit": [
+          20,
+          65
+        ],
+        "reach": [
+          40,
+          100
+        ]
+      },
+      "recorded": {
+        "s": 40,
+        "re": 70,
+        "c": "h",
+        "f": [
+          {
+            "code": "sen_lo",
+            "fact": "graduate role, first or second year of work"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "thin-title-only",
@@ -109,10 +239,31 @@
         "location": "",
         "description": ""
       },
-      "expect": { "flags": ["thin"], "fit": [0, 70], "reach": [0, 70] },
-      "recorded": { "s": 45, "re": 45, "c": "l", "f": [
-        { "code": "thin", "fact": "title and company only, nothing else given" }
-      ] }
+      "expect": {
+        "flags": [
+          "thin"
+        ],
+        "fit": [
+          0,
+          70
+        ],
+        "reach": [
+          0,
+          70
+        ]
+      },
+      "recorded": {
+        "s": 45,
+        "re": 45,
+        "c": "l",
+        "f": [
+          {
+            "code": "thin",
+            "fact": "title and company only, nothing else given"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "comp-famous",
@@ -122,11 +273,36 @@
         "location": "Remote (India)",
         "description": "Build and operate the services that move money for millions of businesses. We work in Go and Ruby on a large Postgres estate. We receive many thousands of applications for each opening on this team."
       },
-      "expect": { "flags": ["fit", "comp"], "fit": [70, 100], "reach": [0, 45] },
-      "recorded": { "s": 90, "re": 28, "c": "h", "f": [
-        { "code": "fit", "fact": "Go services moving money on a Postgres estate" },
-        { "code": "comp", "fact": "many thousands of applications for each opening" }
-      ] }
+      "expect": {
+        "flags": [
+          "fit",
+          "comp"
+        ],
+        "fit": [
+          70,
+          100
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "recorded": {
+        "s": 90,
+        "re": 28,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Go services moving money on a Postgres estate"
+          },
+          {
+            "code": "comp",
+            "fact": "many thousands of applications for each opening"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "open-nontraditional",
@@ -136,11 +312,36 @@
         "location": "Remote (India)",
         "description": "We care what you have built, not where you studied. We have no degree requirement and we interview on real work rather than puzzles. The stack is Go, Postgres and Terraform on AWS."
       },
-      "expect": { "flags": ["fit", "open"], "fit": [70, 100], "reach": [55, 100] },
-      "recorded": { "s": 88, "re": 72, "c": "h", "f": [
-        { "code": "fit", "fact": "Go, Postgres and Terraform on AWS" },
-        { "code": "open", "fact": "no degree requirement, interview on real work" }
-      ] }
+      "expect": {
+        "flags": [
+          "fit",
+          "open"
+        ],
+        "fit": [
+          70,
+          100
+        ],
+        "reach": [
+          55,
+          100
+        ]
+      },
+      "recorded": {
+        "s": 88,
+        "re": 72,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Go, Postgres and Terraform on AWS"
+          },
+          {
+            "code": "open",
+            "fact": "no degree requirement, interview on real work"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "rare-combination",
@@ -150,11 +351,36 @@
         "location": "Bengaluru, India",
         "description": "This role sits between payments domain expertise and platform engineering. You will own the reconciliation system end to end and the infrastructure it runs on. We have struggled to find people who genuinely have both."
       },
-      "expect": { "flags": ["fit", "rare"], "fit": [75, 100], "reach": [45, 100] },
-      "recorded": { "s": 93, "re": 62, "c": "h", "f": [
-        { "code": "fit", "fact": "own the reconciliation system end to end" },
-        { "code": "rare", "fact": "payments domain expertise and platform engineering" }
-      ] }
+      "expect": {
+        "flags": [
+          "fit",
+          "rare"
+        ],
+        "fit": [
+          75,
+          100
+        ],
+        "reach": [
+          45,
+          100
+        ]
+      },
+      "recorded": {
+        "s": 93,
+        "re": 62,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "own the reconciliation system end to end"
+          },
+          {
+            "code": "rare",
+            "fact": "payments domain expertise and platform engineering"
+          }
+        ]
+      },
+      "set": "tune"
     },
     {
       "id": "sen-hi-principal",
@@ -165,11 +391,36 @@
         "description": "You will set technical direction across four teams and be accountable for the multi-year infrastructure roadmap. We expect at least fifteen years of experience and a track record operating Kubernetes at very large scale.",
         "_why": "Two flags, and the fact for sen_hi is deliberately phrased so no single sentence carries half its words. The span should come back empty rather than pointing at the wrong line."
       },
-      "expect": { "flags": ["sen_hi", "cred"], "fit": [30, 80], "reach": [0, 35] },
-      "recorded": { "s": 55, "re": 18, "c": "h", "f": [
-        { "code": "sen_hi", "fact": "at least fifteen years of experience expected" },
-        { "code": "cred", "fact": "candidate has never worked at this altitude before" }
-      ] }
+      "expect": {
+        "flags": [
+          "sen_hi",
+          "cred"
+        ],
+        "fit": [
+          30,
+          80
+        ],
+        "reach": [
+          0,
+          35
+        ]
+      },
+      "recorded": {
+        "s": 55,
+        "re": 18,
+        "c": "h",
+        "f": [
+          {
+            "code": "sen_hi",
+            "fact": "at least fifteen years of experience expected"
+          },
+          {
+            "code": "cred",
+            "fact": "candidate has never worked at this altitude before"
+          }
+        ]
+      },
+      "set": "tune"
     }
   ]
 }

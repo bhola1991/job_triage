@@ -1163,6 +1163,29 @@ async function saveRows(){
   LAST_SAVED = cur.sigs;
 }
 
+/* One read of the shared liveness table for the keys this account actually
+   holds. Deliberately best-effort and never fatal: an account's jobs load with
+   or without it, and a failure leaves every leg unknown, which is exactly what
+   unknown is for. Batched because `in(...)` is a url and urls have limits. */
+async function fillChecks(keys){
+  /* Everything is inside the try, including the clear. The first version put
+     CHECKS.clear() above it and that was a real bug, not a style point: the
+     map is declared 1,400 lines further down, so any context holding this
+     function without it -- selfcheck-sync slices exactly this range -- threw a
+     ReferenceError before reaching the guard, and took the whole of loadRows
+     with it. A best-effort read has to be best-effort on its first line. */
+  try{
+    CHECKS.clear();
+    const uniq = [...new Set((keys||[]).filter(Boolean))];
+    if(!uniq.length || typeof SB === 'undefined' || !SB) return;
+    for(let i=0; i<uniq.length; i+=200){
+      const r = await SB.from('job_checks').select('job_key,closed_on,last_seen').in('job_key', uniq.slice(i,i+200));
+      if(r.error) return;
+      (r.data||[]).forEach(c => CHECKS.set(c.job_key, c));
+    }
+  }catch(e){ /* unknown is a valid answer; never block a load on it */ }
+}
+
 async function loadRows(){
   const [pr, jr] = await Promise.all([
     withTimeout(SB.from('profiles').select('*').eq('user_id',USER.id).eq('deleted',false),
@@ -1172,6 +1195,7 @@ async function loadRows(){
   ]);
   if(pr.error) throw pr.error;
   if(jr.error) throw jr.error;
+  await fillChecks((jr.data||[]).map(r => r.job_key));
   const profiles = {}, byId = {};
   PROFILE_IDS = {};
   (pr.data||[]).forEach(row => {
@@ -2598,6 +2622,38 @@ function addJobs(list){
   return n;
 }
 const isScored = j => String(j.ai_score||'').trim()!=='';
+
+/* Can you act on this row? Three legs, kept apart on purpose.
+
+   A score says how good a job is. None of these do: they say whether the row
+   is worth showing a verdict about at all. Collapsing them into one number is
+   the mistake -- "we cannot see this posting" would become "this job is
+   slightly worse", which is what confWeight's 0.78 already does to low
+   confidence and why an unknown row currently sinks in among genuinely bad
+   ones instead of standing apart.
+
+   Each leg returns null for UNKNOWN, and null is never false. We have not
+   checked most postings; that is not evidence they are dead. The render shows
+   unknown as grey -- `--closed`, which the colour law already defines as "the
+   absence of an instruction" -- and never as a low number. */
+const CHECKS = new Map();        // job_key -> row from public.job_checks
+
+/* Liveness is a fact about the posting, so public.job_checks is shared and not
+   per-user: checked once, read by everyone. Filled on load, best effort. */
+function liveOf(j){
+  const c = CHECKS.get(keyOf(j));
+  return c ? !c.closed_on : null;
+}
+/* Reachability is "is there a person to write to", which today we only know
+   once contacts have been found. Absence means not-yet-looked, not nobody --
+   hence null. The free Mantiks per-company pre-check is what will turn most of
+   these from null into a real answer without spending a credit. */
+function reachableOf(j){
+  return listOf(j,'contacts').length ? true : null;
+}
+function actionableOf(j){
+  return { live: liveOf(j), fresh: ageOf(j), reach: reachableOf(j) };
+}
 const fitOf   = j => { const v=parseFloat(j.ai_score); return isNaN(v)?0:Math.max(0,Math.min(100,v)); };
 const reachOf = j => { const v=parseFloat(j.ai_reachability); return isNaN(v)?45:Math.max(0,Math.min(100,v)); };
 /* The raw judgement as stored on the row, or null. Every number derived from a
@@ -3990,7 +4046,14 @@ function jobCard(j,i){
     : details + btn('reopen','Reopen');
 
   const fact=(k,v,cls)=>`<div class="qfact"><div class="eyebrow">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
-  const fitReach = scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
+  /* Gone from the index it was found in -- public.job_checks saw it yesterday
+     and not today. Only ever false when something actually looked: liveOf
+     returns null for a posting nobody has checked, and null is not false.
+     A rank on a posting that no longer exists is not a low score, it is a
+     wrong one, so the number goes rather than shrinking. */
+  const gone = liveOf(j) === false;
+  const fitReach = gone ? fact('listing', 'gone from the board', 'quiet')
+                 : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
@@ -4004,10 +4067,10 @@ function jobCard(j,i){
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
   const rankCls = st!=='new' ? 'quiet' : '';
 
-  return `<div class="qitem ${acc} ${open?'open':''}" data-jobidx="${i}">
+  return `<div class="qitem ${acc} ${gone?'closed':''} ${open?'open':''}" data-jobidx="${i}">
     <div class="qrow">
       <i class="qbar"></i>
-      <span class="qrank ${rankCls}">${scored?Math.round(rankOf(j)):'—'}</span>
+      <span class="qrank ${rankCls}">${gone?'—':(scored?Math.round(rankOf(j)):'—')}</span>
       <div style="min-width:0"><div class="qt">${esc(j.title||'(untitled)')}</div><div class="qs">${sub}</div></div>
       <div class="qfacts">${facts}</div>
       <div class="qacts">${acts}</div>

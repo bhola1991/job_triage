@@ -429,3 +429,120 @@ cross join lateral jsonb_array_elements(
        else '[]'::jsonb end
 ) as fl(el)
 group by 1;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- job_checks — is this posting still real?
+--
+-- The one table here that is NOT per-user, and that is the point. Whether a
+-- posting is still listed is a fact about the posting, not about anyone's copy
+-- of it: `jobs` is unique on (profile_id, job_key), so the same role held by
+-- ten people would otherwise be checked ten times to learn one thing. Checked
+-- once, read by everyone — the same argument scripts/index/README.md makes for
+-- acquiring a row once and serving it to everyone.
+--
+-- Liveness is a set difference, never a fetch. Every job url sampled on
+-- 2026-09-25 returned 403 to a datacentre IP, and naukri.com/robots.txt names
+-- claudebot, gptbot and perplexitybot and disallows them the whole site. But
+-- the boards publish their complete current index daily to be crawled, so
+-- membership answers the question: present today and absent tomorrow is a
+-- closure, with a date. scripts/index/verify.js computes exactly these columns.
+--
+-- One row per posting, carrying the derived facts rather than one row per
+-- observation. A full event log is 18,806 rows a day for one city; these
+-- counters are what the render and the suspect rules actually read, and a
+-- job_check_events table can be added the day something needs the history.
+create table if not exists public.job_checks (
+  -- keyOf() in index.html, same identity scheme as public.jobs.job_key.
+  job_key    text        primary key,
+  -- Which index this was last seen in, so a run that covered only Pune can
+  -- never be read as closing Mumbai. verify.js enforces the same rule.
+  source     text        not null,
+  first_seen date        not null,
+  last_seen  date        not null,
+  runs       integer     not null default 1 check (runs >= 0),
+  -- Taken down and listed again. A role advertised four times is either hard
+  -- to fill or was never being filled; either way it is not what it appears.
+  reposts    integer     not null default 0 check (reposts >= 0),
+  -- Null means still listed. Set on the first run that covered its source and
+  -- did not find it.
+  closed_on  date,
+  checked_at timestamptz not null default now()
+);
+
+create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
+create index if not exists job_checks_open        on public.job_checks (closed_on) where closed_on is null;
+
+-- Readable by every signed-in user, writable by nobody through the API.
+-- There is no user_id to scope by and nothing personal in the table: a job_key
+-- is a url or a title/company/location triple. The writer is verify.js through
+-- the service role, which bypasses RLS -- so select is the only policy, and its
+-- absence for the other verbs is the deny.
+alter table public.job_checks enable row level security;
+
+drop policy if exists "shared: select" on public.job_checks;
+create policy "shared: select" on public.job_checks
+  for select to authenticated using (true);
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- job_index — the shared corpus
+--
+-- Shared, like job_checks and for the same reason: acquiring a posting costs
+-- ~16x what deciding about it costs (scripts/index/README.md), so the row you
+-- buy once and serve to everyone is the only one that scales. public.jobs stays
+-- per-user and is what someone has CHOSEN to track; this is everything known.
+--
+-- Two tiers, and the distinction is load-bearing rather than cosmetic:
+--   full  an ATS board, RSS or JSON feed. Carries a real description, so it can
+--         be judged and scored.
+--   thin  a board sitemap. Title, company, city, experience and a date, and NO
+--         description -- a Naukri job page is a client-rendered shell. A thin
+--         row is a candidate for a shortlist, never an answer, and nothing
+--         should ask Jev to judge fit from one.
+--
+-- description is capped at 4,000 characters, which is the cap scrapedJob() and
+-- the JSearch mapper already apply. Uncapped, the measured median is 7,319 and
+-- the max 36,121; 4,840 crawled jobs are 37 MB on disk, so a six-figure corpus
+-- would not fit the database it lives in. The index is a filter, not a document
+-- store: whatever needs the full text can fetch it for the few rows that reach
+-- a person.
+create table if not exists public.job_index (
+  -- keyOf() in index.html, the same identity public.jobs and public.job_checks
+  -- use, so all three join without a translation layer.
+  job_key       text        primary key,
+  source        text        not null,
+  url           text        not null,
+  title         text        not null,
+  company       text,
+  location      text,
+  posted        date,
+  description   text,
+  tier          text        not null default 'thin' check (tier in ('full', 'thin')),
+  -- Naukri slugs carry a range; most sources carry neither.
+  exp_min       integer,
+  exp_max       integer,
+  -- The site the posting is on, which is not the source that delivered it:
+  -- the Google run can hand us a LinkedIn posting.
+  publisher     text,
+  first_indexed date        not null default current_date,
+  updated_at    timestamptz not null default now(),
+  -- The same role is posted to five boards under five urls, so job_key cannot
+  -- group them. Generated rather than written: a dedup key computed by each
+  -- caller is a dedup key that disagrees with itself. Title and company only --
+  -- adding location would split Bengaluru from Bangalore and undo the grouping.
+  dedup_key     text generated always as (
+    lower(regexp_replace(coalesce(title, '') || '|' || coalesce(company, ''), '[^a-zA-Z0-9|]', '', 'g'))
+  ) stored
+);
+
+create index if not exists job_index_dedup   on public.job_index (dedup_key);
+create index if not exists job_index_source  on public.job_index (source, posted desc nulls last);
+create index if not exists job_index_posted  on public.job_index (posted desc nulls last) where tier = 'full';
+
+-- Shared and non-personal, so the same policy shape as job_checks: readable by
+-- any signed-in user, written only by the service role, and the absence of the
+-- other three policies is the deny.
+alter table public.job_index enable row level security;
+
+drop policy if exists "shared: select" on public.job_index;
+create policy "shared: select" on public.job_index
+  for select to authenticated using (true);

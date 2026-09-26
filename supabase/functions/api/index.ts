@@ -312,10 +312,22 @@ const SCRAPE_MAX_USD = 0.15;
 type Mode = "permanent" | "freelance" | "gig";
 type Tier = "core" | "probe" | "off";
 type Ctx = { titles: string[]; skills: string[]; city: string; cc: string; since: number; mode: string };
+const TIER_ROWS: Record<Tier, number> = { core: SCRAPE_ROWS, probe: PROBE_ROWS, off: 0 };
+/* A track whose mode is missing or unrecognised used to run EVERY scraper at
+   full rows, which quietly made the `modes` table below advisory. Measured
+   2026-09-24: a real profile carries four tracks and not one of them has a
+   `mode` -- the field postdates them -- so LinkedIn billed 30 rows and ₹13.20
+   on a search where it had just been demoted to a probe. The demotion was real
+   code that no real data reached.
+   The fallback now takes the BEST tier that scraper gets in any mode. Nothing
+   goes dark that was not already off everywhere, so the blind-spot rule the
+   comment above defends still holds -- but a demotion binds even when the mode
+   is unknown, which is the only reason to write one down. */
 const rowsFor = (modes: Partial<Record<Mode, Tier>> | undefined, mode: string) => {
-  const t = modes?.[mode as Mode];
-  if (!modes || !(mode in (modes as object))) return SCRAPE_ROWS;   // unknown mode: behave as before
-  return t === "core" ? SCRAPE_ROWS : t === "probe" ? PROBE_ROWS : 0;
+  if (!modes) return SCRAPE_ROWS;                       // no table at all: as before
+  const t = modes[mode as Mode];
+  if (t) return TIER_ROWS[t];
+  return Object.values(modes).reduce((n, tier) => Math.max(n, TIER_ROWS[tier as Tier] ?? 0), 0);
 };
 const orTerms = (xs: string[]) => xs.length > 1 ? `(${xs.map((x) => `"${x}"`).join(" OR ")})` : xs[0] ? `"${xs[0]}"` : "";
 // Round `since` up to the nearest value a site accepts.
