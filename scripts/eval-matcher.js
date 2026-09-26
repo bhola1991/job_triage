@@ -30,9 +30,21 @@ const grab = re => { const m = h.match(re); if (!m) throw new Error('missing ' +
    not see each other's consts. */
 const T = new Function(
   grab(/const FLAG_CODES = \{[\s\S]*?\nfunction addSpans[\s\S]*?\n}\n/) +
+  /* The three actionability legs sit between isScored and rankOf, so the grab
+     below already carries them — but not what they call. keyOf, listOf,
+     dayDiff and the saneDate/ageOf pair all live outside that range, and
+     without them the legs define fine and throw the moment they are called,
+     which is the failure mode worth avoiding in a file whose whole job is
+     catching that. */
+  grab(/const today = [^\n]*\n/) +
+  grab(/function saneDate[\s\S]*?\nfunction ageOf[\s\S]*?\n}\n/) +
+  grab(/function keyOf[\s\S]*?\n}\n/) +
+  grab(/const dayDiff = [^\n]*\n/) +
+  grab(/const listOf = [^\n]*\n/) +
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
-  + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE};'
+  + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
+  + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
 
 const CASES = JSON.parse(fs.readFileSync(path.join(__dirname, 'eval', 'cases.json'), 'utf8'));
@@ -239,6 +251,40 @@ const spanRate = r3(withSpan / flagsTotal);
   }
 
   if (!bad) ok('composition holds: the distribution decides (not the float), capability outweighs targeting, the four reach signs point the right way, and an unjudged row ranks exactly as it did');
+}
+
+// ── actionability: three legs, and unknown is never dead ─────────────────
+{
+  const { actionableOf, liveOf, reachableOf, CHECKS, ageOf } = T;
+  let bad = 0;
+  const no = (c, m) => { if (!c) { fail(m); bad++; } };
+  const row = (extra) => Object.assign({ url: 'https://x/1', title: 't', company: 'c', location: 'l', contacts: '[]' }, extra);
+
+  CHECKS.clear();
+  /* The invariant this whole axis exists for. We have checked almost nothing,
+     and an unchecked posting is not a dead one -- if null ever collapses to
+     false, every row we never looked at renders as closed. */
+  no(liveOf(row()) === null, 'an unchecked posting is unknown, not dead');
+  no(reachableOf(row()) === null, 'a posting with no contacts found yet is unknown, not unreachable');
+
+  CHECKS.set('u:https://x/1', { closed_on: null });
+  no(liveOf(row()) === true, 'a posting still in the index is live');
+  CHECKS.set('u:https://x/1', { closed_on: '2026-09-26' });
+  no(liveOf(row()) === false, 'a posting gone from the index is not live');
+  CHECKS.clear();
+
+  no(reachableOf(row({ contacts: '[{"name":"A"}]' })) === true, 'a posting with a contact is reachable');
+  no(reachableOf(row({ contacts: 'not json' })) === null, 'unparseable contacts are unknown, not reachable');
+
+  const a = actionableOf(row({ posted: '' }));
+  no(a && 'live' in a && 'fresh' in a && 'reach' in a, 'actionableOf returns all three legs');
+  no(a.fresh === null, 'a posting with no date has unknown age');
+  /* Kept apart on purpose: the legs must never be multiplied into one number,
+     which is what confWeight does to confidence and why an unknown row sinks
+     among bad ones instead of standing apart. */
+  no(typeof a !== 'number', 'actionability is three legs, never a single score');
+
+  if (!bad) ok('actionability: three legs, each null when unknown, and unknown never reads as dead or unreachable');
 }
 
 // ── report ───────────────────────────────────────────────────────────────
