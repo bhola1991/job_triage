@@ -48,12 +48,26 @@ const SUSPECT_OUT = arg('suspect', path.join(DIR, 'suspect.jsonl'));
    price of a judgment later. Tune them from the store, not from taste. */
 const EVERGREEN_DAYS = 60;   // continuously advertised this long is a pipeline ad, not an opening
 const REPOST_MIN = 3;        // taken down and put back this often is churn
-const today = () => new Date().toISOString().slice(0, 10);
+/* The date a snapshot was TAKEN, which is not always the date it is processed.
+   Backfilling a series from snapshots already on disk is the normal case --
+   otherwise every replayed observation stamps as today, first_seen == last_seen
+   for everything, and every age reads as zero. The counts would still be right
+   and every date would be wrong, which is the worst kind of wrong: quietly. */
+const today = () => {
+  const v = arg('asof', '');
+  if (!v) return new Date().toISOString().slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v))) { console.error(`--asof must be YYYY-MM-DD, got ${v}`); process.exit(1); }
+  return v;
+};
 const days = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
 
-const files = process.argv.slice(2).filter((a) => !a.startsWith('--') &&
-  process.argv[process.argv.indexOf(a) - 1] !== '--store' &&
-  process.argv[process.argv.indexOf(a) - 1] !== '--suspect');
+/* Flags that consume the next argument, listed once. The previous version
+   named --store and --suspect inline, so adding --asof silently turned its
+   date into an input filename and the failure was `ENOENT: open '2026-09-24'`.
+   Any new value-taking flag goes here and nowhere else. */
+const VALUED = new Set(['--store', '--suspect', '--asof']);
+const files = process.argv.slice(2).filter((a, i, all) =>
+  !a.startsWith('--') && !VALUED.has(all[i - 1]));
 if (!files.length) {
   console.error('usage: node scripts/index/verify.js <snapshot.jsonl…> [--store f.json] [--suspect f.jsonl]');
   console.error('  a snapshot is JSONL with {url, …} rows — what sitemap-jobs.js or ingest.js writes.');
@@ -131,7 +145,7 @@ fs.writeFileSync(STORE, JSON.stringify(store, null, 0));
 /* ── report ── */
 const total = Object.keys(store.jobs).length;
 const live = Object.values(store.jobs).filter((j) => !j.closed_on).length;
-console.log(`\nrun ${store.runs} · ${now} · sources: ${[...sources].join(', ')}`);
+console.log(`\nrun ${store.runs} · ${now}${arg('asof','') ? ' (--asof)' : ''} · sources: ${[...sources].join(', ')}`);
 console.log(`  new        ${fresh}`);
 console.log(`  still open ${open}`);
 console.log(`  closed     ${closed}`);
