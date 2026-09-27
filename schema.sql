@@ -620,59 +620,113 @@ create index if not exists job_index_title_fts
 -- The corpus, searched. This is what makes 353,604 free postings reachable by
 -- a person instead of sitting in a table nothing queries.
 --
--- Two things in the shape are load-bearing, and both were measured rather than
--- reasoned about.
+-- Three channels, strictest first, each filling only what the one above left:
 --
--- Narrow BEFORE joining job_checks. The obvious order -- match, join, sort,
--- limit -- took 5.6 seconds, because ~1,949 title matches each cost a 1.4 ms
--- index lookup into a 151 MB table. Cutting to the final candidates first
--- takes it to 25 ms. Same rows, same indexes, 217x.
+--   phrase   "Operations Manager", those words in that order.
+--   words    every word of one title, any order.
+--   partial  any word, ranked by ts_rank. Last resort.
+--
+-- The third exists because two were all-or-nothing. Measured against four real
+-- tracks: phrase gave 60, 60 and 58 rows for Operations Manager, Content
+-- Strategist and Agri-Tech Founder -- and ZERO for AI Systems Builder, whose
+-- titles exist nowhere in the corpus as those exact consecutive words. It
+-- failed hardest on the emerging roles where titles vary most. Adding `words`
+-- took that track to 5; the corpus holds 386 titles with ai+developer and
+-- 1,923 with ai+engineer, so requiring every word of a four-word title is
+-- barely looser than requiring the phrase. `partial` takes it to 60.
+--
+-- This is the design scripts/index/retrieve.js already validated -- literal
+-- matches taken outright, a weaker channel filling the pool, 47% -> 100%
+-- recall -- and only the literal half had been implemented.
+--
+-- The third channel is only PAID FOR when needed. Running it unconditionally
+-- cost 3.47 seconds on a track phrase matching answered in 49 ms, because
+-- "Operations Manager" widens to operations|manager|supply|chain|... and that
+-- is most of the corpus. So a cheap probe counts the strict hits, stopping at
+-- the limit, and only widens if they cannot fill the page.
+--
+-- Two more things were measured rather than reasoned about:
+--
+-- Narrow BEFORE joining job_checks. Match, join, sort, limit took 5.6 seconds,
+-- because ~1,949 title matches each cost a 1.4 ms lookup into a 151 MB table.
+-- Cutting to the final candidates first takes it to 25 ms.
 --
 -- Dedup on dedup_key. Without it the first version returned nine copies of one
--- posting -- a recruiter had listed the same role in nine cities -- and the
--- second requested title returned nothing at all, because the flood took every
--- slot. The count of collapsed copies comes back so the caller can say "also
--- in 8 other cities" rather than silently hiding them. The window runs over
--- the whole matched set before any limit: limiting first would keep whichever
--- duplicates happened to sort earliest.
+-- posting -- a recruiter listing the same role in nine cities -- while the
+-- second requested title returned nothing, because the flood took every slot.
+-- The collapsed count comes back so the caller can say "also in 8 other
+-- cities" instead of hiding them.
 --
--- LEFT join, so `closed_on is null` also admits rows never checked. That is
--- the same rule liveOf follows in the app -- unchecked is not dead -- and
--- hiding unverified rows would hide most of the corpus.
+-- LEFT join, so `closed_on is null` admits rows never checked. Same rule
+-- liveOf follows in the app: unchecked is not dead, and hiding unverified rows
+-- would hide most of the corpus.
+--
+-- ts_rank is not BM25 -- no idf, so "developer" and "llm" weigh alike -- which
+-- is why partial ranks last rather than being blended into a single score.
 create or replace function public.search_index(
   p_titles text[], p_days integer default 30, p_limit integer default 60)
 returns table (job_key text, title text, company text, location text,
-               posted date, tier text, source text, closed_on date, duplicates integer)
+               posted date, tier text, source text, closed_on date,
+               duplicates integer, channel text)
 language plpgsql stable security definer set search_path = public as $$
-declare v_q tsquery; t text; v_lim integer := least(greatest(coalesce(p_limit, 60), 1), 200);
+declare
+  v_phrase tsquery; v_words tsquery; v_any tsquery; v_filter tsquery; t text; w text;
+  v_lim integer := least(greatest(coalesce(p_limit, 60), 1), 200);
+  v_since date := current_date - greatest(coalesce(p_days, 30), 1);
+  v_strict integer;
 begin
-  -- Folded into one tsquery so the GIN index is consulted once.
-  -- phraseto_tsquery keeps word order and escapes its input, so a title with
-  -- an apostrophe or an operator in it cannot become syntax.
   foreach t in array coalesce(p_titles, '{}'::text[]) loop
     if length(btrim(t)) > 0 then
-      v_q := case when v_q is null then phraseto_tsquery('simple', t)
-                  else v_q || phraseto_tsquery('simple', t) end;
+      v_phrase := case when v_phrase is null then phraseto_tsquery('simple', t)
+                       else v_phrase || phraseto_tsquery('simple', t) end;
+      v_words  := case when v_words  is null then plainto_tsquery('simple', t)
+                       else v_words  || plainto_tsquery('simple', t) end;
+      -- Split rather than string surgery on a tsquery, so a title containing
+      -- an operator stays data.
+      foreach w in array regexp_split_to_array(lower(btrim(t)), '[^a-z0-9+#]+') loop
+        if length(w) >= 2 then
+          v_any := case when v_any is null then plainto_tsquery('simple', w)
+                        else v_any || plainto_tsquery('simple', w) end;
+        end if;
+      end loop;
     end if;
   end loop;
-  if v_q is null then return; end if;
+  if v_phrase is null or v_any is null then return; end if;
+
+  select count(*) into v_strict from (
+    select 1 from public.job_index i
+     where i.posted >= v_since and to_tsvector('simple', i.title) @@ v_words
+     limit v_lim) probe;
+
+  v_filter := case when v_strict >= v_lim then v_words else v_any end;
 
   return query
   with cand as (
-    select i.job_key, i.title, i.company, i.location, i.posted, i.tier, i.source,
-           row_number() over (partition by i.dedup_key order by i.posted desc nulls last) as rn,
-           count(*)    over (partition by i.dedup_key) as dupes
+    select i.job_key, i.title, i.company, i.location, i.posted, i.tier, i.source, i.dedup_key,
+           case when to_tsvector('simple', i.title) @@ v_phrase then 0
+                when to_tsvector('simple', i.title) @@ v_words  then 1
+                else 2 end as chan,
+           ts_rank(to_tsvector('simple', i.title), v_any) as rank
       from public.job_index i
-     where to_tsvector('simple', i.title) @@ v_q
-       and i.posted >= current_date - greatest(coalesce(p_days, 30), 1)
+     where i.posted >= v_since
+       and to_tsvector('simple', i.title) @@ v_filter
   ),
-  hit as (select * from cand where rn = 1 order by posted desc limit v_lim * 4)
+  one as (
+    select distinct on (dedup_key) *, count(*) over (partition by dedup_key) as dupes
+      from cand order by dedup_key, chan, posted desc nulls last
+  ),
+  hit as (
+    select * from one
+     order by chan, case when chan = 2 then -rank else 0 end, posted desc
+     limit v_lim * 4
+  )
   select h.job_key, h.title, h.company, h.location, h.posted, h.tier, h.source,
-         c.closed_on, h.dupes::integer
+         c.closed_on, h.dupes::integer,
+         (array['phrase','words','partial'])[h.chan + 1]
     from hit h
     left join public.job_checks c on c.job_key = h.job_key
    where c.closed_on is null
-   order by h.posted desc
+   order by h.chan, case when h.chan = 2 then -h.rank else 0 end, h.posted desc
    limit v_lim;
 end $$;
 
