@@ -197,7 +197,17 @@ async function rowsFrom(src, depth = 0) {
     for (const c of wanted) {
       try {
         const rows = await rowsFrom(c, depth + 1);
-        console.log(`  ${String(rows.length).padStart(7)}  ${c.split('/').pop()}`);
+        /* Which FILE a row came from, not just which board. Every Naukri
+           sitemap is tagged `naukri-sitemap`, so when one of nineteen files
+           fails the source still looks 93% intact -- and verify.js, seeing
+           25,000 rows absent, records 25,000 closures for postings that are
+           perfectly alive. Measured on 2026-09-27, when Naukri served
+           sitemap-latest-jd-pages-1.xml.gz as ten bytes mid-regeneration.
+           With the file on the row, verify.js can close only what it actually
+           looked at. */
+        const part = c.split('/').pop();
+        for (const r of rows) r.part = part;
+        console.log(`  ${String(rows.length).padStart(7)}  ${part}`);
         out.push(...rows);
       } catch (e) { console.error(`  skipped ${c.split('/').pop()}: ${e.message}`); }
     }

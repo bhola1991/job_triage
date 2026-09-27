@@ -89,9 +89,18 @@ for (const f of files) {
 }
 if (!seen.size) { console.error('no rows with a url — nothing to verify'); process.exit(1); }
 
-/* The source a snapshot came from, so a partial run cannot be read as a mass
-   closure. Verifying only the Pune sitemap must never mark Mumbai closed. */
+/* What this run actually LOOKED AT, so a partial run cannot be read as a mass
+   closure. Two levels, because one is not enough.
+   Source: verifying only the Pune sitemap must never mark Mumbai closed.
+   Part: every Naukri file carries the same source, so when one of nineteen
+   fails the board still looks 93% intact while 25,000 live postings appear to
+   have vanished. That is not hypothetical -- on 2026-09-27 Naukri served
+   sitemap-latest-jd-pages-1.xml.gz as ten bytes and this file recorded the
+   difference as closures. A row is now only closable if its own part was read
+   this run. A row with no part falls back to the source rule, which is what
+   the feeds and ATS boards use. */
 const sources = new Set([...seen.values()].map((r) => r.source || 'unknown'));
+const parts = new Set([...seen.values()].map((r) => r.part).filter(Boolean));
 
 /* ── the store ── */
 const store = fs.existsSync(STORE) ? JSON.parse(fs.readFileSync(STORE, 'utf8')) : { runs: 0, jobs: {} };
@@ -99,12 +108,13 @@ const now = today();
 const first = store.runs === 0;
 store.runs++;
 
-let fresh = 0, open = 0, closed = 0, reposted = 0;
+let fresh = 0, open = 0, closed = 0, reposted = 0, unseen = 0;
 
 for (const [url, row] of seen) {
   const j = store.jobs[url];
   if (!j) {
-    store.jobs[url] = { source: row.source || 'unknown', title: row.title || '', company: row.company || '',
+    store.jobs[url] = { source: row.source || 'unknown', part: row.part || null,
+      title: row.title || '', company: row.company || '',
       location: row.location || '', partial: !!row.partial,
       first_seen: now, last_seen: now, runs: 1, reposts: 0, closed_on: null };
     fresh++;
@@ -113,6 +123,7 @@ for (const [url, row] of seen) {
     // and re-advertised is either hard to fill or was never being filled.
     if (j.closed_on) { j.reposts++; j.closed_on = null; j.closed_src = null; reposted++; }
     j.last_seen = now; j.runs++;
+    if (row.part) j.part = row.part;      // a posting can move between files
     open++;
   }
 }
@@ -152,6 +163,8 @@ for (const url of declared) {
    left strictly alone. */
 for (const [url, j] of Object.entries(store.jobs)) {
   if (seen.has(url) || j.closed_on || !sources.has(j.source)) continue;
+  // Its file was not read this run: absence proves nothing about this row.
+  if (j.part && !parts.has(j.part)) { unseen++; continue; }
   j.closed_on = now; j.closed_src = 'inferred';
   j.open_days = days(j.first_seen, now);
   closed++;
@@ -179,6 +192,7 @@ console.log(`\nrun ${store.runs} · ${now}${arg('asof','') ? ' (--asof)' : ''} �
 console.log(`  new        ${fresh}`);
 console.log(`  still open ${open}`);
 console.log(`  closed     ${closed}${declared.size ? ' (inferred from absence)' : ''}`);
+if (unseen) console.log(`  held       ${unseen} (their sitemap file was not read this run — absence proves nothing)`);
 if (declared.size) console.log(`  expired    ${expired} (declared by the board)`);
 console.log(`  reposted   ${reposted}`);
 console.log(`\nstore: ${total} job(s) known, ${live} currently listed`);
