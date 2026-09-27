@@ -469,6 +469,12 @@ const PRICE_USD: Record<string, number> = {
   linkedin: 0.005,         // per row; bebity doesn't publish a price, so this is a cautious guess
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
   adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0,
+  // The shared corpus. Zero because the row was acquired once by a crawl
+  // nobody paid per-search for -- but it is listed rather than omitted so
+  // search_report accepts it and source_yield can rank the index against the
+  // sources that do cost money. A free source with no yield is still worth
+  // knowing about.
+  index: 0,
 };
 /* Per tier, because the browser can now ask for either and they are not close:
    flash is ~4x cheaper in, ~7x cheaper on a cache hit, ~3x cheaper out. Pricing
@@ -978,6 +984,44 @@ Deno.serve(async (req) => {
           if (!(e instanceof Http)) await refund(user, s, "search", CONTACT_COST);
           throw e;
         }
+      }
+
+      /* The shared corpus, searched. FREE, and that is the point rather than a
+         concession: these rows were acquired once and are served to everyone,
+         so there is no vendor call to meter. A board_search spends 25 credits
+         to buy 30 rows for one person; this reads 353,604 that are already
+         paid for.
+         It is deliberately NOT a replacement for board_search. The corpus lags
+         -- Naukri's city sitemaps are about a week behind, and only its
+         latest-jd feed is same-day -- so the paid path still exists for the
+         freshest rows and for sources with no free index. This is the cheap
+         first look that should happen before anyone spends anything. */
+      case "index_search": {
+        const titles = (Array.isArray(b.titles) ? b.titles : [])
+          .map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, MAX_TITLES);
+        if (!titles.length) throw new Http(400, "no titles");
+        const days = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), 365);
+        const limit = Math.min(Math.max(Math.ceil(Number(b.limit) || 60), 1), 200);
+        const { data, error } = await admin.rpc("search_index",
+          { p_titles: titles, p_days: days, p_limit: limit });
+        if (error) throw new Http(502, "The index is not answering right now.");
+        /* Shaped like every other source so the app treats it alike. There is
+           no url column in job_index -- job_key IS 'u:' + the url -- so it is
+           rebuilt here, the same way schema.sql documents. */
+        const jobs = (data || []).map((r: Any): Job => ({
+          title: r.title || "",
+          company: r.company || "",
+          url: String(r.job_key || "").replace(/^u:/, ""),
+          location: r.location || "",
+          // Thin rows carry no description by design; the app's own `thin`
+          // handling is what should decide what to do about that, not a
+          // fabricated snippet here.
+          description: "",
+          posted: r.posted || "",
+          publisher: r.source || "index",
+          origin: "index",
+        })).filter((j: Job) => j.title && j.url);
+        return json({ jobs, searched: titles, days });
       }
 
       case "apify_start": {

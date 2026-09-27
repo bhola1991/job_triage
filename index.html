@@ -3449,6 +3449,24 @@ async function runBoards(trk, where){
       const last=Date.parse((p.searchedAt||{})[trk.id]||'');
       const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
       setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
+      /* The shared corpus first, because it is free and instant. These rows
+         were acquired once and are served to everyone, so nothing is metered
+         and nothing is waited on -- they are on screen before the paid sources
+         have started. The boards then fill what the index does not have, which
+         is mostly the last few days: outside Naukri's latest-jd feed the
+         corpus lags about a week, so this does not replace a search, it makes
+         one cheaper to justify.
+         Wrapped because the index is an optimisation and must never be able to
+         stop a search the user has already paid for. */
+      try{
+        const ix=await hosted('index_search',{titles:titles.slice(0,4), since_days, limit:60});
+        const rows=(ix&&ix.jobs)||[];
+        if(rows.length){
+          await live.add(rows.map(jsearchRow));
+          live.draw(`${rows.length} from the index · searching the boards for the rest…`);
+        }
+      }catch(e){ console.warn('index search skipped:', e.message); }
+
       // fallback: portal queries the server runs on Google if every API source comes back empty.
       const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
         where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),

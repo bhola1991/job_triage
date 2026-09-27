@@ -209,6 +209,9 @@ module.exports = {
       note: 'The same judgment for up to {MAX_JUDGE_BATCH} postings. Jev takes one state per request, so the server still makes one call per posting and only the round trip and the charge are batched -- which is what makes judging a whole search cost one credit instead of three hundred. A partial batch keeps the credit; a batch where every posting failed refunds.' },
     'sv.apStart': { diagram: 'server', group: 'actions', kind: 'credit', label: 'apify_start — {COST.apifyQuery} per query',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'apify_start' } },
+    'sv.idxsearch': { diagram: 'server', group: 'actions', kind: 'db', label: 'index_search \u2014 the corpus, free',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'index_search' },
+      note: 'Free because the rows were acquired once and are served to everyone: there is no vendor call to meter. board_search spends 25 credits to buy 30 rows for one person; this reads 353,604 already paid for. Not a replacement -- the corpus lags about a week outside Naukri latest-jd -- but it is the cheap first look that should happen before anything is spent.' },
     'sv.mantiks': { diagram: 'server', group: 'actions', kind: 'credit', label: 'mantiks_contact — one contact, refunded on a miss',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'mantiks_contact' },
       note: 'Two calls: find the posting in Mantiks (free), then ask who owns the req (1 lead credit). Tried before the Google roster; a miss refunds the user and falls through, so the question is never billed twice.' },
@@ -310,6 +313,9 @@ module.exports = {
     'st.prune':   { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'prune_index \u2014 forget what died a month ago',
       anchor: { file: 'schema.sql', sql: 'public.prune_index' },
       note: 'A board\u2019s live inventory does not grow: Naukri holds ~350k and takes in ~10,088 a day while a comparable number expire, so a corpus that deletes the dead is a constant size and one that keeps them fills a 500 MB tier in about two weeks. Closed rows only, older than 30 days, and never a posting anyone is tracking -- the day someone opens a row to find out what happened is exactly the day this would otherwise have deleted the answer.' },
+    'st.search':  { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'search_index() \u2014 title match over the corpus',
+      anchor: { file: 'schema.sql', sql: 'public.search_index' },
+      note: 'Narrows to the final candidates BEFORE joining job_checks: the obvious order took 5.6s because ~1,949 title matches each cost a 1.4ms lookup into a 151 MB table, and limiting first takes it to 25ms. Deduped on dedup_key, or one recruiter listing a role in nine cities takes nine of twelve slots -- measured, not feared -- and the collapsed count is returned so the caller can say so rather than hide it. simple and not english: stemming would merge Engineer with Engineering Manager, which are different jobs.' },
     'st.index':   { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'job_index \u2014 the shared corpus',
       anchor: { file: 'schema.sql', sql: 'public.job_index' },
       note: 'Shared for the same reason as job_checks: acquiring a posting costs ~16x what deciding about it costs, so the row bought once and served to everyone is the only one that scales. public.jobs is what a person has chosen to track; this is everything known. Two tiers -- a full row carries a real description and can be judged, a thin row comes from a board sitemap and carries none, so it is a shortlist candidate and never an answer. dedup_key is generated rather than written, because the same role posted to five boards has five urls and a key each caller computes is a key that disagrees with itself.' },
@@ -390,6 +396,8 @@ module.exports = {
     ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'st.index', to: 'st.checks', label: 'still listed?' },
+    { from: 'sv.idxsearch', to: 'st.search', label: 'search_index()' },
+    { from: 'st.search', to: 'st.index', label: 'title match, deduped' },
     { from: 'sv.mantiks', to: 'sv.apStart', label: 'miss → Google' },
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
