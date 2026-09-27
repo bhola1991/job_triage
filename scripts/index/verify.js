@@ -102,6 +102,28 @@ if (!seen.size) { console.error('no rows with a url — nothing to verify'); pro
 const sources = new Set([...seen.values()].map((r) => r.source || 'unknown'));
 const parts = new Set([...seen.values()].map((r) => r.part).filter(Boolean));
 
+/* Did the crawl that produced these snapshots actually read everything?
+   sitemap-jobs.js writes a sidecar saying which files it could not fetch. A row
+   tagged with its file is protected by `parts` above -- but rows indexed before
+   tagging existed carry no part at all, and those are exactly the ones a broken
+   file would silently close. So when any file failed, no part-less row is
+   closable this run. Conservative on purpose: the cost of holding a dead row
+   one extra day is nothing, and the cost of deleting a live one is a job the
+   user never sees. */
+let crawlIncomplete = false;
+for (const f of files) {
+  const meta = f.replace(/\.jsonl$/, '') + '.meta.json';
+  if (!fs.existsSync(meta)) continue;
+  try {
+    const m = JSON.parse(fs.readFileSync(meta, 'utf8'));
+    (m.parts || []).forEach((p) => parts.add(p));
+    if ((m.failed || []).length) {
+      crawlIncomplete = true;
+      console.log(`  ${path.basename(f)}: ${m.failed.length} file(s) unreadable — ${m.failed.join(', ')}`);
+    }
+  } catch { /* an unreadable sidecar is not a reason to fail the diff */ }
+}
+
 /* ── the store ── */
 const store = fs.existsSync(STORE) ? JSON.parse(fs.readFileSync(STORE, 'utf8')) : { runs: 0, jobs: {} };
 const now = today();
@@ -165,6 +187,7 @@ for (const [url, j] of Object.entries(store.jobs)) {
   if (seen.has(url) || j.closed_on || !sources.has(j.source)) continue;
   // Its file was not read this run: absence proves nothing about this row.
   if (j.part && !parts.has(j.part)) { unseen++; continue; }
+  if (!j.part && crawlIncomplete) { unseen++; continue; }
   j.closed_on = now; j.closed_src = 'inferred';
   j.open_days = days(j.first_seen, now);
   closed++;

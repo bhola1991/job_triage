@@ -186,6 +186,13 @@ function naukriRow(url) {
    same publisher, through different files. */
 const JOB_SITEMAP = /jobDescPages|latest-jd-pages|incremental-jd-pages/i;
 
+/* Files this run could not read. Written beside the snapshot, because the
+   crawler is the only thing that knows and verify.js is the thing that needs
+   to: a missing file is indistinguishable from a mass closure once the rows
+   are gone from the list. Naukri served latest-jd-pages-1 as ten bytes on
+   2026-09-27 and 25,000 live postings were recorded as closed. */
+const FAILED = [];
+
 async function rowsFrom(src, depth = 0) {
   const xml = await load(src);
   const urls = locs(xml);
@@ -209,7 +216,7 @@ async function rowsFrom(src, depth = 0) {
         for (const r of rows) r.part = part;
         console.log(`  ${String(rows.length).padStart(7)}  ${part}`);
         out.push(...rows);
-      } catch (e) { console.error(`  skipped ${c.split('/').pop()}: ${e.message}`); }
+      } catch (e) { FAILED.push(c.split('/').pop()); console.error(`  skipped ${c.split('/').pop()}: ${e.message}`); }
     }
     return out;
   }
@@ -231,6 +238,13 @@ async function rowsFrom(src, depth = 0) {
   const ageOf = (j) => (j.posted ? Math.round((Date.now() - Date.parse(j.posted)) / 864e5) : null);
   const jobs = MAX_AGE ? all.filter((j) => { const a = ageOf(j); return a === null || a <= MAX_AGE; }) : all;
   fs.writeFileSync(OUT, jobs.map((j) => JSON.stringify(j)).join('\n') + '\n');
+
+  /* The sidecar is written even when nothing failed -- an absent file would be
+     ambiguous between "clean run" and "old crawler", and verify.js should not
+     have to guess which. */
+  fs.writeFileSync(OUT.replace(/\.jsonl$/, '') + '.meta.json',
+    JSON.stringify({ at: new Date().toISOString(), parts: [...new Set(all.map((r) => r.part).filter(Boolean))], failed: FAILED }, null, 2) + '\n');
+  if (FAILED.length) console.log(`  ${FAILED.length} file(s) unreadable this run: ${FAILED.join(', ')}`);
 
   const named = jobs.filter((j) => j.company).length;
   const dated = all.filter((j) => j.posted);
