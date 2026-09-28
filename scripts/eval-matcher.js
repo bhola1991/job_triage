@@ -168,11 +168,15 @@ const spanRate = r3(withSpan / flagsTotal);
 
 // ── 6. the merge: Jev fires, DeepSeek explains ───────────────────────────
 {
+  /* Placed either side of the cut rather than at fixed numbers: this asserts
+     how the merge behaves, not where FLAG_P happens to sit, and it used to
+     fail for the wrong reason when the cut moved from 0.5 to 0.8. */
+  const over = Math.min(0.99, T.FLAG_P + (1 - T.FLAG_P) / 2), under = T.FLAG_P / 2;
   const ds = T.normFlags([{ code: 'loc', fact: 'Berlin office' }, { code: 'comp', fact: 'thousands apply' }]);
   const jev = { confidence: 'high', flags: [
-    { code: 'loc', probability: 0.91 },     // fired, and DeepSeek has a fact
-    { code: 'comp', probability: 0.12 },    // DeepSeek raised it, Jev does not agree
-    { code: 'rare', probability: 0.77 },    // Jev raises one DeepSeek never mentioned
+    { code: 'loc', probability: over },     // fired, and DeepSeek has a fact
+    { code: 'comp', probability: under },   // DeepSeek raised it, Jev does not agree
+    { code: 'rare', probability: over },    // Jev raises one DeepSeek never mentioned
   ] };
   const out = T.mergeJudgment(ds, jev);
   const codes = out.map(f => f.code).sort().join(',');
@@ -285,6 +289,76 @@ const spanRate = r3(withSpan / flagsTotal);
   no(typeof a !== 'number', 'actionability is three legs, never a single score');
 
   if (!bad) ok('actionability: three legs, each null when unknown, and unknown never reads as dead or unreachable');
+}
+
+// ── 9. FLAG_P, against recorded Jev probabilities ────────────────────────
+/* Everything above measures DeepSeek's flags, because `recorded` is a DeepSeek
+   answer. FLAG_P governs Jev's, and until eval/judgments.json existed nothing
+   measured it at all: the cut sat at 0.5 with one hand-written assertion for
+   company. These run the app's own mergeJudgment, so the threshold under test
+   is the shipped one rather than a copy of it.
+
+   The check is on WHICH codes disagree, not how many, so it holds under every
+   --set and still fails the moment the cut moves: at 0.5 the extras below
+   reappear in open, sen_lo and sen_hi, which is what this is here to stop. */
+{
+  const P = path.join(__dirname, 'eval', 'judgments.json');
+  if (!fs.existsSync(P)) {
+    console.log('  note  no eval/judgments.json — run scripts/record-judgments.ts to measure FLAG_P');
+  } else {
+    const REC = JSON.parse(fs.readFileSync(P, 'utf8'));
+    /* Two disagreements that no threshold can remove, both recorded 2026-09-28
+       against jev-1.13.0. Neither is the cut point being wrong:
+
+       fit  — the labels name the flag worth SHOWING on a row, while the noul
+              answers the question it was asked. On loc-onsite-berlin the work
+              really is the candidate's strongest area (Go and Postgres
+              settlement infrastructure); it is the location that rules the job
+              out, so the label carries loc alone and Jev still says 0.89.
+       rare — "rewards this candidate's rare combination" is weakly true of
+              almost any backend payments posting for this profile, so it sits
+              at 0.81-0.86 where the label says nothing. Its one true case is
+              0.90: a 0.04 gap, too thin to place a cut inside honestly.
+
+       cred is the mirror image, a miss rather than an extra: sen-hi-principal
+       demands "a track record operating Kubernetes at very large scale", which
+       the label calls a hard gate and the question calls a credential. Jev
+       answers 0.29. Widening the question is the fix, not lowering the cut —
+       at 0.29 every flag in the set fires. */
+    const STRUCTURAL_EXTRA = ['fit', 'rare'];
+    const STRUCTURAL_MISS = ['cred'];
+    let jtp = 0, jfp = 0, jfn = 0, unexpected = 0, seen = 0;
+    CASES.cases.forEach(c => {
+      const j = REC.judgments[c.id];
+      if (!j) return;
+      seen++;
+      // dsFlags empty: this asks only which flags clear the cut, not what fact
+      // DeepSeek attached to them.
+      const got = T.mergeJudgment([], j).map(f => f.code);
+      const want = c.expect.flags;
+      jtp += got.filter(x => want.indexOf(x) > -1).length;
+      const extra = got.filter(x => want.indexOf(x) === -1);
+      const miss = want.filter(x => got.indexOf(x) === -1);
+      jfp += extra.length; jfn += miss.length;
+      extra.forEach(code => {
+        if (STRUCTURAL_EXTRA.indexOf(code) === -1) {
+          fail(`${c.id}: ${code} fired at ${j.flags.find(f => f.code === code).probability} — above FLAG_P ${T.FLAG_P} and not a known structural extra`);
+          unexpected++;
+        }
+      });
+      miss.forEach(code => {
+        if (STRUCTURAL_MISS.indexOf(code) === -1) {
+          fail(`${c.id}: ${code} did not fire at ${j.flags.find(f => f.code === code).probability}, below FLAG_P ${T.FLAG_P}`);
+          unexpected++;
+        }
+      });
+    });
+    if (seen !== CASES.cases.length) {
+      fail(`${CASES.cases.length - seen} case(s) have no recorded judgment — re-record with scripts/record-judgments.ts`);
+    } else if (!unexpected) {
+      ok(`FLAG_P ${T.FLAG_P} on ${REC.model}: ${jtp} right, ${jfp} extra (fit/rare only), ${jfn} missed (cred only)`);
+    }
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────

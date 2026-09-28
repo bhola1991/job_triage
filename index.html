@@ -2926,8 +2926,43 @@ function bestSentence(desc, fact){
 
 /* Above which probability a Jev noul counts as "this flag is true". Jev
    returns a number per flag precisely so the caller can keep its own
-   threshold rather than trusting one chosen elsewhere; this is ours. */
-const FLAG_P = 0.5;
+   threshold rather than trusting one chosen elsewhere; this is ours.
+
+   0.8, measured rather than picked. It was 0.5, which is the worst available
+   cut: a noul carries no separate confidence, so 0.5 is exactly where the
+   model is torn, and every flag it was unsure about became a chip on a row.
+   Over the ten labelled postings that fired seven flags nothing supported --
+   `open` on five of them.
+
+   scripts/tune-flag-threshold.js sweeps the recorded probabilities in
+   scripts/eval/judgments.json against the labels. Seven of the ten flags
+   separate cleanly, and every one of their gaps straddles 0.8:
+
+       flag      true fires at    false reaches    gap
+       loc            0.96             0.25        0.71
+       thin           0.95             0.22        0.73
+       shape          0.97             0.48        0.49
+       sen_lo         0.97             0.53        0.44
+       comp           0.90             0.45        0.45
+       sen_hi         0.82             0.58        0.24
+       open           0.91             0.70        0.21
+
+   One number for all ten rather than ten tuned numbers, because with one or
+   two positive cases per flag a per-flag decimal would be fitted to noise.
+   The gaps are wide enough that the choice inside them barely matters; what
+   mattered was being at 0.5.
+
+   The consequence argument points the same way. The flags that bury a job --
+   loc, cred, shape, sen_hi, sen_lo, thin, comp -- are the ones with the widest
+   gaps, so a high cut costs them nothing and a false one is expensive. The
+   flags that merely encourage an application are where the residual noise
+   sits, which is the cheaper error to keep.
+
+   Two flags are not fixable from here at any cut, and eval-matcher.js §9 says
+   why in full: `fit` answers the question it was asked while the labels name
+   the flag worth showing, and `rare` is weakly true of nearly every posting
+   this profile sees. Calibrated on jev-1.13.0; a model bump invalidates it. */
+const FLAG_P = 0.8;
 
 /* ── composing a judgement into numbers ──────────────────────────────────
    Jev answers questions; it does not hand back a fit score. These turn its

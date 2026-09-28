@@ -440,6 +440,8 @@ scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST 
 scripts/selfcheck-boards.js         Board-source check.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/eval/                       Recorded model answers + the committed baseline.
+scripts/record-judgments.ts         Records one live Jev judgment per case (needs a key; ~$0.0005).
+scripts/tune-flag-threshold.js      Offline sweep: where FLAG_P should sit, from those recordings.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
 scripts/pipeline-map.js             Data-pipeline map: resolves code anchors, writes Mermaid notes to an Obsidian vault.
