@@ -502,6 +502,85 @@ async function logUsage(rows: Record<string, unknown>[]) {
 
 /* Actors disagree on field names, so take the first one present. */
 const pick = (x: Any, ...keys: string[]) => { for (const k of keys) { const v = k.split(".").reduce((o, p) => o?.[p], x); if (v !== undefined && v !== null && v !== "") return v; } return ""; };
+/* ── the flywheel ───────────────────────────────────────────────────────────
+   Every posting a paid search touches, deposited into the shared corpus.
+
+   Until now job_index was written ONLY by scripts/index/push-index.js, the
+   offline crawler. A user spent 25 credits, the rows went to their own
+   public.jobs, and the corpus learned nothing -- so acquisition was paid for
+   once and used once, by one person. That is the opposite of why the table is
+   shared: a posting costs ~16x more to acquire than to decide about, so a row
+   bought once and served to everyone is the only one that scales.
+
+   These are also the rows the corpus is short of. It holds 8,082 `full` rows
+   against 340,907 `thin` ones, and a thin row carries no description, so it can
+   never be judged -- only shortlisted. Search rows come from Adzuna, Jooble,
+   Careerjet, JSearch and the scrapers WITH their descriptions, which is exactly
+   the scarce kind.
+
+   Deposited BEFORE the caller's own scoring. scoreAndCut drops anything under
+   MIN_FIT for that person, and a role wrong for them is not wrong for everyone
+   -- cutting first would make this a shared shortlist instead of a shared
+   corpus.
+
+   Two writes, not one, and the split is the point: a `full` row upserts, because
+   newer full data should win; a `thin` row is inserted only when the key is
+   ABSENT. Without that split a short search snippet would overwrite a crawler
+   row that had a real description -- a silent downgrade of the corpus by the
+   feature meant to enrich it.
+
+   Best-effort throughout, like logUsage: the user has already paid for this
+   search and a corpus write must never be able to fail it. index.html holds the
+   same rule from the other side, where index_search is wrapped so the
+   optimisation can never stop a search someone paid for. */
+const INDEX_MAX_AGE_DAYS = 35;   // as scripts/index/push-index.js: do not store
+const INDEX_DESC_CAP = 4000;     // what search_index could never return anyway
+const INDEX_DEPOSIT_CAP = 600;
+async function depositIndex(jobs: Job[]) {
+  try {
+    const clean = (v: unknown, n: number) => { const t = String(v ?? "").trim(); return t ? t.slice(0, n) : null; };
+    const seen = new Map<string, Record<string, unknown>>();
+    for (const j of jobs) {
+      // keyOf() in index.html, mirrored: the identity public.jobs and
+      // public.job_checks already use, so all three join without translation.
+      const u = String(j?.url || "").trim();
+      if (!j || !String(j.title || "").trim() || !u || u === "nan") continue;
+      const posted = /^\d{4}-\d{2}-\d{2}$/.test(String(j.posted || "")) ? String(j.posted) : null;
+      if (posted && (Date.now() - Date.parse(posted)) / 864e5 > INDEX_MAX_AGE_DAYS) continue;
+      const desc = String(j.description || "");
+      const tier = desc.length > 200 ? "full" : "thin";
+      seen.set("u:" + u.toLowerCase(), {
+        job_key: "u:" + u.toLowerCase(),
+        source: clean(j.publisher, 80) || "search",
+        title: clean(j.title, 300) || "(untitled)",
+        company: clean(j.company, 200),
+        location: clean(j.location, 200),
+        posted,
+        description: tier === "full" ? desc.slice(0, INDEX_DESC_CAP) : null,
+        tier,
+        publisher: clean(j.publisher, 120),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    const rows = [...seen.values()].slice(0, INDEX_DEPOSIT_CAP);
+    if (!rows.length) return;
+    const full = rows.filter((r) => r.tier === "full");
+    const thin = rows.filter((r) => r.tier === "thin");
+    if (full.length) {
+      const { error } = await admin.from("job_index").upsert(full, { onConflict: "job_key" });
+      if (error) console.error("index deposit (full):", error.message);
+    }
+    if (thin.length) {
+      const { error } = await admin.from("job_index")
+        .upsert(thin, { onConflict: "job_key", ignoreDuplicates: true });
+      if (error) console.error("index deposit (thin):", error.message);
+    }
+  } catch (e) {
+    // Never the user's problem: they paid for a search, not for a corpus write.
+    console.error("index deposit:", (e as Error).message);
+  }
+}
+
 function scrapedJob(x: Any, source: string): Job {
   let url = String(pick(x, "jobUrl", "url", "link", "staticUrl", "JdURL", "applyUrl", "externalApplyLink"));
   if (source === "naukri" && url && !/^https?:/.test(url)) url = "https://www.naukri.com/" + url.replace(/^\//, "");
@@ -731,6 +810,9 @@ Deno.serve(async (req) => {
             await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
             await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
           }
+          // Into the shared corpus on the way out. Before the caller scores and
+          // cuts them, so the corpus keeps what was wrong for THIS person.
+          await depositIndex(jobs);
           return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, free, sourceErrors: errors, ...wallet(s) });
         } catch (e) {
           // Anything that throws after the credit was taken has to put it back.
@@ -1074,7 +1156,14 @@ Deno.serve(async (req) => {
           const rows = items as Any[];
           await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
             kind: "scrape", source: b.source, units: rows.length, cost_inr: inr(rows.length * (PRICE_USD[b.source] || 0)) }]);
-          return json({ items: rows.map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url) });
+          // The scraper half of the same search. These arrive on a later request
+          // than board_search -- a run is polled until it finishes -- so they
+          // need their own deposit or the paid rows never reach the corpus at
+          // all. They are also the dearest rows in the product: LinkedIn was
+          // measured at 7.66 per exclusive posting against upwork's 0.14.
+          const jobs = rows.map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url);
+          await depositIndex(jobs);
+          return json({ items: jobs });
         }
         return json({ items });
       }
