@@ -111,18 +111,33 @@ const parts = new Set([...seen.values()].map((r) => r.part).filter(Boolean));
    one extra day is nothing, and the cost of deleting a live one is a job the
    user never sees. */
 let crawlIncomplete = false;
+/* Sources this run SAMPLED rather than enumerated. The part rule above protects
+   a board whose index comes in files; this protects one that comes in pages.
+   ingest.js caps Himalayas at 50 pages of a 96,023-posting board and
+   MyCareersFuture at 20, and RemoteOK, Remotive and Arbeitnow hand back a
+   single page of the newest jobs -- so most of each of those boards is absent
+   from any given run by construction. Treating that absence as closure closed
+   every row outside today's page window: measured 2026-09-28, himalayas 1,564
+   of 2,543, mycareersfuture 1,997 of 3,915, arbeitnow 532 of 858 -- in each
+   case exactly (stored minus today's slice), which is the signature of the cap
+   deciding rather than the board. Same principle as the part guard: absence
+   from something you did not read through is not evidence. */
+const partialSources = new Set();
 for (const f of files) {
   const meta = f.replace(/\.jsonl$/, '') + '.meta.json';
   if (!fs.existsSync(meta)) continue;
   try {
     const m = JSON.parse(fs.readFileSync(meta, 'utf8'));
     (m.parts || []).forEach((p) => parts.add(p));
+    (m.partial || []).forEach((n) => partialSources.add(n));
     if ((m.failed || []).length) {
       crawlIncomplete = true;
       console.log(`  ${path.basename(f)}: ${m.failed.length} file(s) unreadable — ${m.failed.join(', ')}`);
     }
   } catch { /* an unreadable sidecar is not a reason to fail the diff */ }
 }
+if (partialSources.size)
+  console.log(`  sampled, not enumerated (absence will not close): ${[...partialSources].join(', ')}`);
 
 /* ── the store ── */
 const store = fs.existsSync(STORE) ? JSON.parse(fs.readFileSync(STORE, 'utf8')) : { runs: 0, jobs: {} };
@@ -185,6 +200,9 @@ for (const url of declared) {
    left strictly alone. */
 for (const [url, j] of Object.entries(store.jobs)) {
   if (seen.has(url) || j.closed_on || !sources.has(j.source)) continue;
+  // Its source was sampled, not enumerated: this row may simply be on a page
+  // this run never asked for.
+  if (partialSources.has(j.source)) { unseen++; continue; }
   // Its file was not read this run: absence proves nothing about this row.
   if (j.part && !parts.has(j.part)) { unseen++; continue; }
   if (!j.part && crawlIncomplete) { unseen++; continue; }
@@ -215,7 +233,7 @@ console.log(`\nrun ${store.runs} · ${now}${arg('asof','') ? ' (--asof)' : ''} �
 console.log(`  new        ${fresh}`);
 console.log(`  still open ${open}`);
 console.log(`  closed     ${closed}${declared.size ? ' (inferred from absence)' : ''}`);
-if (unseen) console.log(`  held       ${unseen} (their sitemap file was not read this run — absence proves nothing)`);
+if (unseen) console.log(`  held       ${unseen} (their file or their page range was not read this run — absence proves nothing)`);
 if (declared.size) console.log(`  expired    ${expired} (declared by the board)`);
 console.log(`  reposted   ${reposted}`);
 console.log(`\nstore: ${total} job(s) known, ${live} currently listed`);

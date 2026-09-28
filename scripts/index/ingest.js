@@ -72,13 +72,18 @@ const FEED = {
    repeat. MyCareersFuture honours 100. */
 async function paged(urlFor, rowsOf, map, cap) {
   const out = [];
+  // Did we reach the END of the source, or did we stop because the cap said so?
+  // verify.js cannot tell those apart from the rows alone, and the difference
+  // decides whether absence from this run means anything. Running out of pages
+  // is a census; stopping at the cap is a sample.
+  let complete = false;
   for (let i = 0; i < cap; i++) {
     const d = await get(urlFor(i, out.length));
     const rows = rowsOf(d) || [];
-    if (!rows.length) break;
+    if (!rows.length) { complete = true; break; }
     out.push(...rows.map(map));
   }
-  return out;
+  return { rows: out, complete };
 }
 
 const PAGED = {
@@ -124,12 +129,17 @@ async function main() {
     for (const slug of SRC[platform] || [])
       tasks.push({ name: `${platform}:${slug}`, publisher: platform,
                    run: () => get(ATS[platform].url(slug)).then(d => ATS[platform].rows(d, slug)) });
+  // A single-page feed is a WINDOW on a larger board, never its census: RemoteOK
+  // and Remotive hand back the newest ~100 and stop, so a posting falling off
+  // page one is not a posting that closed. Absence here proves nothing, and
+  // saying so is the whole fix.
   for (const [name, url] of Object.entries(SRC.feeds || {}))
-    tasks.push({ name, publisher: name, run: () => get(url).then(FEED[name]) });
+    tasks.push({ name, publisher: name, census: 'window', run: () => get(url).then(FEED[name]) });
   for (const [name, run] of Object.entries(PAGED))
-    tasks.push({ name, publisher: name, run });
+    tasks.push({ name, publisher: name, census: 'paged', run });
 
   const seen = new Set(), rows = [], failed = [];
+  const complete = [], partial = [];
   let dupes = 0;
   // Bounded concurrency: polite to every host, and fast enough for 47 sources.
   const queue = tasks.slice();
@@ -137,8 +147,14 @@ async function main() {
     for (let t; (t = queue.shift());) {
       try {
         const got = await t.run();
+        // paged() answers with {rows, complete}; an ATS board or a feed answers
+        // with a plain array. An ATS board IS the company's whole list, so it
+        // is a census; a feed is not, whatever it returns.
+        const list = Array.isArray(got) ? got : (got.rows || []);
+        const isCensus = Array.isArray(got) ? t.census !== 'window' : !!got.complete;
+        (isCensus ? complete : partial).push(t.name);
         let kept = 0;
-        for (const j of got) {
+        for (const j of list) {
           if (!j.title || !j.url) continue;
           const key = j.url.split(/[?#]/)[0].toLowerCase();
           if (seen.has(key)) { dupes++; continue; }          // URL-first dedup, as the app does
@@ -162,10 +178,18 @@ async function main() {
     return;
   }
   fs.writeFileSync(out, rows.map(r => JSON.stringify(r)).join('\n') + '\n');
+  /* The sidecar, same shape and same reason as sitemap-jobs.js: tell the
+     verifier what this run could NOT see. Written even when everything was a
+     census, because an absent file is ambiguous between "nothing was capped"
+     and "an older crawler wrote this". */
+  fs.writeFileSync(out.replace(/\.jsonl$/, '') + '.meta.json',
+    JSON.stringify({ at: new Date().toISOString(), complete: complete.sort(),
+                     partial: partial.sort(), failed }, null, 2) + '\n');
   const bytes = fs.statSync(out).size;
   console.log(`\nindexed ${rows.length} jobs from ${tasks.length - failed.length}/${tasks.length} sources`);
   console.log(`dropped ${dupes} duplicates by URL`);
   console.log(`${out}  ${(bytes / 1e6).toFixed(1)} MB  (${Math.round(bytes / rows.length)} bytes/job)`);
   if (failed.length) console.log(`\nfailed (skipped, not fatal):\n  ${failed.join('\n  ')}`);
+  if (partial.length) console.log(`\nsampled, not enumerated (absence here will NOT close a row):\n  ${partial.join(', ')}`);
 }
 main();
