@@ -44,6 +44,7 @@ const T = new Function(
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
   + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
+  + 'reflagJob,storedFlagList,'
   + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
 
@@ -358,6 +359,65 @@ const spanRate = r3(withSpan / flagsTotal);
     } else if (!unexpected) {
       ok(`FLAG_P ${T.FLAG_P} on ${REC.model}: ${jtp} right, ${jfp} extra (fit/rare only), ${jfn} missed (cred only)`);
     }
+  }
+}
+
+// ── 10. re-deciding a row the cut has moved under ────────────────────────
+/* reflagJob re-thresholds ai_flags from the probabilities already in
+   ai_judgment. It rewrites rows in an account, so the properties that matter
+   are the destructive ones: it must not invent a flag, must not lose the fact
+   or the quote on a flag it keeps, must leave an unjudged row alone, and must
+   be safe to run twice. Checked against the recorded judgments rather than a
+   hand-made row, so the shape under test is the shape Jev really returns. */
+{
+  const P = path.join(__dirname, 'eval', 'judgments.json');
+  if (fs.existsSync(P)) {
+    const REC = JSON.parse(fs.readFileSync(P, 'utf8'));
+    let bad = 0;
+    const no = (cond, msg) => { if (!cond) { fail(msg); bad++; } };
+
+    Object.keys(REC.judgments).forEach(id => {
+      const jv = REC.judgments[id];
+      // The row as it would have been written at the old cut of 0.5, with a
+      // fact and a quote on every flag so their loss would show.
+      const old = jv.flags.filter(f => f.probability >= 0.5)
+        .map(f => ({ code: f.code, fact: `fact for ${f.code}`, span: `span for ${f.code}` }));
+      const row = { ai_judgment: JSON.stringify(jv), ai_flags: JSON.stringify(old) };
+
+      T.reflagJob(row);
+      const now = T.storedFlagList(row);
+      const codes = now.map(f => f.code);
+      const want = jv.flags.filter(f => f.probability >= T.FLAG_P).map(f => f.code);
+
+      no(codes.slice().sort().join(',') === want.slice().sort().join(','),
+        `${id}: re-flagged to [${codes}], expected the codes above FLAG_P ${T.FLAG_P} [${want}]`);
+      // Raising a cut can only remove, never add. Worth asserting separately:
+      // it is the property that makes this safe to run over real rows.
+      no(codes.every(c => old.some(o => o.code === c)), `${id}: re-flagging introduced a flag the row did not have`);
+      no(now.every(f => f.fact === `fact for ${f.code}` && f.span === `span for ${f.code}`),
+        `${id}: re-flagging lost the fact or the quote on a flag it kept`);
+      // Twice is once: the second pass has nothing left to change.
+      no(T.reflagJob(row) === false, `${id}: re-flagging is not idempotent`);
+    });
+
+    // An unjudged row is DeepSeek's alone, and FLAG_P has no authority there.
+    const ds = { ai_flags: JSON.stringify([{ code: 'comp', fact: 'thousands apply', span: 'thousands apply' }]) };
+    const before = ds.ai_flags;
+    no(T.reflagJob(ds) === false && ds.ai_flags === before, 'a row with no judgement was rewritten');
+
+    /* A code the judgement has no answer for -- what a question dropped from
+       judge.ts leaves behind. Keeping it is the cautious reading: the flag was
+       true when something asked, and nothing has said otherwise. */
+    const gone = {
+      ai_judgment: JSON.stringify({ flags: [{ code: 'loc', probability: 0.96 }] }),
+      ai_flags: JSON.stringify([{ code: 'loc', fact: 'Berlin', span: 'Berlin' },
+        { code: 'shape', fact: 'front-end only', span: 'front-end only' }]),
+    };
+    T.reflagJob(gone);
+    no(T.storedFlagList(gone).some(f => f.code === 'shape'),
+      'a flag the judgement no longer answers was silently deleted');
+
+    if (!bad) ok(`reflagJob: re-thresholds ${Object.keys(REC.judgments).length} recorded rows at FLAG_P ${T.FLAG_P} without inventing a flag, losing a fact, touching an unjudged row, or changing anything on a second pass`);
   }
 }
 
