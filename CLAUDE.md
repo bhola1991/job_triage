@@ -439,7 +439,11 @@ scripts/selfcheck-rows.js           Job/profile <-> typed row round trip.
 scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST stand-in.
 scripts/selfcheck-boards.js         Board-source check.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
+scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.
+scripts/tune-flag-thresholds.js     FLAG_P sweep per code, offline against judgments.json. A measurement, not a gate.
 scripts/eval/                       Recorded model answers + the committed baseline.
+scripts/eval/cases.json             31 labelled postings. `expect.flags` = what to RAISE (DeepSeek's contract); `expect.codes` = what is TRUE per code, omitting what a posting does not determine. Read its _note before labelling.
+scripts/eval/judgments.json         One raw Jev judgement per case, committed so the threshold sweep runs offline.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
 scripts/pipeline-map.js             Data-pipeline map: resolves code anchors, writes Mermaid notes to an Obsidian vault.
