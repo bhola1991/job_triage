@@ -479,7 +479,11 @@ create table if not exists public.job_checks (
 );
 
 create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
-create index if not exists job_checks_open        on public.job_checks (closed_on) where closed_on is null;
+-- No index on (closed_on) where closed_on is null. There was one; it took
+-- 3,360 kB and pg_stat_user_indexes recorded ZERO scans over the life of the
+-- table, because nothing looks a posting up by "still open" -- search_index
+-- reaches job_checks through the primary key on the join, and prune_index wants
+-- the opposite predicate, which job_checks_closed_src already covers.
 create index if not exists job_checks_closed_src  on public.job_checks (closed_src) where closed_on is not null;
 
 -- Readable by every signed-in user, writable by nobody through the API.
@@ -551,7 +555,13 @@ create table if not exists public.job_index (
   ) stored
 );
 
-create index if not exists job_index_dedup   on public.job_index (dedup_key);
+-- No index on (dedup_key), deliberately, and this one is worth explaining
+-- because the column is load-bearing while the index was not. search_index
+-- collapses duplicates with `distinct on (dedup_key)` over a CTE that has
+-- ALREADY been cut to a few hundred candidates, and sorts that in memory; no
+-- query anywhere looks a row up BY dedup_key, and there is not one WHERE clause
+-- on it in this file, the edge function or scripts/index/. It cost 39 MB -- 7%
+-- of a 500 MB tier -- for one recorded scan in the table's lifetime.
 create index if not exists job_index_source  on public.job_index (source, posted desc nulls last);
 create index if not exists job_index_posted  on public.job_index (posted desc nulls last) where tier = 'full';
 
