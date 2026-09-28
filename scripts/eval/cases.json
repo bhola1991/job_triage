@@ -1,5 +1,5 @@
 {
-  "_note": "Labelled set for scripts/eval-matcher.js. One profile, ten postings, each with the flags a correct matcher should raise and the band its two scores should land in. `recorded` is a model answer captured once and committed, so the offline run is deterministic and measures THIS repository's flag handling, span finding and ranking rather than today's weather at DeepSeek. Re-record with --live when the prompt changes.\n\nEvery case carries `set`. The holdout is never tuned on and is the only honest input to a final comparison; the tune set is where work happens. The two holdout cases were chosen mechanically, not by taste: they are the only pair that can be removed while leaving all ten flag codes still represented in tune (shape survives in shape-frontend, sen_hi and cred in sen-hi-principal). With n=10 a holdout of 2 quantises every metric to halves, so treat it as a smoke test that the tune set has not been overfitted -- not as a measurement. It becomes one when the set grows.",
+  "_note": "Labelled set for scripts/eval-matcher.js and scripts/tune-flag-thresholds.js. One profile, thirty postings. `recorded` is a DeepSeek answer captured once and committed, so the offline run is deterministic and measures THIS repository's flag handling, span finding and ranking rather than today's weather at DeepSeek. Re-record with scripts/record-eval.ts --deepseek when the prompt changes.\n\nTWO LABEL FIELDS, AND THEY ANSWER DIFFERENT QUESTIONS.\n\n`expect.flags` is what a correct matcher should RAISE, and it is DeepSeek's contract: the scoring prompt tells it to raise a code only when it can point at something in the posting, so a code that is true but unquotable does not belong here. eval-matcher.js scores precision and recall against this field and treats anything outside it as a false positive.\n\n`expect.codes` is what is TRUE of the posting, one entry per flag code, labelled against the exact question wording in supabase/functions/_shared/judge.ts. It exists because Jev is asked all ten questions on every posting and must answer each one, while `expect.flags` only ever listed the one or two codes a case was built to exercise. Reading an absent code as false is what made a flag-threshold sweep meaningless: `open` scored 0.17 precision against flags on 2026-09-28 almost entirely because nine cases that never mentioned openness were counted as negatives.\n\nSo a code is present here only when the posting DETERMINES it. A code the posting leaves genuinely open is OMITTED, and the sweep skips it rather than counting it either way. The labelling rules, which are what make an omission auditable:\n  comp  true on a signal of unusual applicant volume, a mass-market employer, or explicit selectivity language (a firm that says it recruits only from a narrow set of institutions is describing a competitive process, not a quiet one). An obscure employer with no such language is a FALSE rather than an omission: obscurity is evidence against unusual competition, not an absence of evidence. Omitted only where the posting does not identify the employer at all.\n  open  true only on explicit text welcoming non-traditional backgrounds (no degree needed, self-taught, blind process); false where the posting demands conventional pedigree or a degree; omitted on silence.\n  rare  true only where the posting asks for BOTH payments/fintech domain depth AND hands-on platform or infrastructure ownership, since that pair is the profile's unusual_combination; false otherwise.\n  fit   judged on the work alone, can-do and targeting, independent of whether the candidate is eligible. A role ruled out by location can still be a true `fit` here; it is `loc` that carries the disqualification.\n  loc   carries geographic ineligibility, including work-authorisation gates. `cred` is for credentials, not geography.\n  cred  a formal credential the candidate lacks (a degree, a certification, a clearance). An experience or skill bar is NOT a credential, however hard it is to clear.\n  thin  true when the decisive facts are absent, regardless of length: thin-culture-copy is four sentences and true, thin-one-line-stack is one sentence and false.\n\nWhere the two fields disagree on purpose, the case carries `expect.codes_note` saying why.\n\nEvery case carries `set`. The holdout is never tuned on and is the only honest input to a final comparison; the tune set is where work happens. Holdout membership is checked by tune-flag-thresholds.js, which refuses to report a threshold for a code whose tune set does not hold both labels.",
   "profile": {
     "name": "Alex Rao",
     "location": "Bengaluru, India",
@@ -75,7 +75,18 @@
         "reach": [
           0,
           45
-        ]
+        ],
+        "codes": {
+          "loc": true,
+          "fit": true,
+          "rare": true,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 18,
@@ -88,82 +99,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "low": 0.01,
-          "high": 0.4,
-          "medium": 0.59
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.87
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.07
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.66
-          },
-          {
-            "code": "cred",
-            "probability": 0.16
-          },
-          {
-            "code": "shape",
-            "probability": 0.06
-          },
-          {
-            "code": "loc",
-            "probability": 0.95
-          },
-          {
-            "code": "thin",
-            "probability": 0.05
-          },
-          {
-            "code": "comp",
-            "probability": 0.33
-          },
-          {
-            "code": "open",
-            "probability": 0.58
-          },
-          {
-            "code": "rare",
-            "probability": 0.79
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.72,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.28,
-              "4": 0.72
-            },
-            "confidence": 0.76
-          },
-          "fit_targeting": {
-            "score": 3.62,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.37,
-              "4": 0.63
-            },
-            "confidence": 0.69
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "shape-frontend",
@@ -184,7 +120,18 @@
         "reach": [
           0,
           60
-        ]
+        ],
+        "codes": {
+          "shape": true,
+          "fit": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 8,
@@ -197,82 +144,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "low": 0.01,
-          "medium": 0.84,
-          "high": 0.15
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.03
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.09
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.21
-          },
-          {
-            "code": "cred",
-            "probability": 0.13
-          },
-          {
-            "code": "shape",
-            "probability": 0.97
-          },
-          {
-            "code": "loc",
-            "probability": 0.04
-          },
-          {
-            "code": "thin",
-            "probability": 0.04
-          },
-          {
-            "code": "comp",
-            "probability": 0.35
-          },
-          {
-            "code": "open",
-            "probability": 0.34
-          },
-          {
-            "code": "rare",
-            "probability": 0.06
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 0.03,
-            "probabilities": {
-              "0": 0.97,
-              "1": 0.03,
-              "2": 0,
-              "3": 0,
-              "4": 0
-            },
-            "confidence": 0.98
-          },
-          "fit_targeting": {
-            "score": 0,
-            "probabilities": {
-              "0": 1,
-              "1": 0,
-              "2": 0,
-              "3": 0,
-              "4": 0
-            },
-            "confidence": 1
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "shape-management",
@@ -294,7 +166,18 @@
         "reach": [
           0,
           40
-        ]
+        ],
+        "codes": {
+          "shape": true,
+          "sen_hi": true,
+          "fit": false,
+          "loc": false,
+          "sen_lo": false,
+          "cred": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 15,
@@ -311,82 +194,7 @@
           }
         ]
       },
-      "set": "holdout",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "medium": 0.85,
-          "high": 0.14,
-          "low": 0.01
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.08
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.77
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.21
-          },
-          {
-            "code": "cred",
-            "probability": 0.32
-          },
-          {
-            "code": "shape",
-            "probability": 0.97
-          },
-          {
-            "code": "loc",
-            "probability": 0.08
-          },
-          {
-            "code": "thin",
-            "probability": 0.09
-          },
-          {
-            "code": "comp",
-            "probability": 0.36
-          },
-          {
-            "code": "open",
-            "probability": 0.29
-          },
-          {
-            "code": "rare",
-            "probability": 0.41
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 1.26,
-            "probabilities": {
-              "0": 0.05,
-              "1": 0.68,
-              "2": 0.24,
-              "3": 0.02,
-              "4": 0.01
-            },
-            "confidence": 0.7
-          },
-          "fit_targeting": {
-            "score": 0,
-            "probabilities": {
-              "0": 1,
-              "1": 0,
-              "2": 0,
-              "3": 0,
-              "4": 0
-            },
-            "confidence": 1
-          }
-        }
-      }
+      "set": "holdout"
     },
     {
       "id": "cred-degree",
@@ -407,7 +215,19 @@
         "reach": [
           0,
           45
-        ]
+        ],
+        "codes": {
+          "cred": true,
+          "fit": true,
+          "open": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 82,
@@ -420,82 +240,7 @@
           }
         ]
       },
-      "set": "holdout",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "high": 0.13,
-          "low": 0.01,
-          "medium": 0.86
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.8
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.09
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.71
-          },
-          {
-            "code": "cred",
-            "probability": 0.96
-          },
-          {
-            "code": "shape",
-            "probability": 0.08
-          },
-          {
-            "code": "loc",
-            "probability": 0.04
-          },
-          {
-            "code": "thin",
-            "probability": 0.06
-          },
-          {
-            "code": "comp",
-            "probability": 0.34
-          },
-          {
-            "code": "open",
-            "probability": 0.14
-          },
-          {
-            "code": "rare",
-            "probability": 0.67
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.22,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0.05,
-              "3": 0.67,
-              "4": 0.27
-            },
-            "confidence": 0.73
-          },
-          "fit_targeting": {
-            "score": 3.19,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0.03,
-              "3": 0.74,
-              "4": 0.23
-            },
-            "confidence": 0.77
-          }
-        }
-      }
+      "set": "holdout"
     },
     {
       "id": "sen-lo-junior",
@@ -516,7 +261,19 @@
         "reach": [
           40,
           100
-        ]
+        ],
+        "codes": {
+          "sen_lo": true,
+          "open": true,
+          "fit": false,
+          "loc": false,
+          "sen_hi": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 40,
@@ -529,82 +286,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "medium": 0.86,
-          "high": 0.12,
-          "low": 0.02
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.27
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.04
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.97
-          },
-          {
-            "code": "cred",
-            "probability": 0.13
-          },
-          {
-            "code": "shape",
-            "probability": 0.1
-          },
-          {
-            "code": "loc",
-            "probability": 0.05
-          },
-          {
-            "code": "thin",
-            "probability": 0.11
-          },
-          {
-            "code": "comp",
-            "probability": 0.42
-          },
-          {
-            "code": "open",
-            "probability": 0.7
-          },
-          {
-            "code": "rare",
-            "probability": 0.23
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.51,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.49,
-              "4": 0.51
-            },
-            "confidence": 0.59
-          },
-          "fit_targeting": {
-            "score": 1.66,
-            "probabilities": {
-              "0": 0.01,
-              "1": 0.48,
-              "2": 0.36,
-              "3": 0.15,
-              "4": 0
-            },
-            "confidence": 0.43
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "thin-title-only",
@@ -625,7 +307,10 @@
         "reach": [
           0,
           70
-        ]
+        ],
+        "codes": {
+          "thin": true
+        }
       },
       "recorded": {
         "s": 45,
@@ -638,82 +323,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "low",
-        "confidence_probabilities": {
-          "high": 0,
-          "medium": 0.05,
-          "low": 0.95
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.73
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.16
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.48
-          },
-          {
-            "code": "cred",
-            "probability": 0.18
-          },
-          {
-            "code": "shape",
-            "probability": 0.09
-          },
-          {
-            "code": "loc",
-            "probability": 0.24
-          },
-          {
-            "code": "thin",
-            "probability": 0.96
-          },
-          {
-            "code": "comp",
-            "probability": 0.36
-          },
-          {
-            "code": "open",
-            "probability": 0.63
-          },
-          {
-            "code": "rare",
-            "probability": 0.65
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.54,
-            "probabilities": {
-              "0": 0.02,
-              "1": 0.01,
-              "2": 0.01,
-              "3": 0.36,
-              "4": 0.6
-            },
-            "confidence": 0.61
-          },
-          "fit_targeting": {
-            "score": 2.95,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0.07,
-              "3": 0.9,
-              "4": 0.03
-            },
-            "confidence": 0.92
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "comp-famous",
@@ -735,7 +345,18 @@
         "reach": [
           0,
           45
-        ]
+        ],
+        "codes": {
+          "comp": true,
+          "fit": true,
+          "rare": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false
+        }
       },
       "recorded": {
         "s": 90,
@@ -752,82 +373,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "high": 0.04,
-          "medium": 0.95,
-          "low": 0.01
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.93
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.15
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.47
-          },
-          {
-            "code": "cred",
-            "probability": 0.13
-          },
-          {
-            "code": "shape",
-            "probability": 0.07
-          },
-          {
-            "code": "loc",
-            "probability": 0.04
-          },
-          {
-            "code": "thin",
-            "probability": 0.19
-          },
-          {
-            "code": "comp",
-            "probability": 0.89
-          },
-          {
-            "code": "open",
-            "probability": 0.66
-          },
-          {
-            "code": "rare",
-            "probability": 0.86
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.8,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.2,
-              "4": 0.8
-            },
-            "confidence": 0.83
-          },
-          "fit_targeting": {
-            "score": 3.72,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.28,
-              "4": 0.72
-            },
-            "confidence": 0.76
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "open-nontraditional",
@@ -849,7 +395,19 @@
         "reach": [
           55,
           100
-        ]
+        ],
+        "codes": {
+          "open": true,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 88,
@@ -866,82 +424,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "medium": 0.9,
-          "low": 0.01,
-          "high": 0.09
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.89
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.14
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.5
-          },
-          {
-            "code": "cred",
-            "probability": 0.06
-          },
-          {
-            "code": "shape",
-            "probability": 0.06
-          },
-          {
-            "code": "loc",
-            "probability": 0.04
-          },
-          {
-            "code": "thin",
-            "probability": 0.22
-          },
-          {
-            "code": "comp",
-            "probability": 0.31
-          },
-          {
-            "code": "open",
-            "probability": 0.92
-          },
-          {
-            "code": "rare",
-            "probability": 0.79
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.05,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0.05,
-              "3": 0.85,
-              "4": 0.1
-            },
-            "confidence": 0.88
-          },
-          "fit_targeting": {
-            "score": 3.3,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.69,
-              "4": 0.31
-            },
-            "confidence": 0.74
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "rare-combination",
@@ -963,7 +446,18 @@
         "reach": [
           45,
           100
-        ]
+        ],
+        "codes": {
+          "rare": true,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        }
       },
       "recorded": {
         "s": 93,
@@ -980,82 +474,7 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "high": 0.03,
-          "medium": 0.95,
-          "low": 0.02
-        },
-        "flags": [
-          {
-            "code": "fit",
-            "probability": 0.91
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.49
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.21
-          },
-          {
-            "code": "cred",
-            "probability": 0.16
-          },
-          {
-            "code": "shape",
-            "probability": 0.06
-          },
-          {
-            "code": "loc",
-            "probability": 0.1
-          },
-          {
-            "code": "thin",
-            "probability": 0.21
-          },
-          {
-            "code": "comp",
-            "probability": 0.44
-          },
-          {
-            "code": "open",
-            "probability": 0.7
-          },
-          {
-            "code": "rare",
-            "probability": 0.9
-          }
-        ],
-        "scores": {
-          "fit_capability": {
-            "score": 3.6,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0.01,
-              "3": 0.38,
-              "4": 0.61
-            },
-            "confidence": 0.67
-          },
-          "fit_targeting": {
-            "score": 3.42,
-            "probabilities": {
-              "0": 0,
-              "1": 0,
-              "2": 0,
-              "3": 0.58,
-              "4": 0.42
-            },
-            "confidence": 0.64
-          }
-        }
-      }
+      "set": "tune"
     },
     {
       "id": "sen-hi-principal",
@@ -1078,7 +497,20 @@
         "reach": [
           0,
           35
-        ]
+        ],
+        "codes": {
+          "sen_hi": true,
+          "cred": false,
+          "open": false,
+          "fit": false,
+          "loc": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "codes_note": "codes.cred is false while expect.flags carries cred: a track record operating Kubernetes at very large scale is an experience bar, not a hard credential. The flag list records what DeepSeek raises and is left alone; the code records what judge.ts actually asks."
       },
       "recorded": {
         "s": 55,
@@ -1095,83 +527,1010 @@
           }
         ]
       },
-      "set": "tune",
-      "recorded_jev": {
-        "model": "jev-1.13.0",
-        "confidence": "medium",
-        "confidence_probabilities": {
-          "high": 0.1,
-          "medium": 0.89,
-          "low": 0.01
-        },
+      "set": "tune"
+    },
+    {
+      "id": "loc-remote-us-only",
+      "job": {
+        "title": "Senior Backend Engineer, Payments",
+        "company": "Northlane",
+        "location": "Remote (United States)",
+        "description": "Design and operate the Go services behind our card issuing platform, backed by Postgres and Kafka. You will own reliability for the payment path end to end, including the Terraform that deploys it. This role is remote within the United States only and requires existing US work authorisation. Seven or more years of backend experience."
+      },
+      "expect": {
         "flags": [
+          "loc"
+        ],
+        "codes": {
+          "loc": true,
+          "fit": true,
+          "rare": true,
+          "cred": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          40
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 15,
+        "re": 3,
+        "c": "h",
+        "f": [
+          {
+            "code": "loc",
+            "fact": "Remote within the United States only"
+          }
+        ]
+      }
+    },
+    {
+      "id": "loc-hybrid-london",
+      "job": {
+        "title": "Backend Engineer, Ledger",
+        "company": "Ravelin Pay",
+        "location": "London (hybrid, three days on-site)",
+        "description": "Join the team building our double-entry ledger in Go on Postgres. You will work on reconciliation, settlement timing and the reporting that sits on top. This is a hybrid role requiring three days a week in our London office. We are not able to sponsor visas or support relocation."
+      },
+      "expect": {
+        "flags": [
+          "loc"
+        ],
+        "codes": {
+          "loc": true,
+          "fit": true,
+          "rare": false,
+          "cred": false,
+          "sen_hi": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          40
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "set": "holdout",
+      "recorded": {
+        "s": 15,
+        "re": 4,
+        "c": "h",
+        "f": [
+          {
+            "code": "loc",
+            "fact": "London office; no visa sponsorship or relocation support"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cred-clearance",
+      "job": {
+        "title": "Backend Engineer, Government Payments",
+        "company": "Civica Rails",
+        "location": "Remote (India)",
+        "description": "Build Go services that move funds for public sector disbursement programmes, on Postgres and Kafka. Candidates must hold an active national security clearance before starting and we cannot sponsor the vetting process. Five years of backend experience required."
+      },
+      "expect": {
+        "flags": [
+          "cred",
+          "fit"
+        ],
+        "codes": {
+          "cred": true,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          40,
+          90
+        ],
+        "reach": [
+          0,
+          40
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 88,
+        "re": 30,
+        "c": "h",
+        "f": [
           {
             "code": "fit",
-            "probability": 0.08
-          },
-          {
-            "code": "sen_hi",
-            "probability": 0.96
-          },
-          {
-            "code": "sen_lo",
-            "probability": 0.03
+            "fact": "Build Go services that move funds on Postgres and Kafka"
           },
           {
             "code": "cred",
-            "probability": 0.3
+            "fact": "active national security clearance before starting; cannot sponsor vetting"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cred-cissp",
+      "job": {
+        "title": "Payments Platform Engineer, Security",
+        "company": "Vaultline",
+        "location": "Remote (India)",
+        "description": "Own the Go services that tokenise card data and the Postgres schemas behind them, working closely with our compliance team. A current CISSP or equivalent security certification is required for this role. You will also run the infrastructure in Terraform and AWS."
+      },
+      "expect": {
+        "flags": [
+          "cred",
+          "fit"
+        ],
+        "codes": {
+          "cred": true,
+          "fit": true,
+          "rare": true,
+          "open": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          45,
+          95
+        ],
+        "reach": [
+          0,
+          45
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 70,
+        "re": 25,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Go services that tokenise card data and Postgres schemas"
           },
+          {
+            "code": "cred",
+            "fact": "current CISSP or equivalent security certification is required"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sen-hi-director",
+      "job": {
+        "title": "Director of Engineering, Payments",
+        "company": "Kite Financial",
+        "location": "Remote (India)",
+        "description": "Lead three teams building our payments platform, owning roadmap, budget and headcount. You will hire, run performance cycles and represent engineering to the executive team. Twelve or more years of experience including at least four leading managers of managers."
+      },
+      "expect": {
+        "flags": [
+          "sen_hi",
+          "shape"
+        ],
+        "codes": {
+          "sen_hi": true,
+          "shape": true,
+          "fit": false,
+          "cred": false,
+          "loc": false,
+          "sen_lo": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          30
+        ],
+        "reach": [
+          0,
+          35
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 5,
+        "re": 5,
+        "c": "h",
+        "f": [
           {
             "code": "shape",
-            "probability": 0.43
+            "fact": "Lead three teams, hire, run performance cycles"
           },
           {
-            "code": "loc",
-            "probability": 0.05
-          },
+            "code": "sen_hi",
+            "fact": "Twelve or more years including four leading managers of managers"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sen-hi-staff-architect",
+      "job": {
+        "title": "Staff Architect, Core Banking",
+        "company": "Meridian Core",
+        "location": "Remote (India)",
+        "description": "Set the technical direction for our core banking platform across eight teams. You will define standards, arbitrate cross-team design disputes and own the multi-year architecture roadmap. We are looking for fifteen or more years of experience, including prior staff or principal scope at a large bank."
+      },
+      "expect": {
+        "flags": [
+          "sen_hi"
+        ],
+        "codes": {
+          "sen_hi": true,
+          "open": false,
+          "fit": false,
+          "cred": false,
+          "loc": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          45
+        ],
+        "reach": [
+          0,
+          35
+        ]
+      },
+      "set": "holdout",
+      "recorded": {
+        "s": 35,
+        "re": 10,
+        "c": "h",
+        "f": [
           {
-            "code": "thin",
-            "probability": 0.07
-          },
+            "code": "sen_hi",
+            "fact": "fifteen or more years, prior staff/principal scope at large bank"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sen-lo-grad",
+      "job": {
+        "title": "Graduate Backend Engineer",
+        "company": "Tilt",
+        "location": "Remote (India)",
+        "description": "A first engineering role for recent graduates. You will write Go services with a mentor pairing alongside you for the first six months. No prior industry experience is expected and we hire on aptitude rather than track record."
+      },
+      "expect": {
+        "flags": [
+          "sen_lo",
+          "open"
+        ],
+        "codes": {
+          "sen_lo": true,
+          "open": true,
+          "fit": false,
+          "cred": false,
+          "loc": false,
+          "sen_hi": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          35
+        ],
+        "reach": [
+          0,
+          60
+        ],
+        "band_note": "This band contradicts sen-lo-junior's [40,100] and the contradiction is deliberate rather than overlooked. The two postings are materially the same -- a remote-India graduate role stating that no prior experience is required -- and DeepSeek scored reachability 5 here against 70 there. Both cannot be right. Low is the defensible answer, since an over-levelled applicant is screened out rather than hired, which makes sen-lo-junior's band the one to revisit. It is left alone here because relabelling a committed case to match a later opinion is how a baseline stops meaning anything."
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 25,
+        "re": 5,
+        "c": "h",
+        "f": [
           {
-            "code": "comp",
-            "probability": 0.34
+            "code": "sen_lo",
+            "fact": "A first engineering role for recent graduates"
           },
           {
             "code": "open",
-            "probability": 0.23
+            "fact": "we hire on aptitude rather than track record"
+          }
+        ]
+      }
+    },
+    {
+      "id": "sen-lo-mid",
+      "job": {
+        "title": "Backend Engineer II",
+        "company": "Parcelo",
+        "location": "Remote (India)",
+        "description": "Write and maintain Go services for our logistics API on Postgres. You will take well-scoped tickets from a senior engineer and grow into owning a service. Two to four years of backend experience is the sweet spot for this role."
+      },
+      "expect": {
+        "flags": [
+          "sen_lo"
+        ],
+        "codes": {
+          "sen_lo": true,
+          "fit": false,
+          "cred": false,
+          "loc": false,
+          "sen_hi": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          10,
+          50
+        ],
+        "reach": [
+          0,
+          60
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 45,
+        "re": 32,
+        "c": "h",
+        "f": [
+          {
+            "code": "sen_lo",
+            "fact": "Two to four years of backend experience sweet spot"
+          }
+        ]
+      }
+    },
+    {
+      "id": "shape-ml-research",
+      "job": {
+        "title": "Machine Learning Research Engineer",
+        "company": "Nuvo Labs",
+        "location": "Remote (India)",
+        "description": "Train and evaluate fraud detection models on transaction data, publishing internally and at conferences. You will work in PyTorch and own the experiment pipeline end to end. A strong grounding in statistics and prior ML research output is expected."
+      },
+      "expect": {
+        "flags": [
+          "shape"
+        ],
+        "codes": {
+          "shape": true,
+          "open": false,
+          "fit": false,
+          "cred": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          30
+        ],
+        "reach": [
+          0,
+          50
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 5,
+        "re": 5,
+        "c": "h",
+        "f": [
+          {
+            "code": "shape",
+            "fact": "Train and evaluate fraud detection models in PyTorch"
+          }
+        ]
+      }
+    },
+    {
+      "id": "shape-data-scientist",
+      "job": {
+        "title": "Data Scientist, Risk",
+        "company": "Halden",
+        "location": "Bengaluru, India",
+        "description": "Build risk models for our lending book using Python, SQL and scikit-learn. You will present findings to the credit committee and iterate on feature design with analysts. An advanced degree in a quantitative field is required."
+      },
+      "expect": {
+        "flags": [
+          "shape",
+          "cred"
+        ],
+        "codes": {
+          "shape": true,
+          "cred": true,
+          "open": false,
+          "fit": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          25
+        ],
+        "reach": [
+          0,
+          40
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 5,
+        "re": 4,
+        "c": "h",
+        "f": [
+          {
+            "code": "shape",
+            "fact": "Build risk models using Python, SQL and scikit-learn"
+          },
+          {
+            "code": "cred",
+            "fact": "An advanced degree in a quantitative field is required"
+          }
+        ]
+      }
+    },
+    {
+      "id": "thin-culture-copy",
+      "job": {
+        "title": "Senior Engineer",
+        "company": "Brightloom",
+        "location": "Remote (India)",
+        "description": "We are a mission-driven team on a journey to reimagine how people connect with what matters. Our values are curiosity, ownership and radical candour, and we live them every day. We offer flexible hours, a learning budget and an annual offsite. You will join a group of people who care deeply about craft and about each other."
+      },
+      "expect": {
+        "flags": [
+          "thin"
+        ],
+        "codes": {
+          "thin": true,
+          "loc": false,
+          "comp": false
+        },
+        "fit": [
+          0,
+          60
+        ],
+        "reach": [
+          0,
+          70
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 30,
+        "re": 40,
+        "c": "m",
+        "f": [
+          {
+            "code": "thin",
+            "fact": "values, flexible hours, learning budget, annual offsite; no technical details"
+          }
+        ]
+      }
+    },
+    {
+      "id": "thin-one-line-stack",
+      "job": {
+        "title": "Backend Engineer, Go and Postgres",
+        "company": "Ledgerly",
+        "location": "Remote (India)",
+        "description": "Go and Postgres, payments ledger, senior level, fully remote in India."
+      },
+      "expect": {
+        "flags": [
+          "fit"
+        ],
+        "codes": {
+          "thin": false,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          55,
+          100
+        ],
+        "reach": [
+          35,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 93,
+        "re": 78,
+        "c": "m",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Go and Postgres, payments ledger, senior level"
           },
           {
             "code": "rare",
-            "probability": 0.19
+            "fact": "payments ledger plus Go and Postgres senior level"
           }
+        ]
+      }
+    },
+    {
+      "id": "comp-bigtech",
+      "job": {
+        "title": "Senior Software Engineer, Payments",
+        "company": "Google",
+        "location": "Bengaluru, India",
+        "description": "Work on the payments infrastructure behind Play billing, in Go on globally distributed systems. You will design for correctness at very high transaction volume and own the services end to end. This team receives a high volume of applications and the interview process includes multiple rounds of algorithmic screening."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "comp"
         ],
-        "scores": {
-          "fit_capability": {
-            "score": 1.08,
-            "probabilities": {
-              "0": 0.02,
-              "1": 0.89,
-              "2": 0.09,
-              "3": 0,
-              "4": 0
-            },
-            "confidence": 0.91
+        "codes": {
+          "comp": true,
+          "fit": true,
+          "rare": true,
+          "open": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false
+        },
+        "fit": [
+          55,
+          100
+        ],
+        "reach": [
+          0,
+          40
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 90,
+        "re": 10,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "payments infrastructure behind Play billing, in Go"
           },
-          "fit_targeting": {
-            "score": 1.03,
-            "probabilities": {
-              "0": 0.14,
-              "1": 0.7,
-              "2": 0.14,
-              "3": 0.02,
-              "4": 0
-            },
-            "confidence": 0.73
+          {
+            "code": "comp",
+            "fact": "high volume of applications and multiple rounds of algorithmic screening"
           }
-        }
+        ]
+      }
+    },
+    {
+      "id": "comp-scaleup-brand",
+      "job": {
+        "title": "Founding Backend Engineer",
+        "company": "Aperture Spend",
+        "location": "Remote (India)",
+        "description": "Join a widely followed fintech as an early backend hire on our spend management platform, written in Go on Postgres. You will own services end to end and shape the platform as we scale. We receive several thousand applications a month and hire a very small number of engineers."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "comp"
+        ],
+        "codes": {
+          "comp": true,
+          "fit": true,
+          "rare": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false
+        },
+        "fit": [
+          55,
+          100
+        ],
+        "reach": [
+          0,
+          40
+        ]
+      },
+      "set": "holdout",
+      "recorded": {
+        "s": 84,
+        "re": 18,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Go on Postgres, own services end to end"
+          },
+          {
+            "code": "comp",
+            "fact": "several thousand applications a month, hire a very small number"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-no-degree",
+      "job": {
+        "title": "Backend Engineer, Payments",
+        "company": "Settle Loop",
+        "location": "Remote (India)",
+        "description": "Build and run the Go services that move money for our merchants, on Postgres and Kafka. We do not require a degree and we do not screen on where you worked before; we hire on a paid work sample. Self-taught and career-changing engineers are welcome and well represented on the team."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "open"
+        ],
+        "codes": {
+          "open": true,
+          "fit": true,
+          "rare": true,
+          "cred": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          60,
+          100
+        ],
+        "reach": [
+          50,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 89,
+        "re": 85,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Build and run the Go services that move money"
+          },
+          {
+            "code": "open",
+            "fact": "Self-taught and career-changing engineers are welcome"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-blind-process",
+      "job": {
+        "title": "Platform Engineer",
+        "company": "Northbound Tools",
+        "location": "Remote (India)",
+        "description": "Own the Terraform and AWS footprint behind our developer platform, and the Go tooling engineers use to ship. We run an open application process with no CV screen: everyone completes the same take-home and we interview blind. Bootcamp graduates and self-taught engineers have joined us this way."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "open"
+        ],
+        "codes": {
+          "open": true,
+          "fit": true,
+          "rare": false,
+          "cred": false,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          55,
+          100
+        ],
+        "reach": [
+          50,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 62,
+        "re": 80,
+        "c": "h",
+        "f": [
+          {
+            "code": "open",
+            "fact": "open application process with no CV screen"
+          }
+        ]
+      }
+    },
+    {
+      "id": "open-pedigree-only",
+      "job": {
+        "title": "Senior Backend Engineer",
+        "company": "Aureus Capital",
+        "location": "Remote (India)",
+        "description": "Build low-latency Go services for our trading infrastructure on Postgres. We recruit exclusively from top-tier engineering schools and tier-one investment banks, and a computer science degree from a recognised institution is mandatory. Nine or more years of experience required."
+      },
+      "expect": {
+        "flags": [
+          "cred",
+          "comp"
+        ],
+        "codes": {
+          "open": false,
+          "cred": true,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": true
+        },
+        "fit": [
+          40,
+          90
+        ],
+        "reach": [
+          0,
+          35
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 70,
+        "re": 6,
+        "c": "h",
+        "f": [
+          {
+            "code": "cred",
+            "fact": "computer science degree from a recognised institution is mandatory"
+          },
+          {
+            "code": "comp",
+            "fact": "recruit exclusively from top-tier engineering schools and tier-one investment banks"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rare-payments-platform",
+      "job": {
+        "title": "Senior Engineer, Payment Infrastructure",
+        "company": "Corvus Pay",
+        "location": "Remote (India)",
+        "description": "We need someone who has both built payment rails and run the platform underneath them. You will own our Go settlement services on Postgres and the Terraform that deploys them, and you will be the person who understands reconciliation end to end. This combination is rare and it is exactly what the role needs."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "rare"
+        ],
+        "codes": {
+          "rare": true,
+          "fit": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          70,
+          100
+        ],
+        "reach": [
+          40,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 96,
+        "re": 80,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "own our Go settlement services on Postgres"
+          },
+          {
+            "code": "rare",
+            "fact": "built payment rails and run the platform underneath them"
+          }
+        ]
+      }
+    },
+    {
+      "id": "rare-plain-crud",
+      "job": {
+        "title": "Backend Engineer, Internal Tools",
+        "company": "Grendel Systems",
+        "location": "Remote (India)",
+        "description": "Maintain the Go services behind our internal admin tools on Postgres. The work is steady CRUD, small feature requests from operations, and occasional bug fixes. There is no payments work and no infrastructure ownership in this role."
+      },
+      "expect": {
+        "flags": [],
+        "codes": {
+          "rare": false,
+          "fit": false,
+          "loc": false,
+          "sen_hi": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          10,
+          55
+        ],
+        "reach": [
+          35,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 46,
+        "re": 65,
+        "c": "h",
+        "f": [
+          {
+            "code": "sen_lo",
+            "fact": "steady CRUD, small feature requests and occasional bug fixes"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fit-strong-remote-india",
+      "job": {
+        "title": "Senior Backend Engineer, Payments",
+        "company": "Kaveri Pay",
+        "location": "Remote (India)",
+        "description": "Design and operate the Go services behind our UPI settlement flow, on Postgres and Kafka. You will own services from design through to production, including the Terraform that deploys them. Eight or more years of backend experience; fully remote within India."
+      },
+      "expect": {
+        "flags": [
+          "fit",
+          "rare"
+        ],
+        "codes": {
+          "fit": true,
+          "rare": true,
+          "loc": false,
+          "sen_hi": false,
+          "sen_lo": false,
+          "cred": false,
+          "shape": false,
+          "thin": false,
+          "comp": false
+        },
+        "fit": [
+          70,
+          100
+        ],
+        "reach": [
+          40,
+          100
+        ]
+      },
+      "set": "tune",
+      "recorded": {
+        "s": 95,
+        "re": 80,
+        "c": "h",
+        "f": [
+          {
+            "code": "fit",
+            "fact": "Design and operate Go services behind UPI settlement flow"
+          },
+          {
+            "code": "rare",
+            "fact": "UPI settlement flow on Postgres and Kafka, including Terraform"
+          }
+        ]
+      }
+    },
+    {
+      "id": "fit-k8s-gap",
+      "job": {
+        "title": "Senior Platform Engineer, Kubernetes",
+        "company": "Orbit Runtime",
+        "location": "Remote (India)",
+        "description": "Run our multi-tenant Kubernetes estate: cluster upgrades, operators written in Go, and the platform APIs on top. Deep hands-on Kubernetes operations experience is the core requirement and is non-negotiable. Seven or more years in infrastructure roles."
+      },
+      "expect": {
+        "flags": [],
+        "codes": {
+          "fit": false,
+          "cred": false,
+          "sen_hi": false,
+          "loc": false,
+          "sen_lo": false,
+          "shape": false,
+          "thin": false,
+          "rare": false,
+          "comp": false
+        },
+        "fit": [
+          10,
+          55
+        ],
+        "reach": [
+          0,
+          50
+        ]
+      },
+      "set": "holdout",
+      "recorded": {
+        "s": 55,
+        "re": 12,
+        "c": "h",
+        "f": [
+          {
+            "code": "cred",
+            "fact": "Deep hands-on Kubernetes operations experience is the core requirement"
+          }
+        ]
       }
     }
-  ],
-  "_note_jev": "recorded_jev captured by scripts/record-jev.ts. Re-record when the questions in supabase/functions/_shared/judge.ts change, and commit the diff: the move in the eval's metrics is then the questions' effect, isolated."
+  ]
 }

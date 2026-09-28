@@ -3,36 +3,36 @@
   "sets": {
     "all": {
       "metrics": {
-        "precision": 1,
-        "recall": 1,
+        "precision": 0.938,
+        "recall": 0.978,
         "calibration": 1,
         "factRate": 1,
-        "spanRate": 0.867,
-        "cases": 10
+        "spanRate": 0.938,
+        "cases": 31
       },
-      "recorded": "2026-09-21"
+      "recorded": "2026-09-28"
     },
     "tune": {
       "metrics": {
-        "precision": 1,
-        "recall": 1,
+        "precision": 0.95,
+        "recall": 0.974,
         "calibration": 1,
         "factRate": 1,
-        "spanRate": 0.833,
-        "cases": 8
+        "spanRate": 0.95,
+        "cases": 25
       },
-      "recorded": "2026-09-26"
+      "recorded": "2026-09-28"
     },
     "holdout": {
       "metrics": {
-        "precision": 1,
+        "precision": 0.875,
         "recall": 1,
         "calibration": 1,
         "factRate": 1,
-        "spanRate": 1,
-        "cases": 2
+        "spanRate": 0.875,
+        "cases": 6
       },
-      "recorded": "2026-09-26"
+      "recorded": "2026-09-28"
     }
   }
 }
