@@ -44,6 +44,7 @@ const T = new Function(
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
   + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
+  + 'reflagJob,storedFlagList,'
   + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
 
@@ -168,11 +169,15 @@ const spanRate = r3(withSpan / flagsTotal);
 
 // ── 6. the merge: Jev fires, DeepSeek explains ───────────────────────────
 {
+  /* Placed either side of the cut rather than at fixed numbers: this asserts
+     how the merge behaves, not where FLAG_P happens to sit, and it used to
+     fail for the wrong reason when the cut moved from 0.5 to 0.8. */
+  const over = Math.min(0.99, T.FLAG_P + (1 - T.FLAG_P) / 2), under = T.FLAG_P / 2;
   const ds = T.normFlags([{ code: 'loc', fact: 'Berlin office' }, { code: 'comp', fact: 'thousands apply' }]);
   const jev = { confidence: 'high', flags: [
-    { code: 'loc', probability: 0.91 },     // fired, and DeepSeek has a fact
-    { code: 'comp', probability: 0.12 },    // DeepSeek raised it, Jev does not agree
-    { code: 'rare', probability: 0.77 },    // Jev raises one DeepSeek never mentioned
+    { code: 'loc', probability: over },     // fired, and DeepSeek has a fact
+    { code: 'comp', probability: under },   // DeepSeek raised it, Jev does not agree
+    { code: 'rare', probability: over },    // Jev raises one DeepSeek never mentioned
   ] };
   const out = T.mergeJudgment(ds, jev);
   const codes = out.map(f => f.code).sort().join(',');
@@ -285,6 +290,135 @@ const spanRate = r3(withSpan / flagsTotal);
   no(typeof a !== 'number', 'actionability is three legs, never a single score');
 
   if (!bad) ok('actionability: three legs, each null when unknown, and unknown never reads as dead or unreachable');
+}
+
+// ── 9. FLAG_P, against recorded Jev probabilities ────────────────────────
+/* Everything above measures DeepSeek's flags, because `recorded` is a DeepSeek
+   answer. FLAG_P governs Jev's, and until eval/judgments.json existed nothing
+   measured it at all: the cut sat at 0.5 with one hand-written assertion for
+   company. These run the app's own mergeJudgment, so the threshold under test
+   is the shipped one rather than a copy of it.
+
+   The check is on WHICH codes disagree, not how many, so it holds under every
+   --set and still fails the moment the cut moves: at 0.5 the extras below
+   reappear in open, sen_lo and sen_hi, which is what this is here to stop. */
+{
+  const P = path.join(__dirname, 'eval', 'judgments.json');
+  if (!fs.existsSync(P)) {
+    console.log('  note  no eval/judgments.json — run scripts/record-judgments.ts to measure FLAG_P');
+  } else {
+    const REC = JSON.parse(fs.readFileSync(P, 'utf8'));
+    /* Two disagreements that no threshold can remove, both recorded 2026-09-28
+       against jev-1.13.0. Neither is the cut point being wrong:
+
+       fit  — the labels name the flag worth SHOWING on a row, while the noul
+              answers the question it was asked. On loc-onsite-berlin the work
+              really is the candidate's strongest area (Go and Postgres
+              settlement infrastructure); it is the location that rules the job
+              out, so the label carries loc alone and Jev still says 0.89.
+       rare — "rewards this candidate's rare combination" is weakly true of
+              almost any backend payments posting for this profile, so it sits
+              at 0.81-0.86 where the label says nothing. Its one true case is
+              0.90: a 0.04 gap, too thin to place a cut inside honestly.
+
+       cred is the mirror image, a miss rather than an extra: sen-hi-principal
+       demands "a track record operating Kubernetes at very large scale", which
+       the label calls a hard gate and the question calls a credential. Jev
+       answers 0.29. Widening the question is the fix, not lowering the cut —
+       at 0.29 every flag in the set fires. */
+    const STRUCTURAL_EXTRA = ['fit', 'rare'];
+    const STRUCTURAL_MISS = ['cred'];
+    let jtp = 0, jfp = 0, jfn = 0, unexpected = 0, seen = 0;
+    CASES.cases.forEach(c => {
+      const j = REC.judgments[c.id];
+      if (!j) return;
+      seen++;
+      // dsFlags empty: this asks only which flags clear the cut, not what fact
+      // DeepSeek attached to them.
+      const got = T.mergeJudgment([], j).map(f => f.code);
+      const want = c.expect.flags;
+      jtp += got.filter(x => want.indexOf(x) > -1).length;
+      const extra = got.filter(x => want.indexOf(x) === -1);
+      const miss = want.filter(x => got.indexOf(x) === -1);
+      jfp += extra.length; jfn += miss.length;
+      extra.forEach(code => {
+        if (STRUCTURAL_EXTRA.indexOf(code) === -1) {
+          fail(`${c.id}: ${code} fired at ${j.flags.find(f => f.code === code).probability} — above FLAG_P ${T.FLAG_P} and not a known structural extra`);
+          unexpected++;
+        }
+      });
+      miss.forEach(code => {
+        if (STRUCTURAL_MISS.indexOf(code) === -1) {
+          fail(`${c.id}: ${code} did not fire at ${j.flags.find(f => f.code === code).probability}, below FLAG_P ${T.FLAG_P}`);
+          unexpected++;
+        }
+      });
+    });
+    if (seen !== CASES.cases.length) {
+      fail(`${CASES.cases.length - seen} case(s) have no recorded judgment — re-record with scripts/record-judgments.ts`);
+    } else if (!unexpected) {
+      ok(`FLAG_P ${T.FLAG_P} on ${REC.model}: ${jtp} right, ${jfp} extra (fit/rare only), ${jfn} missed (cred only)`);
+    }
+  }
+}
+
+// ── 10. re-deciding a row the cut has moved under ────────────────────────
+/* reflagJob re-thresholds ai_flags from the probabilities already in
+   ai_judgment. It rewrites rows in an account, so the properties that matter
+   are the destructive ones: it must not invent a flag, must not lose the fact
+   or the quote on a flag it keeps, must leave an unjudged row alone, and must
+   be safe to run twice. Checked against the recorded judgments rather than a
+   hand-made row, so the shape under test is the shape Jev really returns. */
+{
+  const P = path.join(__dirname, 'eval', 'judgments.json');
+  if (fs.existsSync(P)) {
+    const REC = JSON.parse(fs.readFileSync(P, 'utf8'));
+    let bad = 0;
+    const no = (cond, msg) => { if (!cond) { fail(msg); bad++; } };
+
+    Object.keys(REC.judgments).forEach(id => {
+      const jv = REC.judgments[id];
+      // The row as it would have been written at the old cut of 0.5, with a
+      // fact and a quote on every flag so their loss would show.
+      const old = jv.flags.filter(f => f.probability >= 0.5)
+        .map(f => ({ code: f.code, fact: `fact for ${f.code}`, span: `span for ${f.code}` }));
+      const row = { ai_judgment: JSON.stringify(jv), ai_flags: JSON.stringify(old) };
+
+      T.reflagJob(row);
+      const now = T.storedFlagList(row);
+      const codes = now.map(f => f.code);
+      const want = jv.flags.filter(f => f.probability >= T.FLAG_P).map(f => f.code);
+
+      no(codes.slice().sort().join(',') === want.slice().sort().join(','),
+        `${id}: re-flagged to [${codes}], expected the codes above FLAG_P ${T.FLAG_P} [${want}]`);
+      // Raising a cut can only remove, never add. Worth asserting separately:
+      // it is the property that makes this safe to run over real rows.
+      no(codes.every(c => old.some(o => o.code === c)), `${id}: re-flagging introduced a flag the row did not have`);
+      no(now.every(f => f.fact === `fact for ${f.code}` && f.span === `span for ${f.code}`),
+        `${id}: re-flagging lost the fact or the quote on a flag it kept`);
+      // Twice is once: the second pass has nothing left to change.
+      no(T.reflagJob(row) === false, `${id}: re-flagging is not idempotent`);
+    });
+
+    // An unjudged row is DeepSeek's alone, and FLAG_P has no authority there.
+    const ds = { ai_flags: JSON.stringify([{ code: 'comp', fact: 'thousands apply', span: 'thousands apply' }]) };
+    const before = ds.ai_flags;
+    no(T.reflagJob(ds) === false && ds.ai_flags === before, 'a row with no judgement was rewritten');
+
+    /* A code the judgement has no answer for -- what a question dropped from
+       judge.ts leaves behind. Keeping it is the cautious reading: the flag was
+       true when something asked, and nothing has said otherwise. */
+    const gone = {
+      ai_judgment: JSON.stringify({ flags: [{ code: 'loc', probability: 0.96 }] }),
+      ai_flags: JSON.stringify([{ code: 'loc', fact: 'Berlin', span: 'Berlin' },
+        { code: 'shape', fact: 'front-end only', span: 'front-end only' }]),
+    };
+    T.reflagJob(gone);
+    no(T.storedFlagList(gone).some(f => f.code === 'shape'),
+      'a flag the judgement no longer answers was silently deleted');
+
+    if (!bad) ok(`reflagJob: re-thresholds ${Object.keys(REC.judgments).length} recorded rows at FLAG_P ${T.FLAG_P} without inventing a flag, losing a fact, touching an unjudged row, or changing anything on a second pass`);
+  }
 }
 
 // ── report ───────────────────────────────────────────────────────────────

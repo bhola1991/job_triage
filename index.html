@@ -2926,8 +2926,43 @@ function bestSentence(desc, fact){
 
 /* Above which probability a Jev noul counts as "this flag is true". Jev
    returns a number per flag precisely so the caller can keep its own
-   threshold rather than trusting one chosen elsewhere; this is ours. */
-const FLAG_P = 0.5;
+   threshold rather than trusting one chosen elsewhere; this is ours.
+
+   0.8, measured rather than picked. It was 0.5, which is the worst available
+   cut: a noul carries no separate confidence, so 0.5 is exactly where the
+   model is torn, and every flag it was unsure about became a chip on a row.
+   Over the ten labelled postings that fired seven flags nothing supported --
+   `open` on five of them.
+
+   scripts/tune-flag-threshold.js sweeps the recorded probabilities in
+   scripts/eval/judgments.json against the labels. Seven of the ten flags
+   separate cleanly, and every one of their gaps straddles 0.8:
+
+       flag      true fires at    false reaches    gap
+       loc            0.96             0.25        0.71
+       thin           0.95             0.22        0.73
+       shape          0.97             0.48        0.49
+       sen_lo         0.97             0.53        0.44
+       comp           0.90             0.45        0.45
+       sen_hi         0.82             0.58        0.24
+       open           0.91             0.70        0.21
+
+   One number for all ten rather than ten tuned numbers, because with one or
+   two positive cases per flag a per-flag decimal would be fitted to noise.
+   The gaps are wide enough that the choice inside them barely matters; what
+   mattered was being at 0.5.
+
+   The consequence argument points the same way. The flags that bury a job --
+   loc, cred, shape, sen_hi, sen_lo, thin, comp -- are the ones with the widest
+   gaps, so a high cut costs them nothing and a false one is expensive. The
+   flags that merely encourage an application are where the residual noise
+   sits, which is the cheaper error to keep.
+
+   Two flags are not fixable from here at any cut, and eval-matcher.js §9 says
+   why in full: `fit` answers the question it was asked while the labels name
+   the flag worth showing, and `rare` is weakly true of nearly every posting
+   this profile sees. Calibrated on jev-1.13.0; a model bump invalidates it. */
+const FLAG_P = 0.8;
 
 /* ── composing a judgement into numbers ──────────────────────────────────
    Jev answers questions; it does not hand back a fit score. These turn its
@@ -3056,6 +3091,86 @@ function mergeJudgment(dsFlags, judged){
     out.push({ code, fact: fact[code] || '' });
   });
   return out;
+}
+
+/* ── re-deciding old rows when the cut moves ──────────────────────────────
+   ai_flags holds the flags that cleared FLAG_P at the moment the row was
+   judged, so every row judged before a change to that number carries the old
+   decision and nothing re-reads it. Moving the cut from 0.5 to 0.8 without
+   this would leave the rows already in the account showing the seven-in-ten
+   false chips the new cut exists to remove.
+
+   Free, and that is the point: ai_judgment kept every probability, so this is
+   the same evidence re-thresholded rather than a re-judgement. No Jev call, no
+   credit, no DeepSeek call.
+
+   Facts and quotes are carried across from the row rather than recomputed --
+   the fact came from DeepSeek and is not reproducible from here, and re-running
+   bestSentence would need the description, which this deliberately does not
+   touch. A flag that reappears because the cut went DOWN keeps an empty fact,
+   which is exactly what mergeJudgment gives a flag DeepSeek never mentioned.
+
+   Rows with no ai_judgment are left alone: their flags are DeepSeek's own, and
+   FLAG_P has no authority over those. */
+function storedFlagList(j){
+  const v = j && j.ai_flags;
+  if(Array.isArray(v)) return v;
+  const t = String(v||'').trim();
+  if(t.charAt(0) === '['){ try{ const a = JSON.parse(t); return Array.isArray(a) ? a : []; }catch(e){} }
+  /* A comma-joined legacy string predates judgements entirely, so it is only
+     ever reached on a row this function has already declined to touch. */
+  return [];
+}
+const codeOf = f => FLAG_SHORT[String((f && f.code) || '').trim()] || '';
+function reflagJob(j){
+  const jv = judgmentOf(j);
+  if(!jv || !Array.isArray(jv.flags)) return false;
+  /* Normalised the same way on both sides, so the comparison at the end is
+     about which flags a row carries and not about how they were spelled. */
+  const norm = f => ({ code: codeOf(f), fact: String((f && f.fact) || ''), span: String((f && f.span) || '') });
+  const was = storedFlagList(j).map(norm).filter(f => f.code);
+  const had = {}; was.forEach(f => { had[f.code] = f; });
+  const out = [], kept = {};
+  jv.flags.forEach(f => {
+    const code = codeOf(f);
+    if(!code || kept[code] || !(Number(f.probability) >= FLAG_P)) return;
+    kept[code] = 1;
+    out.push(had[code] || { code, fact: '', span: '' });
+  });
+  /* A stored flag the judgement has no answer for is kept rather than dropped:
+     that is what a question removed from judge.ts would look like, and losing
+     the row's flag to it would be a silent deletion. */
+  was.forEach(f => {
+    if(kept[f.code] || jv.flags.some(x => codeOf(x) === f.code)) return;
+    kept[f.code] = 1;
+    out.push(f);
+  });
+  if(JSON.stringify(out) === JSON.stringify(was)) return false;
+  j.ai_flags = JSON.stringify(out);
+  return true;
+}
+
+/* Runs once per value of FLAG_P rather than once ever: the key stores the cut
+   it last applied, so tuning the number again re-runs this instead of needing
+   somebody to remember that it exists. */
+const FLAGCUT_KEY = 'triage:flagcut';
+async function reflagJudged(){
+  if((await get(FLAGCUT_KEY)) === String(FLAG_P)) return 0;
+  let changed = 0, judged = 0;
+  Object.keys(DB.profiles||{}).forEach(id => {
+    const rec = DB.profiles[id];
+    (((rec && rec.jobs) || [])).forEach(j => {
+      if(!judgmentOf(j)) return;
+      judged++;
+      if(reflagJob(j)) changed++;
+    });
+  });
+  if(changed) await save();
+  /* Written after the save, so a save that could not reach the server leaves
+     the key unset and the pass runs again next time. */
+  await put(FLAGCUT_KEY, String(FLAG_P));
+  if(changed) console.info(`re-decided ${changed} of ${judged} judged rows at FLAG_P ${FLAG_P}`);
+  return changed;
 }
 
 /* Attach the quote to each flag. Runs over whatever the posting actually says,
@@ -5627,6 +5742,11 @@ async function afterAuthInner(){
      them the other way round and a first-time cloud sign-in migrates nothing. */
   try{ await migrateRows(); }
   catch(e){ cloudDown(e); console.warn('row migration failed:', e && e.message); }
+  /* After the rows exist, since it saves. Its own failure is not worth
+     stopping a sign-in for: the rows keep the flags they had and the key stays
+     unset, so the next load tries again. */
+  try{ await reflagJudged(); }
+  catch(e){ console.warn('re-flagging judged rows failed:', e && e.message); }
 }
 
 /* A reset link that's expired or was already used comes back with the

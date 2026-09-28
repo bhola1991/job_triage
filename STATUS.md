@@ -164,8 +164,10 @@ gate is what `PLAN.md:18-21` puts in front of steps 3–5.
 | --- | --- |
 | **LLM failures write no ledger row** | The three refund paths in the `llm` and `judge` actions return before `logUsage`. The table already carries `kind: "error"` rows for source failures (`jsearch: 404`, `naukri: Apify 400`) — the LLM paths just do not use the pattern. Fixing it would have turned today's entire diagnosis into one query. |
 | `billing.sql` | **Not applied.** Live `spend_llm` decrements the free pot by a hardcoded `1`; the repo says `- p_n`. Latent — every caller passes 1. `refund_free` is its pair. |
-| `FLAG_P = 0.5` | The worst available cut point. A Noul at 0.5 means the model is torn, and Nouls carry no confidence, so the probability is the whole signal. A live run fired `open` at 0.55 and `rare` at 0.59 on a posting supporting neither. |
-| `TYPESAFE_MODEL` | Unset, so `jev-latest`. Currently resolves to **`jev-1.13.0`**. Thresholds calibrated on an unpinned model move silently on a bump. |
+| ~~`FLAG_P = 0.5`~~ | **Done 2026-09-28: 0.8, measured.** `scripts/record-judgments.ts` recorded one live Jev judgment per labelled case into `scripts/eval/judgments.json` (12,170 input tokens, $0.0005); `scripts/tune-flag-threshold.js` sweeps them against the labels. At 0.5 the ten postings carried **seven** unsupported chips, `open` on five of them. Seven of the ten flags separate cleanly and every one of those gaps straddles 0.8, so it is one number rather than ten fitted to one or two positives each. `eval-matcher.js` §9 now measures the shipped cut and fails if it moves back.<br><br>Rows judged before the change carried the old decision, since `ai_flags` stores the flags that cleared the cut at judge time and nothing re-read it. `reflagJudged()` re-thresholds them from the probabilities already in `ai_judgment` on the next load — no Jev call, no credit, and facts and quotes carried across rather than recomputed. It is keyed on the cut it last applied (`triage:flagcut`), so tuning the number again re-runs it instead of needing anyone to remember it exists. §10 asserts the destructive properties: never invents a flag, never loses a fact, leaves an unjudged row alone, idempotent. |
+| `fit` and `rare` fire where no label wants them | What is left at 0.8, and no cut removes it. `fit` answers the question it was asked — on `loc-onsite-berlin` the work really is this candidate's strongest area, and the label carries `loc` alone because that is the flag worth showing. `rare` is weakly true of nearly every backend payments posting for this profile (0.81–0.86 against a single true case at 0.90). Both are question or label wording, not threshold. |
+| `cred` misses a gate it should catch | `sen-hi-principal` demands "a track record operating Kubernetes at very large scale". The label calls that a hard gate; the question asks about a credential, and a track record is not one. Jev answers **0.29**, so no cut recovers it — widening the question is the fix. |
+| ~~`TYPESAFE_MODEL`~~ | **Pinned 2026-09-28** to `jev-1.13.0` in `_shared/api-clients.ts`, the name a live judgment reported rather than one written from memory. The env var still overrides. This is what makes `FLAG_P` meaningful: the cut is calibrated against probabilities from this model, and on another one the same 0.8 means something else with nothing to error. |
 | `eval-matcher.js --live` | `cases.json` tells you to re-record with `--live`. That flag does not exist; only `--write-baseline` is implemented. |
 | RLS on the new tables | Verified **valid**, not **correct**. PGlite has no real `auth.uid()` or PostgREST. |
 | `handle_new_user()` | RPC-callable by `anon`. Pre-existing; a direct call fails on the undefined `new` record, so low risk, but `schema.sql` revokes every other function and not this one. |
@@ -328,8 +330,11 @@ measurement, the rest are the same gate as before.
    ~12,000 input tokens, about **$0.0005**. Still the gate for everything below.
 6. **Flip `ai_score` to the composed value** once the eval says the ranking is
    at least as good.
-7. **Tune `FLAG_P` per consequence**, then **pin `TYPESAFE_MODEL`** to
-   `jev-1.13.0` before trusting any threshold.
+7. ~~**Tune `FLAG_P` per consequence**, then **pin `TYPESAFE_MODEL`**.~~ Done
+   2026-09-28: 0.8 and `jev-1.13.0`. What it left behind is smaller and sits in
+   the table above — the `cred` question is too narrow for the gate it is meant
+   to catch, and `fit`/`rare` need their wording looked at rather than their
+   cut. Neither blocks 5 or 6.
 8. **Log the LLM refund paths as `kind: "error"` rows.** Every figure derived
    from `usage_events` is survivorship-biased until this exists.
 9. **Apply `billing.sql`** — its own pass, since it is latent.
