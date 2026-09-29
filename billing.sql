@@ -51,6 +51,14 @@ create table if not exists public.apify_runs (
   created_at timestamptz not null default now()
 );
 alter table public.apify_runs add column if not exists source text;
+-- When the reaper dealt with this run: aborted because it was still going long
+-- after anything could still be watching it, or found already over. Without it
+-- the reaper has no memory and would re-abort and re-log the same run on every
+-- pass. Same change as supabase/migrations/20260929_03_orphan_abort.sql, which
+-- also carries the schedule.
+alter table public.apify_runs add column if not exists aborted_at timestamptz;
+create index if not exists apify_runs_unreaped
+  on public.apify_runs (created_at) where aborted_at is null;
 alter table public.apify_runs enable row level security;
 
 -- Every pot check sits in an UPDATE's WHERE clause, so two parallel calls can't
