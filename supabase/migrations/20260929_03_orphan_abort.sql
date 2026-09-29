@@ -1,0 +1,96 @@
+-- 2026-09-29 — reap Apify runs the browser stopped watching.
+--
+-- A run is started by the `api` edge function and polled by the browser. Close
+-- the tab, lose the network, or simply outlast the poll, and nothing aborts it:
+-- the actor keeps running on our Apify account and keeps billing until its own
+-- timeout. billing.sql:48-49 already records the shape of it -- 23 runs
+-- started, 16 returning results, and nothing anywhere naming the seven that
+-- went or saying what they cost.
+--
+-- Two parts: a column that makes the reaper idempotent, and the schedule.
+--
+-- NOT APPLIED by the branch that added it, and the schedule half needs two
+-- extensions and a secret before it will do anything. Read it before running
+-- it: this is the one file here that makes the database call out to the
+-- internet on a timer.
+
+-- ── 1. the column ───────────────────────────────────────────────────────────
+--
+-- Without this the reaper has no memory. apify_runs carries created_at and
+-- nothing else about a run's fate, so every pass would re-abort the same
+-- finished runs and write another error row each time -- and the orphan rate,
+-- which is the number this whole thing exists to make visible, would just be
+-- the cron's frequency. Stamped whether the run was aborted or found already
+-- over, because both mean "dealt with".
+alter table public.apify_runs
+  add column if not exists aborted_at timestamptz;
+
+-- The reaper's own query: oldest first, unstamped only. Partial, because the
+-- stamped rows are the overwhelming majority in steady state and none of them
+-- is ever looked at again.
+create index if not exists apify_runs_unreaped
+  on public.apify_runs (created_at)
+  where aborted_at is null;
+
+
+-- ── 2. the schedule ─────────────────────────────────────────────────────────
+--
+-- This project has no scheduler at all: no cron on the machine (it is not
+-- installed), no pg_cron, no GitHub Actions, no Cloudflare cron triggers.
+-- STATUS.md has carried "nothing schedules verify.js" as an open gap for
+-- exactly this reason. So the scheduling lives here, in the one place that is
+-- always running.
+--
+-- Requires, once, in the SQL editor or the dashboard:
+--   create extension if not exists pg_cron  with schema extensions;
+--   create extension if not exists pg_net   with schema extensions;
+--
+-- And the function deployed with --no-verify-jwt, plus a shared secret set on
+-- BOTH sides -- the function refuses to run without it:
+--   supabase functions deploy reap-apify --no-verify-jwt
+--   supabase secrets set REAP_SECRET=<a long random string>
+--
+-- Then store the same string here so the schedule can send it. Vault rather
+-- than inline, because cron.job is readable and a literal secret in a job
+-- definition is a secret in a table:
+--   select vault.create_secret('<the same long random string>', 'reap_secret');
+--   select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+--
+-- Every five minutes, not every fifteen. The reaper only acts on runs already
+-- fifteen minutes old, so the schedule decides how long an orphan burns AFTER
+-- it qualifies, not whether it is caught; five minutes bounds the waste at
+-- twenty minutes total and costs one cheap query when there is nothing to do.
+--
+-- Unschedule first so the file is re-runnable, the same way every policy in
+-- schema.sql is dropped before it is created.
+select cron.unschedule('reap-apify')
+ where exists (select 1 from cron.job where jobname = 'reap-apify');
+
+select cron.schedule(
+  'reap-apify',
+  '*/5 * * * *',
+  $cron$
+  select net.http_post(
+    url     := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
+               || '/functions/v1/reap-apify',
+    headers := jsonb_build_object(
+                 'Content-Type',   'application/json',
+                 'X-Reap-Secret',  (select decrypted_secret from vault.decrypted_secrets where name = 'reap_secret')),
+    body    := '{}'::jsonb,
+    -- Longer than one pass can take: 50 runs, two Apify calls each, is the
+    -- worst case and it is nowhere near this. A timeout here abandons the
+    -- response, not the aborts already made.
+    timeout_milliseconds := 55000
+  );
+  $cron$
+);
+
+-- To check it afterwards:
+--   select jobname, schedule, active from cron.job where jobname = 'reap-apify';
+--   select * from cron.job_run_details where jobid =
+--     (select jobid from cron.job where jobname = 'reap-apify')
+--    order by start_time desc limit 10;
+--   select * from public.source_errors;          -- orphan_abort rows land here
+--
+-- To stop it:
+--   select cron.unschedule('reap-apify');

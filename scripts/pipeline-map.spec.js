@@ -235,7 +235,10 @@ module.exports = {
       note: 'job_index used to be written ONLY by the offline crawler, so a user spent 25 credits, the rows went to their own public.jobs, and the corpus learned nothing -- acquisition paid for once and used once, by one person. These are also the rows it is short of: 8,082 full against 340,907 thin, and only a full row can be judged. Deposited BEFORE the caller scores and cuts, because a role wrong for this person is not wrong for everyone. Full rows upsert; thin rows insert only when the key is absent, so a short search snippet can never overwrite a crawler row that had a real description. Best-effort like logUsage: the search is already paid for and a corpus write must never fail it.' },
     'sv.runs':    { diagram: 'server', group: 'actions', kind: 'db', label: 'apify_runs — who owns this run',
       anchor: { file: 'billing.sql', sql: 'public.apify_runs' },
-      note: 'RLS on with zero policies: server-only by construction. Every apify_status and apify_items call checks ownership here first.' },
+      note: 'RLS on with zero policies: server-only by construction. Every apify_status and apify_items call checks ownership here first, and aborted_at records when the reaper below dealt with the row.' },
+    'sv.reap':    { diagram: 'server', group: 'actions', kind: 'net', label: 'reap-apify — scheduled, every 5 min',
+      anchor: { file: 'supabase/functions/reap-apify/index.ts', const: 'ORPHAN_MINUTES' },
+      note: 'The second edge function, and the only thing here nobody clicks. A run whose browser stopped polling -- closed tab, dropped network -- keeps running and keeps billing on our Apify account until its own timeout; 23 runs started against 16 returning results is the measurement that says so. Anything still alive 15 minutes after it started is orphaned by definition, because the longest timeout the api function asks for is 11. Aborts it, stamps aborted_at so the next pass leaves it alone, and writes one usage_events row of kind error with reason orphan_abort -- which is what makes the orphan rate a number rather than a suspicion.' },
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
@@ -492,6 +495,7 @@ module.exports = {
     { from: 'sc.rescore', to: 'sc.judgeMany', label: 'once for the whole rescore' },
     { from: 'sc.cut', to: 'sc.judgeMany', label: 'once for the whole search' },
     { from: 'sc.judgeMany', to: 'sc.merge' },
+    { from: 'sv.reap', to: 'sv.runs', label: 'stamps aborted_at' },
     { from: 'sc.grab', to: 'sc.merge' },
     { from: 'sc.merge', to: 'sc.span' },
 
