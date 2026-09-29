@@ -20,9 +20,9 @@
 // Secrets: APIFY_TOKEN (the same one `api` uses).
 //   SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 //
-// Deploy with --no-verify-jwt and schedule it; see
-// supabase/migrations/20260929_03_orphan_abort.sql for the pg_cron side and
-// the shared secret this checks below.
+// Deploy it normally -- WITH jwt verification, which is the default and is half
+// the door. See supabase/migrations/20260929_03_orphan_abort.sql for the
+// pg_cron side, which presents the service-role key as its bearer token.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 
@@ -51,14 +51,34 @@ const apify = (path: string, init: RequestInit = {}) =>
   });
 
 Deno.serve(async (req) => {
-  /* Deployed --no-verify-jwt so pg_cron can reach it without a session, which
-     means this shared secret is the only thing between the internet and a
-     function that aborts runs. Constant-time-ish compare via length + join is
-     overkill for a header nobody can probe cheaply, so a plain compare it is --
-     but it must be set, or the function refuses rather than running open. */
-  const want = Deno.env.get("REAP_SECRET");
-  if (!want) return new Response("server is missing the REAP_SECRET secret", { status: 500 });
-  if (req.headers.get("X-Reap-Secret") !== want) return new Response("no", { status: 401 });
+  /* Two locks, and they fail differently, which is the point of having both.
+
+     The platform's own jwt verification is the first: this function is deployed
+     WITHOUT --no-verify-jwt, so anything not signed by this project's jwt secret
+     is rejected before a line of this runs.
+
+     That alone is not enough, because the anon key is also a valid jwt for this
+     project and so is every signed-in user's token. This function aborts other
+     people's Apify runs; a logged-in stranger must not be able to call it. So
+     the second lock is that the bearer token has to BE the service-role key.
+
+     Compared against the env var rather than by reading the token's `role`
+     claim. A claim check is only as good as the signature check in front of it,
+     and would quietly become forgeable the day somebody redeployed this with
+     --no-verify-jwt. This comparison does not care how it was deployed.
+
+     Constant-time, borrowed from the Razorpay signature check in api/index.ts:
+     a timing oracle on a credential this powerful is not worth the saved line. */
+  const sameString = (a: string, b: string) => {
+    if (a.length !== b.length) return false;
+    let d = 0;
+    for (let i = 0; i < a.length; i++) d |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return d === 0;
+  };
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  if (!key) return new Response("server is missing SUPABASE_SERVICE_ROLE_KEY", { status: 500 });
+  const bearer = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
+  if (!sameString(bearer, key)) return new Response("no", { status: 401 });
 
   const cutoff = new Date(Date.now() - ORPHAN_MINUTES * 60_000).toISOString();
 

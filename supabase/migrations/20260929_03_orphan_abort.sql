@@ -9,10 +9,24 @@
 --
 -- Two parts: a column that makes the reaper idempotent, and the schedule.
 --
--- NOT APPLIED by the branch that added it, and the schedule half needs two
--- extensions and a secret before it will do anything. Read it before running
--- it: this is the one file here that makes the database call out to the
--- internet on a timer.
+-- PARTLY APPLIED, and the split is deliberate.
+--
+-- Part 1 (the column and its index) was applied to kgacahuzaxqkzdcpyboc on
+-- 2026-09-29 as migration 20260929110038 (apify_runs_aborted_at). Re-verified
+-- against the live catalogue on 2026-10-04: public.apify_runs.aborted_at is
+-- present. It is inert on its own -- no writer sets it until the reaper is
+-- deployed -- and harmless.
+--
+-- Part 2 (the schedule) is NOT applied, because on this project it still could
+-- not work and would fail loudly every five minutes if forced. Re-checked
+-- 2026-10-04:
+--   * pg_cron and pg_net are both NOT INSTALLED, and there is no `cron` schema.
+--   * the reap-apify edge function is not deployed.
+--   * `vault` exists, but the entries this reads (project_url,
+--     service_role_key) do not, so net.http_post would be handed a null url on
+--     every tick.
+-- Apply it only after those three are true. This is the one file here that
+-- makes the database call out to the internet on a timer, so read it first.
 
 -- ── 1. the column ───────────────────────────────────────────────────────────
 --
@@ -45,16 +59,26 @@ create index if not exists apify_runs_unreaped
 --   create extension if not exists pg_cron  with schema extensions;
 --   create extension if not exists pg_net   with schema extensions;
 --
--- And the function deployed with --no-verify-jwt, plus a shared secret set on
--- BOTH sides -- the function refuses to run without it:
---   supabase functions deploy reap-apify --no-verify-jwt
---   supabase secrets set REAP_SECRET=<a long random string>
+-- And the function deployed the ordinary way -- WITH jwt verification, which is
+-- the default, so the platform rejects anything not signed by this project
+-- before the function runs at all:
+--   supabase functions deploy reap-apify
 --
--- Then store the same string here so the schedule can send it. Vault rather
--- than inline, because cron.job is readable and a literal secret in a job
--- definition is a secret in a table:
---   select vault.create_secret('<the same long random string>', 'reap_secret');
+-- The schedule authenticates as the service role. There is no bespoke secret to
+-- invent, rotate or leak: the credential is one the project already has, and
+-- the function checks the bearer token IS that key rather than merely reading a
+-- `role` claim -- because a claim is only as trustworthy as the signature check
+-- in front of it, and that check is a deploy flag away from being switched off.
+--
+-- Vault rather than inline, and here it matters more than usual: cron.job is a
+-- readable table, and this is the key that bypasses every RLS policy in the
+-- database. It must never be pasted into a job definition, a log line or a
+-- migration file.
+--   select vault.create_secret('<the service_role key>', 'service_role_key');
 --   select vault.create_secret('https://<project-ref>.supabase.co', 'project_url');
+--
+-- Find the key under Project Settings -> API -> service_role. Rotating it means
+-- updating this vault entry too, or the schedule starts getting 401s.
 --
 -- Every five minutes, not every fifteen. The reaper only acts on runs already
 -- fifteen minutes old, so the schedule decides how long an orphan burns AFTER
@@ -74,8 +98,8 @@ select cron.schedule(
     url     := (select decrypted_secret from vault.decrypted_secrets where name = 'project_url')
                || '/functions/v1/reap-apify',
     headers := jsonb_build_object(
-                 'Content-Type',   'application/json',
-                 'X-Reap-Secret',  (select decrypted_secret from vault.decrypted_secrets where name = 'reap_secret')),
+                 'Content-Type',  'application/json',
+                 'Authorization', 'Bearer ' || (select decrypted_secret from vault.decrypted_secrets where name = 'service_role_key')),
     body    := '{}'::jsonb,
     -- Longer than one pass can take: 50 runs, two Apify calls each, is the
     -- worst case and it is nowhere near this. A timeout here abandons the
@@ -91,6 +115,9 @@ select cron.schedule(
 --     (select jobid from cron.job where jobname = 'reap-apify')
 --    order by start_time desc limit 10;
 --   select * from public.source_errors;          -- orphan_abort rows land here
+--
+-- A 401 in job_run_details means the vault copy of the key and the project's
+-- real one have drifted apart -- re-create the service_role_key entry.
 --
 -- To stop it:
 --   select cron.unschedule('reap-apify');
