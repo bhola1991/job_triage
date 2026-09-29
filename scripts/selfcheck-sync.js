@@ -115,7 +115,7 @@ const job = (title, extra) => Object.assign({
   notes: '', source: '', query: '', ai_score: '', ai_reason: '', ai_flags: '', ai_judgment: '',
   ai_confidence: '', ai_reachability: '', channel: 'posted', stage: 'new', last_touch: '',
   contacts: '[]', events: '[]', added: '2026-09-01', posted: '', posted_lo: '',
-  posted_hi: '', posted_src: '',
+  posted_hi: '', posted_src: '', score_tier: '',
 }, extra || {});
 
 const profileRec = jobs => ({

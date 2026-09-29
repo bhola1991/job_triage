@@ -7,7 +7,7 @@
 //
 // Rules for editing this file:
 //   * Anchor a declaration, never a line number and never comment text.
-//   * Write {MIN_FIT}, never 50. Values come from source.
+//   * Write {FLASH_INTAKE_CUT}, never 50. Values come from source.
 //   * A node's `note` is the point. The diagram shows shape; the note says why.
 //   * If a check fails because you renamed something, fix the anchor here in the
 //     same commit. If it fails because you ADDED an action, table or section,
@@ -21,7 +21,7 @@
 module.exports = {
   constants: [
     { name: 'MAX_AGE_DAYS',        file: 'index.html' },
-    { name: 'MIN_FIT',             file: 'index.html' },
+    { name: 'FLASH_INTAKE_CUT',             file: 'index.html' },
     { name: 'SCORE_BATCH',         file: 'index.html' },
     { name: 'AUTO_MAX',            file: 'index.html' },
     { name: 'KEEP_TOP',            file: 'index.html' },
@@ -239,8 +239,8 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'e89c2a',
-      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'cdd399',
+      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {FLASH_INTAKE_CUT} intake cut here is applied to flash scores. Each row records which tier scored it in jobs.score_tier, because two numbers on different scales in one column are only comparable if you can tell them apart. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
       note: 'Descriptions cut to 700 chars. A row that already has a trustworthy date sends it, so the model is never asked to guess one.' },
@@ -259,9 +259,9 @@ module.exports = {
     'sc.grab':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'grabJSON',
       anchor: { file: 'index.html', fn: 'grabJSON' }, section: 'LLM',
       note: 'Strips code fences and slices first { to last }. Throws on malformed output, which is caught one level up.' },
-    'sc.keep':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept: fit {MIN_FIT}+',
-      anchor: { file: 'index.html', const: 'MIN_FIT' }, section: "board search: every source's results, scored, 50+ kept" },
-    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}',
+    'sc.keep':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept: fit {FLASH_INTAKE_CUT}+',
+      anchor: { file: 'index.html', const: 'FLASH_INTAKE_CUT' }, section: "board search: every source's results, scored, 50+ kept" },
+    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {FLASH_INTAKE_CUT}',
       anchor: { file: 'index.html', re: 'else below\\+\\+' },
       note: 'The one place a paid-for row is thrown away. It was judged and it lost.' },
     'sc.rescore': { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'runScoring \u2014 the Score button, batches of 6',
@@ -485,8 +485,8 @@ module.exports = {
     { from: 'sc.claude', to: 'sc.deepseek', label: 'our key, {COST.llm} credit' },
     { from: 'sc.deepseek', to: 'sc.refund', label: 'empty or 502', style: 'drop' },
     { from: 'sc.deepseek', to: 'sc.grab' },
-    { from: 'sc.grab', to: 'sc.keep', label: 'fit {MIN_FIT}+' },
-    { from: 'sc.grab', to: 'sc.below', label: 'under {MIN_FIT}', style: 'drop' },
+    { from: 'sc.grab', to: 'sc.keep', label: 'fit {FLASH_INTAKE_CUT}+' },
+    { from: 'sc.grab', to: 'sc.below', label: 'under {FLASH_INTAKE_CUT}', style: 'drop' },
     { from: 'sc.batch', to: 'sc.unscored', label: 'batch threw', style: 'drop' },
     { from: 'sc.rescore', to: 'sc.batch' },
     { from: 'sc.rescore', to: 'sc.judge', label: 'one call per job' },
