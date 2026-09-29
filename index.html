@@ -1242,15 +1242,45 @@ async function migrateRows(){
     return;
   }
   MIGRATED = true;
+  MIGRATED_AT = Date.now();
   await put('triage:current', DB.current||'');
-  await put('triage:migrated','1');
+  /* An ISO stamp rather than '1', because the blob's retirement is measured
+     from this moment and '1' is not a date. '1' is still read as migrated
+     below -- every account that migrated before today holds one -- it just has
+     to be given a date the first time it is seen. */
+  await put('triage:migrated', new Date(MIGRATED_AT).toISOString());
 }
 
-/* The blob is written on every save whether or not this account has migrated.
+/* How long the blob keeps being written after an account moves onto rows.
+   It is a rollback copy, and a rollback copy has a shelf life: two weeks of
+   successful row saves is long enough to have noticed a migration that went
+   wrong, and past that the blob is no longer insurance -- it is a full second
+   copy of every job and every CV, rewritten on every keystroke-driven save,
+   for a rollback nobody is going to perform. */
+const BLOB_SUNSET_DAYS = 14;
+
+/* When this account migrated, as epoch ms; null when it has not, or when the
+   stamp could not be read. Null means keep writing -- never stop on a date we
+   are unsure of. */
+let MIGRATED_AT = null;
+
+/* Whether the blob is still worth writing.
+
+   Three ways to be true, and the last two matter as much as the first:
+     - not migrated: the blob IS the storage.
+     - the cloud is not reachable: rows cannot be written, so the blob is the
+       only thing keeping this device's work, sunset or not.
+     - migrated recently: still inside the rollback window. */
+function blobLive(){
+  if(!MIGRATED || !cloudNow() || !MIGRATED_AT) return true;
+  return (Date.now() - MIGRATED_AT) < BLOB_SUNSET_DAYS * 864e5;
+}
+
+/* The blob was written on every save whether or not this account had migrated.
    Once it has, nothing reads it -- it is the offline copy and the rollback,
-   and a rollback copy is only worth keeping if it is current. */
+   and a rollback copy is only worth keeping while it could still be used. */
 async function save(){
-  await put('triage:db', JSON.stringify(DB));
+  if(blobLive()) await put('triage:db', JSON.stringify(DB));
   if(!cloudNow() || !MIGRATED) return;
   /* Which profile is open is the one thing in DB that is not a row. It rode
      inside the blob, and once the blob stops being read it needs its own key
@@ -1260,12 +1290,36 @@ async function save(){
   catch(e){
     cloudDown(e);
     console.warn('row save failed:', e && e.message);
-    syncNote("Saved on this device \u2014 " + ((e&&e.message)||'could not reach the server')
+    /* Locally, and whatever the sunset says. The note below promises the work
+       is not lost, and once the blob is retired the row save is the only thing
+       that was keeping that promise -- so the moment it fails is the moment
+       the copy earns its keep again. Local only: the cloud is what just
+       refused us. */
+    try{ await putLocal('triage:db', JSON.stringify(DB)); }catch(_){}
+    syncNote("Saved on this device — " + ((e&&e.message)||'could not reach the server')
              + ". Your work is not lost.");
   }
 }
 async function load(){
-  MIGRATED = (await get('triage:migrated')) === '1';
+  /* Anything non-empty means migrated. Accounts that migrated before the stamp
+     existed hold '1', which says it happened but not when -- so they are given
+     today's date and their fortnight starts now. Backdating them instead would
+     retire the blob on the same load that introduced the idea, which is not a
+     window, it is a switch. */
+  const mig = (await get('triage:migrated')) || '';
+  MIGRATED = !!mig;
+  /* Shape-checked before parsing, and that is not belt-and-braces. The legacy
+     value is the string '1', and Date.parse('1') does not fail -- it returns
+     the 1st of January 2001, which is twenty-five years past any window and
+     would retire the blob on the spot for every account that predates the
+     stamp. Only something ISO-shaped counts as a date here. */
+  const at = /^\d{4}-\d{2}-\d{2}T/.test(mig) ? Date.parse(mig) : NaN;
+  MIGRATED_AT = isNaN(at) ? null : at;
+  if(MIGRATED && MIGRATED_AT === null){
+    MIGRATED_AT = Date.now();
+    try{ await put('triage:migrated', new Date(MIGRATED_AT).toISOString()); }
+    catch(e){ console.warn('could not stamp the migration date:', e && e.message); }
+  }
   let fromRows = false;
   if(cloudNow() && MIGRATED){
     try{
