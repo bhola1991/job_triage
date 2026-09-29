@@ -9,6 +9,8 @@
 //   * Anchor a declaration, never a line number and never comment text.
 //   * Write {FLASH_INTAKE_CUT}, never 50. Values come from source.
 //   * A node's `note` is the point. The diagram shows shape; the note says why.
+//   * A term that needs explaining goes in `glossary` ONCE and is then used
+//     plainly in the notes. A word defined in four notes drifts in three.
 //   * If a check fails because you renamed something, fix the anchor here in the
 //     same commit. If it fails because you ADDED an action, table or section,
 //     the map is genuinely missing something -- add a node or scope it out.
@@ -19,9 +21,25 @@
 // nothing.
 
 module.exports = {
+  /* Terms the notes use as if everyone knows them. Defined here once and
+     rendered into the index note, because the alternative is defining them in
+     whichever note happened to need them first -- and then not at all in the
+     other six. */
+  glossary: [
+    { term: 'Jev',
+      says: "System One's classifier model; returns typed judgments (confidence, capability, targeting, per-flag probabilities)." },
+    { term: 'noul',
+      says: 'A TypeSafe SDK primitive: one question that comes back as a probability rather than a word. Not a typo, and not ours to rename \u2014 it is imported by name from npm:@typesafe-ai/sdk in supabase/functions/_shared/judge.ts, which is why it turns up in the notes, in eval-matcher.js and in PLAN.md.' },
+    { term: 'System One',
+      says: 'TypeSafe\'s family of small judgment models, of which Jev is the one this project uses. Named for fast, intuitive judgment, as against deliberate reasoning \u2014 which is the other model here, and the reason the two are priced apart.' },
+    { term: 'the TypeSafe API key',
+      says: 'TYPESAFE_API_KEY, held as a Supabase secret and read only by the edge function. It is never sent to the browser, which is why every judgement is a server round trip and why an own-key or local-only session gets no judgement at all.' },
+    { term: 'thin / full',
+      says: 'A corpus row with no description (a board sitemap) against one carrying a real description (an ATS board, RSS or JSON feed). Only a full row can be scored or judged; a thin one is a candidate for a shortlist and never an answer.' },
+  ],
   constants: [
     { name: 'MAX_AGE_DAYS',        file: 'index.html' },
-    { name: 'FLASH_INTAKE_CUT',             file: 'index.html' },
+    { name: 'FLASH_INTAKE_CUT',     file: 'index.html' },
     { name: 'SCORE_BATCH',         file: 'index.html' },
     { name: 'AUTO_MAX',            file: 'index.html' },
     { name: 'KEEP_TOP',            file: 'index.html' },
