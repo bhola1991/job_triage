@@ -112,9 +112,12 @@ module.exports = {
 
   nodes: {
     /* ── intake ─────────────────────────────────────────────────────────── */
-    'in.boards':  { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runBoards — search the job boards',
+    'in.boards':  { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runBoards — the free pass',
       anchor: { file: 'index.html', fn: 'runBoards' }, section: "board search: every source's results, scored, 50+ kept",
-      note: 'The only door that scores on the way in. Everything it keeps is already judged.' },
+      note: 'The only door that scores on the way in. Everything it keeps is already judged. Since c4ba75d it STOPS after the corpus: index_search is free, so this adds what it found, says so, and offers the paid boards as their own action. Before that both ran in one click and nobody ever saw the free answer before 25 credits had been committed to fetching more -- a preview you cannot act on is not a preview.' },
+    'in.paid':    { diagram: 'arrival', group: 'the seven doors', kind: 'credit', label: 'runPaidBoards — {COST.boardSearch} credits, on its own button',
+      anchor: { file: 'index.html', fn: 'runPaidBoards' }, section: "board search: every source's results, scored, 50+ kept",
+      note: 'Everything that used to be the second half of runBoards, unchanged, reached only from the offer the free pass leaves behind. PAID_OFFER carries the titles, window and place the free pass used, rather than recomputing them: a second click must search what the first one searched, or the free pass was a preview of nothing.' },
     'in.ats':     { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runAts — pull a company feed',
       anchor: { file: 'index.html', fn: 'runAts' }, section: "board search: every source's results, scored, 50+ kept",
       note: 'No URL check, no age cut, no fit cut — an ATS feed is trusted.' },
@@ -435,6 +438,8 @@ module.exports = {
 
   edges: [
     { from: 'in.boards', to: 'in.addJobs' }, { from: 'in.ats', to: 'in.addJobs' },
+    { from: 'in.boards', to: 'in.paid', label: 'offers, never calls' },
+    { from: 'in.paid', to: 'in.addJobs' },
     { from: 'in.suggest', to: 'in.addJobs' }, { from: 'in.csv', to: 'in.addJobs' },
     { from: 'in.paste', to: 'in.addJobs' }, { from: 'in.cold', to: 'in.addJobs' },
     { from: 'in.addJobs', to: 'in.keyOf', label: 'already seen?' },
