@@ -9,7 +9,7 @@
 //   MANTIKS_API_KEY (contact finder)
 //   optional job sources: JSEARCH_API_KEY (OpenWeb Ninja — NOT a RapidAPI key, see below),
 //     ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
+// SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { judge } from "../_shared/judge.ts";
@@ -88,7 +88,36 @@ const secret = (k: string) => {
   if (!v) throw new Error(`server is missing the ${k} secret`);
   return v;
 };
+/* Two clients, and which one a query uses is a security decision rather than a
+   style one.
+
+   `admin` holds the service role, so it bypasses row-level security entirely.
+   That is correct for exactly three kinds of work and nothing else: the shared,
+   non-personal corpus (job_index); the tables a user must never be able to write
+   or read directly, however well-behaved the browser is (apify_runs, orders,
+   usage_events); and the credit RPCs, whose whole point is that a balance cannot
+   be moved from DevTools.
+
+   `asCaller` carries the caller's own JWT against the anon key, so every policy
+   in schema.sql and billing.sql applies to it exactly as it would in the
+   browser. Anything scoped to one person that RLS already covers belongs here,
+   because then a mistake in a WHERE clause is caught by the database instead of
+   being the only thing standing between two users.
+
+   What is NOT here, and is the reason this file touches so few per-user tables:
+   jobs, profiles and user_state are never read or written from this function at
+   all. The browser reaches them through PostgREST directly with the anon key and
+   its own session, already under the policies at schema.sql:24-38 and 328-370.
+   The boundary for a person's own data is the database, not this broker. */
 const admin = createClient(secret("SUPABASE_URL"), secret("SUPABASE_SERVICE_ROLE_KEY"));
+
+const asCaller = (token: string) =>
+  createClient(secret("SUPABASE_URL"), secret("SUPABASE_ANON_KEY"), {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    // A server handling many callers must never keep one caller's session
+    // around to be picked up by the next request.
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
 const cors = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "*",
@@ -652,6 +681,10 @@ async function refund(user: string, s: Spent, kind: "llm" | "search", n: number)
   if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind, p_n: n });
   else await admin.rpc("add_credits", { p_user: user, p_n: n });
 }
+// Service role, and the .eq("user_id") below is therefore the whole check rather
+// than a belt over RLS's braces. apify_runs has row-level security ON and NO
+// policies at all (billing.sql:54), which is the deny: the caller's own client
+// could not read this row, so ownership has to be asserted here or nowhere.
 async function ownRun(user: string, id: string) {
   const { data } = await admin.from("apify_runs").select("dataset_id").eq("run_id", String(id)).eq("user_id", user).maybeSingle();
   if (!data) throw new Http(404, "run not found");
@@ -739,6 +772,9 @@ Deno.serve(async (req) => {
     const { data: auth } = await admin.auth.getUser(token);
     const user = auth?.user?.id;
     if (!user) throw new Http(401, "sign in first");
+    // The same token, now as a client the database will police. See the note by
+    // `admin` above for which queries are allowed to use which.
+    const me = asCaller(token);
 
     const b = await req.json().catch(() => ({}));
     switch (b.action) {
@@ -835,13 +871,21 @@ Deno.serve(async (req) => {
         // to come from a real search of this caller's. This was the one mutating
         // action that spent nothing and proved nothing: any uuid and any figures
         // were accepted, 30 rows at a time, unmetered and unbounded.
+        // Both reads below stay on the service role on purpose. usage_events is
+        // revoked from `authenticated` outright (billing.sql:245) -- the ledger
+        // is not something the browser is allowed to read at all -- so the
+        // caller's own client would get nothing back and this check would pass
+        // for everyone. The .eq("user_id") is the scoping.
         const { data: own } = await admin.from("usage_events")
           .select("created_at").eq("search_id", sid).eq("user_id", user)
           .order("created_at", { ascending: true }).limit(1).maybeSingle();
         if (!own) throw new Http(404, "unknown search");
         if (Date.now() - new Date(own.created_at as string).getTime() > REPORT_WINDOW_MS)
           throw new Http(409, "search too old to report");
-        // One report per search: a retry must not double the row count.
+        // One report per search: a retry must not double the row count. This one
+        // is deliberately NOT scoped to the caller -- it asks whether the search
+        // has been reported by anybody, and scoping it would reintroduce the
+        // double-count it exists to stop.
         const { count: already } = await admin.from("usage_events")
           .select("id", { count: "exact", head: true }).eq("search_id", sid).eq("kind", "yield");
         if (already) throw new Http(409, "already reported");
@@ -1185,6 +1229,9 @@ Deno.serve(async (req) => {
         });
         const o = await r.json();
         if (!r.ok || !o.id) throw new Http(502, "Couldn't start the payment. Nothing was charged.");
+        // Service role: orders carries only `own orders: select` (billing.sql:36),
+        // so a caller can read their orders but must never write one -- a row
+        // here is a claim about money that the browser does not get to make.
         const { error } = await admin.from("orders").insert({ id: o.id, user_id: user, pack: b.pack, credits: pack.credits, amount: pack.paise });
         if (error) throw error;
         // key_id is Razorpay's publishable id; checkout needs it in the browser.
@@ -1198,7 +1245,10 @@ Deno.serve(async (req) => {
         const { data: order } = await admin.from("orders").select("user_id").eq("id", String(order_id)).maybeSingle();
         if (order?.user_id !== user) throw new Http(404, "order not found");
         await admin.rpc("mark_order_paid", { p_order: order_id, p_payment: payment_id });
-        const { data: c } = await admin.from("credits").select("balance").eq("user_id", user).maybeSingle();
+        // Read back through the caller's own client: `own credits: select`
+        // (billing.sql:21-23) scopes this to their row, so the .eq() below is a
+        // second lock rather than the only one.
+        const { data: c } = await me.from("credits").select("balance").eq("user_id", user).maybeSingle();
         return json({ balance: c?.balance ?? 0 });
       }
     }
