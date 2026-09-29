@@ -1588,6 +1588,7 @@ async function buyDialog(){
     <div class="btn-row" style="margin-top:14px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div></div>`);
   try{
     const {packs,costs}=await hosted('packs',{});
+    if(costs && costs.boardSearch) BOARD_COST=costs.boardSearch;
     if(costs) d.querySelector('#packs').insertAdjacentHTML('beforebegin',
       /* Two prices for scoring because there are two models and they differ 4x.
          A board search scores its own intake on the fast one; asking for a
@@ -3432,6 +3433,60 @@ async function fromAts(jobs, onStatus){
   return {jobs:out, closed};
 }
 
+/* What the corpus search left on the table, so the paid search can be a second
+   click rather than the same click. Holds the track it belongs to: switching
+   track must not leave an offer behind that would spend credits on the titles
+   of a track nobody is looking at. Null whenever there is nothing to offer --
+   no cloud session, an own Apify token, or the paid search already made. */
+let PAID_OFFER = null;
+/* What the live-board search costs, for the button that offers it. The server
+   is the authority (COST.boardSearch) and hands the real figure over with the
+   packs; this is the same number written down so the button can be drawn before
+   anyone has opened the credits dialog. Refreshed from the server whenever that
+   dialog does fetch them. */
+let BOARD_COST = 25;
+
+/* The shared tail of both phases: what was kept goes into the list, the search
+   is reported if it was a metered one, and the person is told what happened.
+   `paid` is what makes the two summaries differ -- a free corpus pass that
+   found little is an invitation to spend, and needs to say so. */
+async function finishSearch(trk, live, failed, paid){
+  const p=P(); const st=live.st, d=st.dropped;
+  const n=addJobs(st.kept.concat(st.unscored));
+  if(SEARCH_ID){
+    hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
+    // Only a search on our keys moves the "new since" point; it's what that window is for.
+    p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
+  }
+  SEARCH_ID=null;
+  /* save, then redraw, then say what happened -- in that order, because
+     render() rebuilds #root and would wipe a summary written before it. */
+  await save(); busy=false; render();
+  const why=[st.below&&`${st.below} scored below ${FLASH_INTAKE_CUT}`, d.listing&&`${d.listing} listing pages`,
+    d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
+    st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
+  if(failed.length) console.warn('sources failed:', failed);
+  const found=(n
+      ? `Added ${st.kept.length} jobs scoring ${FLASH_INTAKE_CUT}+ from ${st.found} results.`
+        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
+      : `Searched ${st.found} results, none new scoring ${FLASH_INTAKE_CUT}+.`);
+  setSearchInfo(found + (why?` Skipped: ${why}.`:'')
+    + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:'')
+    + (paid?'':' The live boards are a separate search, and a paid one.'));
+}
+
+/* Phase one, and free.
+
+   The corpus is hundreds of thousands of postings already acquired and already
+   paid for, served to everyone, so reading it costs nothing and answers at
+   once. It used to run here and then fall straight through into a board search
+   in the same click, which meant nobody ever got the chance to look at the free
+   answer and decide the paid one was unnecessary. Now it stops, shows what it
+   has, and offers the paid search as its own action.
+
+   The own-Apify-token path below is untouched: that person spends on their own
+   account through their own key, there is no credit of ours to save them, and
+   a second click in front of it would buy nothing. */
 async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
   // Portals first, then any specialist registry the track named that is not
@@ -3443,7 +3498,7 @@ async function runBoards(trk, where){
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   const qs=buildBoardQueries(titles,boards,where);
-  busy=true; render();
+  busy=true; PAID_OFFER=null; render();
   try{
     // Pinned to the person's country so Google ranks for where they can
     // actually work. The location term in the query does the real narrowing;
@@ -3453,78 +3508,75 @@ async function runBoards(trk, where){
     const cc=p.profile.country_code||"";
     const live=liveBoard(trk, p.profile, p.track), failed=[];
     if(!ownApify() && cloudNow()){
-      // Our keys: the API sources answer at once; the Google run and the site
-      // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
-      // Each batch is CV-checked the moment it arrives. One source failing
-      // loses only its own results. One charge for the lot.
-      const registries=boards.filter(b=>!PORTALS.includes(b));
-      const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
       // New jobs only: every site is asked for what was posted since this track
       // was last searched (rounded up, plus a day of overlap), 30 days the first time.
       const last=Date.parse((p.searchedAt||{})[trk.id]||'');
       const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
-      setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
-      /* The shared corpus first, because it is free and instant. These rows
-         were acquired once and are served to everyone, so nothing is metered
-         and nothing is waited on -- they are on screen before the paid sources
-         have started. The boards then fill what the index does not have, which
-         is mostly the last few days: outside Naukri's latest-jd feed the
-         corpus lags about a week, so this does not replace a search, it makes
-         one cheaper to justify.
-         Wrapped because the index is an optimisation and must never be able to
-         stop a search the user has already paid for. */
+      setSearchInfo(since_days<30 ? `reading the index for jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'reading the index…');
       try{
         const ix=await hosted('index_search',{titles:titles.slice(0,4), since_days, limit:60});
         const rows=(ix&&ix.jobs)||[];
-        if(rows.length){
-          await live.add(rows.map(jsearchRow));
-          live.draw(`${rows.length} from the index · searching the boards for the rest…`);
-        }
+        if(rows.length) await live.add(rows.map(jsearchRow));
       }catch(e){ console.warn('index search skipped:', e.message); }
-
-      // fallback: portal queries the server runs on Google if every API source comes back empty.
-      const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
-        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
-      SEARCH_ID=r.searchId||null;
-      failed.push(...(r.sourceErrors||[]));
-      let left=(r.scrapers||[]).length+(r.runId?1:0);
-      const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
-      const land=(label, promise)=>promise
-        .then(jobs=>live.add(jobs||[]))
-        .catch(e=>{ failed.push(`${label}: ${e.message}`); })
-        .finally(()=>{ left--; live.draw(note()); });
-      const work=[live.add((r.jobs||[]).map(jsearchRow))];
-      (r.scrapers||[]).forEach(s=>work.push(land(s.label,
-        apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
-          .then(items=>(items||[]).map(jsearchRow)))));
-      if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
-      live.draw(note());
-      await Promise.all(work);
+      /* The same titles, the same window and the same place, carried rather than
+         recomputed: a second click must search what the first one searched, or
+         the free pass was not a preview of anything. Set BEFORE finishSearch,
+         because that is what redraws the panel the offer appears in. */
+      PAID_OFFER={trackId:trk.id, where, since_days};
+      await finishSearch(trk, live, failed, false);
     } else {
       await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
+      await finishSearch(trk, live, failed, true);
     }
-    const st=live.st, d=st.dropped;
-    const n=addJobs(st.kept.concat(st.unscored));
-    if(SEARCH_ID){
-      hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
-      // Only a search on our keys moves the "new since" point; it's what that window is for.
-      p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
-    }
-    SEARCH_ID=null;
-    await save(); busy=false; render();
-    const why=[st.below&&`${st.below} scored below ${FLASH_INTAKE_CUT}`, d.listing&&`${d.listing} listing pages`,
-      d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
-      st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
-    if(failed.length) console.warn('sources failed:', failed);
-    setSearchInfo((n
-      ? `Added ${st.kept.length} jobs scoring ${FLASH_INTAKE_CUT}+ from ${st.found} results.`
-        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
-      : `Searched ${st.found} results, none new scoring ${FLASH_INTAKE_CUT}+.`) + (why?` Skipped: ${why}.`:'')
-      + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
   }catch(e){
     busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
+    setSearchInfo(e.message);
+  }
+}
+
+/* Phase two, and the one that costs credits: the live boards. Only ever reached
+   from the button runBoards offers, never automatically.
+
+   Our keys: the API sources answer at once; the Google run and the site
+   scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later. Each
+   batch is CV-checked the moment it arrives. One source failing loses only its
+   own results. One charge for the lot. */
+async function runPaidBoards(trk, where, since_days){
+  const p=P(); if(!p||busy) return;
+  const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
+  const titles=(trk.titles||[]);
+  if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
+  busy=true; PAID_OFFER=null; render();
+  try{
+    const cc=p.profile.country_code||"";
+    const live=liveBoard(trk, p.profile, p.track), failed=[];
+    const registries=boards.filter(b=>!PORTALS.includes(b));
+    const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
+    setSearchInfo('searching the live boards…');
+    // fallback: portal queries the server runs on Google if every API source comes back empty.
+    const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+      where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
+      fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+    SEARCH_ID=r.searchId||null;
+    failed.push(...(r.sourceErrors||[]));
+    let left=(r.scrapers||[]).length+(r.runId?1:0);
+    const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
+    const land=(label, promise)=>promise
+      .then(jobs=>live.add(jobs||[]))
+      .catch(e=>{ failed.push(`${label}: ${e.message}`); })
+      .finally(()=>{ left--; live.draw(note()); });
+    const work=[live.add((r.jobs||[]).map(jsearchRow))];
+    (r.scrapers||[]).forEach(s=>work.push(land(s.label,
+      apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
+        .then(items=>(items||[]).map(jsearchRow)))));
+    if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
+    live.draw(note());
+    await Promise.all(work);
+    await finishSearch(trk, live, failed, true);
+  }catch(e){
+    busy=false; SEARCH_ID=null; render();
+    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runPaidBoards(trk,where,since_days)); return; }
     setSearchInfo(e.message);
   }
 }
@@ -4381,6 +4433,13 @@ function renderApp(){
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  /* On our keys the first click reads the free corpus and the paid boards are a
+     second, separate one. With an own Apify token there is no credit of ours to
+     save, so that path keeps its single button and its old wording. */
+  const freeFirst=!ownApify() && cloudNow();
+  /* Scoped to THIS track. An offer left behind by another track would spend the
+     board-search charge on titles nobody is looking at. */
+  const offer=!!(PAID_OFFER && PAID_OFFER.trackId===trk.id);
 
   $('#root').innerHTML=`
   <div class="topbar">
@@ -4433,12 +4492,21 @@ function renderApp(){
           value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
         <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
         <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
-          ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
-        ${(trk.boards||[]).length
+          ${busy?'<span class="spin"></span> Searching…':(freeFirst?'Search the free index':'Search the job boards')}</button>
+        ${freeFirst
+          ? `<p class="hint">Hundreds of thousands of postings already collected and shared, read free and answered at once. The live boards are the paid search below.</p>`
+          : (trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
              <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
           : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
+        ${offer
+          ? `<button class="btn-sm" id="btnPaidBoards" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
+               Search live boards — ${BOARD_COST} credits</button>
+             ${(trk.boards||[]).length
+               ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>` : ''}
+             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
+          : ''}
         <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 
         <details class="fold" data-fold="add" ${FOLDS.add?'open':''}>
@@ -4637,6 +4705,10 @@ function renderApp(){
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
+  if($('#btnPaidBoards')) $('#btnPaidBoards').onclick=()=>{
+    const o=PAID_OFFER; if(!o) return;
+    runPaidBoards(trk, o.where, o.since_days);
+  };
   const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
   if($('#tbTools')) $('#tbTools').onclick=toggleTools;
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
