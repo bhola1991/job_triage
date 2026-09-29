@@ -481,8 +481,22 @@ create table if not exists public.job_checks (
   -- floor under it. A render that says "gone from the board" should be able to
   -- tell knowing from guessing.
   closed_src text        check (closed_src is null or closed_src in ('declared', 'inferred')),
+  -- Consecutive runs this posting was absent from a source we actually read
+  -- through. One absence is not a closure: 20.8% of the Naukri index vanished
+  -- across two days on 2026-09-26 and came back, so a single miss sits inside
+  -- the noise. Two in a row does not. Only runs entitled to count increment it
+  -- -- a run that did not read the row's file leaves it alone -- and any
+  -- sighting resets it to 0. Declared expiry ignores it entirely.
+  absent_runs integer     not null default 0 check (absent_runs >= 0),
   checked_at timestamptz not null default now()
 );
+
+-- For databases created before the column above existed (safe to re-run); the
+-- same change is supabase/migrations/20260929_02_absent_runs.sql.
+alter table public.job_checks add column if not exists absent_runs int not null default 0;
+alter table public.job_checks drop constraint if exists job_checks_absent_runs_check;
+alter table public.job_checks add constraint job_checks_absent_runs_check
+  check (absent_runs >= 0);
 
 create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
 -- No index on (closed_on) where closed_on is null. There was one; it took
