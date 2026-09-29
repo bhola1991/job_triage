@@ -22,7 +22,11 @@
 -- publishing its own dead list is a different kind of fact from an absence,
 -- and it has no noise floor under it to wait out.
 --
--- NOT APPLIED by the branch that added it. Run it in the SQL editor.
+-- APPLIED to kgacahuzaxqkzdcpyboc on 2026-09-29 as migration 20260929110023
+-- (job_checks_absent_runs). Verified: public.job_checks.absent_runs int4 not
+-- null default 0, with job_checks_absent_runs_check in place, across 429,018
+-- rows (exact count; the dashboard's 426,018 is a planner estimate). Adding a column with a constant default is metadata-only on
+-- Postgres 17, so this did not rewrite the table.
 alter table public.job_checks
   add column if not exists absent_runs int not null default 0;
 

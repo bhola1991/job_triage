@@ -9,10 +9,21 @@
 --
 -- Two parts: a column that makes the reaper idempotent, and the schedule.
 --
--- NOT APPLIED by the branch that added it, and the schedule half needs two
--- extensions and a secret before it will do anything. Read it before running
--- it: this is the one file here that makes the database call out to the
--- internet on a timer.
+-- PARTLY APPLIED, and the split is deliberate.
+--
+-- Part 1 (the column and its index) was applied to kgacahuzaxqkzdcpyboc on
+-- 2026-09-29 as migration 20260929110038 (apify_runs_aborted_at). Verified:
+-- public.apify_runs.aborted_at timestamptz null. It is inert on its own -- no
+-- writer sets it until the reaper is deployed -- and harmless.
+--
+-- Part 2 (the schedule) is NOT applied, because on this project it could not
+-- work yet and would fail loudly every five minutes if forced:
+--   * pg_cron and pg_net are both NOT INSTALLED (checked 2026-09-29).
+--   * the reap-apify edge function is not deployed.
+--   * the vault secrets it reads (project_url, reap_secret) do not exist, so
+--     net.http_post would be handed a null url on every tick.
+-- Apply it only after those three are true. This is the one file here that
+-- makes the database call out to the internet on a timer, so read it first.
 
 -- ── 1. the column ───────────────────────────────────────────────────────────
 --

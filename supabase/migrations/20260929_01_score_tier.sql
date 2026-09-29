@@ -11,7 +11,9 @@
 -- the column where an honest blank belongs. Null reads as "scored before this
 -- was recorded", which is exactly true.
 --
--- NOT APPLIED by the branch that added it. Run it in the SQL editor.
+-- APPLIED to kgacahuzaxqkzdcpyboc on 2026-09-29 as migration 20260929110011
+-- (jobs_score_tier). Verified: public.jobs.score_tier text null, with
+-- jobs_score_tier_check in place. 232 rows, all null -- no backfill.
 alter table public.jobs
   add column if not exists score_tier text;
 
