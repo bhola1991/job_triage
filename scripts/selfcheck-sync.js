@@ -109,6 +109,11 @@ function newTab(SB, KV){
 
 const ok = (c, m) => { if (!c) { console.error('FAIL', m); process.exitCode = 1; } };
 
+/* Read out of index.html rather than restated here. A test carrying its own
+   copy of the number would keep passing after somebody changed the real one. */
+const BLOB_SUNSET_DAYS = Number((grab(/const BLOB_SUNSET_DAYS = \d+;/).match(/\d+/) || [])[0]);
+if (!BLOB_SUNSET_DAYS) { console.error('FAIL could not read BLOB_SUNSET_DAYS from index.html'); process.exitCode = 1; }
+
 const job = (title, extra) => Object.assign({
   title, company: 'Acme', location: 'Remote', url: 'https://x/' + title.toLowerCase(),
   description: 'd', status: 'New', date_applied: '', follow_up_date: '', pitch_sent: 'No',
@@ -254,6 +259,58 @@ const profileRec = jobs => ({
   let threw = null;
   try { await dup.save(); } catch (err) { threw = err; }
   ok(!threw, 'a duplicated posting does not blow up the save: ' + (threw && threw.message));
+
+  // ---- the blob's shelf life ------------------------------------------
+  /* The blob is a rollback copy, written on every save. Once an account has
+     been on rows for BLOB_SUNSET_DAYS it stops being written -- the cases that
+     matter are the ones where it must NOT stop, because each of them is a way
+     to lose somebody's work quietly. */
+  {
+    const ago = d => new Date(Date.now() - d * 864e5).toISOString();
+    const freshTab = async (kv) => { const t = newTab(fakeSupabase(), kv); await t.load(); return t; };
+
+    // A migration now records WHEN, not just that it happened.
+    const SB4 = fakeSupabase(), KV4 = {};
+    const m = newTab(SB4, KV4);
+    await m.load();
+    await m.migrateRows();
+    m.setDB({ profiles: { p_1: profileRec([job('Alpha')]) }, current: 'p_1' });
+    await m.save();
+    ok(!isNaN(Date.parse(KV4['triage:migrated'] || '')),
+       'migrating stamps a date, not a flag, got ' + JSON.stringify(KV4['triage:migrated']));
+    ok(typeof KV4['triage:db'] === 'string' && KV4['triage:db'].length > 2,
+       'a freshly migrated account still writes the blob');
+
+    // Inside the window: still written.
+    KV4['triage:migrated'] = ago(BLOB_SUNSET_DAYS - 1);
+    KV4['triage:db'] = '';
+    const young = await freshTab(KV4);
+    young.setDB({ profiles: { p_1: profileRec([job('Beta')]) }, current: 'p_1' });
+    await young.save();
+    ok(KV4['triage:db'] !== '', 'inside the window the blob is still written');
+
+    // Past it: not written any more.
+    KV4['triage:migrated'] = ago(BLOB_SUNSET_DAYS + 1);
+    KV4['triage:db'] = '';
+    const old = await freshTab(KV4);
+    old.setDB({ profiles: { p_1: profileRec([job('Gamma')]) }, current: 'p_1' });
+    await old.save();
+    ok(KV4['triage:db'] === '', 'past the window the blob stops being written');
+
+    // An account that migrated before the stamp existed holds '1'. It must be
+    // read as migrated, and given a date to age FROM rather than aged out on
+    // the spot -- backdating it would retire the blob on the same load that
+    // introduced the idea.
+    const KV5 = { 'triage:migrated': '1' };
+    const legacy = await freshTab(KV5);
+    ok(legacy.isMigrated(), "a bare '1' still reads as migrated");
+    ok(!isNaN(Date.parse(KV5['triage:migrated'] || '')),
+       "a bare '1' is given a real date on load, got " + JSON.stringify(KV5['triage:migrated']));
+    legacy.setDB({ profiles: { p_1: profileRec([job('Delta')]) }, current: 'p_1' });
+    KV5['triage:db'] = '';
+    await legacy.save();
+    ok(KV5['triage:db'] !== '', "a bare '1' keeps its blob: its fortnight starts now, not retroactively");
+  }
 
   console.log(process.exitCode ? 'SOME FAILED' : 'ALL PASS');
 })();
