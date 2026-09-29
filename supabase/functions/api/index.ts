@@ -612,6 +612,38 @@ const pick = (x: Any, ...keys: string[]) => { for (const k of keys) { const v = 
 const INDEX_MAX_AGE_DAYS = 35;   // as scripts/index/push-index.js: do not store
 const INDEX_DESC_CAP = 4000;     // what search_index could never return anyway
 const INDEX_DEPOSIT_CAP = 600;
+/* TODO (product/legal, not a code question — do not "fix" this in passing).
+   Everything below is deposited into public.job_index, which is the SHARED
+   corpus: readable by every signed-in user ("shared: select", schema.sql:573).
+   One person pays for a search and the rows it returns become everybody's.
+   That is the deliberate economics of the corpus and it is what makes
+   index_search free — but where a row came FROM is not all alike, and two of
+   these arrive by scraping sites whose terms are their own matter.
+
+   What currently reaches this function, exhaustively:
+
+     via board_search (searchAll) — API sources, queried under our own keys:
+       jsearch, adzuna, jooble, careerjet, remotive, remoteok
+
+     via apify_items — site scrapers, gated on SCRAPERS membership:
+       linkedin    (bebity~linkedin-jobs-scraper)
+       indeed      (misceres~indeed-scraper)
+       naukri      (memo23~naukri-scraper)
+       indiatech   (seemuapps~india-tech-jobs-scraper — Instahyre/CutShort/Foundit)
+       upwork      (valig~upwork-jobs-scraper)
+
+   What does NOT reach it: the Google search-scraper run. apify_items only
+   deposits when b.source is a known SCRAPERS key, and "google" is not one, so
+   those rows go to the caller and nowhere else.
+
+   The question this TODO exists to raise, and which is the owner's to answer:
+   LinkedIn and Indeed rows are scraped, and they are redistributed here to
+   every user of the product rather than only to the person whose search paid
+   for them. Retaining them for the searcher is one posture; pooling them is a
+   different one. If the answer is that they should not pool, the change is to
+   filter by source in this function — the deposit already happens in one
+   place, deliberately, so that it can be. Nothing here is changed by the
+   commit that added this note. */
 async function depositIndex(jobs: Job[]) {
   try {
     const clean = (v: unknown, n: number) => { const t = String(v ?? "").trim(); return t ? t.slice(0, n) : null; };
