@@ -1541,7 +1541,11 @@ async function hosted(action, body){
   return data;
 }
 /* Jev (TypeSafe System One) judges one job: how much of the posting is visible,
-   the two fit scores, and the ten flag codes. Called per job from runScoring. */
+   the two fit scores, and the ten flag codes. Nothing calls this per job any
+   more -- both scoring paths go through judgeMany below, which pays once per
+   JUDGE_BATCH -- and it is kept as the single-posting form of the same call:
+   the `judge` action is live on the server and this is the only thing in the
+   browser that reaches it. */
 async function judgeJob(posting, candidate){
   return hosted('judge', { posting, candidate });
 }
@@ -3023,22 +3027,6 @@ const candidateOf = (prof, track) => {
   };
 };
 
-/* One job, judged. Returns null rather than throwing: a judgement is an
-   improvement on the DeepSeek flags, not a precondition for having any, and a
-   scoring run that already cost money must not be lost to it. Null is also
-   what every local-only and own-key run gets, because the TypeSafe key lives
-   on the server and deliberately never reaches the browser. */
-async function judgeInto(j, cand){
-  if(!cloudNow()) return null;
-  try{
-    return await judgeJob({
-      title: String(j.title||''), company: String(j.company||''),
-      location: String(j.location||''),
-      description: String(j.description||'').slice(0,4000),
-    }, cand);
-  }catch(e){ console.warn('judgment skipped:', e && e.message); return null; }
-}
-
 /* Jev decides which flags are true; DeepSeek says what in the posting makes
    each one true. A flag Jev raises that DeepSeek never mentioned still shows,
    with no fact and no quote -- which is the honest rendering of "we think so
@@ -3099,39 +3087,31 @@ async function runScoring(all, auto){
   if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
   busy=true; render();
   const SIZE=6, total=targets.length; let done=0, failed=0;
+  /* Everything that scored, judged in ONE pass once the loop is done, exactly
+     as scoreAndCut does it. This used to fire judgeInto per job -- one credit
+     each -- while the search path paid one credit per fifty through judgeMany
+     for the same work. A sixty-job rescore cost sixty credits where a
+     sixty-job search cost two, and nothing about a rescore justifies the
+     difference. Collected here rather than judged in the loop because the
+     batch that makes it cheap is fifty, and the scoring batch is six. */
+  const scored=[];
   for(let i=0;i<targets.length;i+=SIZE){
     const batch=targets.slice(i,i+SIZE);
     try{
       const res=await scoreBatch(batch,p.profile,p.track);
-      /* One judgement per job, and one credit per judgement. This is the small
-         path -- a rescore, capped at AUTO_MAX -- so it can carry that; the
-         search path judges through judgeMany instead, which pays once for a
-         whole batch. In parallel across the batch, not across the run: SIZE
-         calls in flight is enough to keep it quick without turning a rescore
-         into a burst of paid traffic. */
-      const cand=candidateOf(p.profile, p.track);
-      const judged=await Promise.all(batch.map(b=>{
-        const r=res[String(b.i)];
-        return r ? judgeInto(p.jobs[b.i], cand) : null;
-      }));
       batch.forEach((b,k)=>{ const r=res[String(b.i)]; if(!r) return;
-        const j=p.jobs[b.i], jv=judged[k];
+        const j=p.jobs[b.i];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
         j.score_tier='pro';          // scoreBatch with no tier resolves to pro
-        /* rankOf keys on the long names, and Jev's choice already answers in
-           them, so this is a straight swap. When there is no judgement it is
-           DeepSeek's own reading -- dropping confidence entirely would move
-           every unjudged job in the ranking. */
-        j.ai_confidence = (jv && jv.confidence) || r.conf;
-        j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
-        /* The whole judgement, kept. Every number the app derives from it --
-           the fit pair, reachability, the confidence weight in rankOf -- is
-           computed from this in the browser, so changing any of those weights
-           re-ranks what is already judged without paying to judge it again. */
-        if(jv) j.ai_judgment = JSON.stringify(jv);
+        /* DeepSeek's own reading for now. The judgement below raises it when
+           one arrives; dropping confidence entirely while waiting would move
+           every job in the ranking for as long as the loop runs. */
+        j.ai_confidence = r.conf;
+        j.ai_flags = JSON.stringify(addSpans(r.flags, j.description));
         // Only ever fills a gap. A date from a feed outranks the model's
         // reading of the same posting, and re-scoring must not overwrite it.
-        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
+        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
+        scored.push({j, r}); });
     }catch(e){
       if(e.message==='NEEDKEY'){
         busy=false;
@@ -3146,6 +3126,34 @@ async function runScoring(all, auto){
     setInfo(`${done} of ${total} done${failed?` · ${failed} failed`:''}`);
     await save();
   }
+
+  /* One judgement call per fifty, and a failure costs the flags rather than the
+     scoring already paid for: a job with no judgement keeps DeepSeek's own
+     reading and its score, which is what judgeMany returning null for it
+     means. rankOf keys on the long names and Jev's choice already answers in
+     them, so the swap below is straight. */
+  if(scored.length && cloudNow()){
+    try{
+      const cand=candidateOf(p.profile, p.track);
+      const judged=await judgeMany(scored.map(({j})=>({
+        title:String(j.title||''), company:String(j.company||''),
+        location:String(j.location||''),
+        description:String(j.description||'').slice(0,4000),
+      })), cand);
+      scored.forEach(({j, r}, k)=>{
+        const jv=judged[k];
+        if(!jv) return;
+        j.ai_confidence=jv.confidence||r.conf;
+        j.ai_flags=JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
+        /* The whole judgement, kept. Every number the app derives from it --
+           the fit pair, reachability, the confidence weight in rankOf -- is
+           computed from this in the browser, so changing any of those weights
+           re-ranks what is already judged without paying to judge it again. */
+        j.ai_judgment=JSON.stringify(jv);
+      });
+    }catch(e){ console.warn('judgement skipped for this rescore:', e && e.message); }
+  }
+
   busy=false;
   setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
   await save(); render();
