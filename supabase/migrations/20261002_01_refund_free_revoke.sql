@@ -1,0 +1,53 @@
+-- 2026-10-02 — close an unauthenticated path to minting free credits.
+--
+-- public.refund_free was executable by PUBLIC, and so by anon and
+-- authenticated. It is SECURITY DEFINER and takes p_user as an argument, so it
+-- does not care who is calling: a POST to /rest/v1/rpc/refund_free carrying
+-- only the anon key -- which ships publicly in config.js and is in every
+-- browser that has loaded the app -- could add arbitrary free_llm or
+-- free_search to any account.
+--
+--   POST /rest/v1/rpc/refund_free  {"p_user":"<any uuid>","p_what":"llm","p_n":999999}
+--
+-- Paid `balance` was never reachable this way, so this was not a route to
+-- stealing money. It was a route to spending ours: free_llm and free_search
+-- gate the free tier, and the free tier buys real DeepSeek and Apify calls.
+--
+-- WHAT DRIFTED, because the file was never wrong. billing.sql:154 has always
+-- carried this revoke. Migration 20260926131717 changed the signature from
+-- (uuid, text) to (uuid, text, integer); a new signature is a NEW function
+-- object, which picks up Supabase's default PUBLIC execute grant, and that
+-- migration did not carry the revoke forward. The tell was in the ACLs --
+-- refund_free was the only one of the six credit functions with an
+-- "=X/postgres" (empty grantee = PUBLIC) entry:
+--
+--   refund_free      {=X/postgres,postgres=X/postgres,service_role=X/postgres}  <-- wrong
+--   spend_llm        {postgres=X/postgres,service_role=X/postgres}
+--   spend_search     {postgres=X/postgres,service_role=X/postgres}
+--   add_credits      {postgres=X/postgres,service_role=X/postgres}
+--   mark_order_paid  {postgres=X/postgres,service_role=X/postgres}
+--   prune_index      {postgres=X/postgres,service_role=X/postgres}
+--
+-- CHECKED BEFORE CLOSING, so the record is not just "we fixed it": every row in
+-- public.credits was inside its ceiling (free_llm <= 60, free_search <= 5,
+-- which spend/refund arithmetic cannot exceed on its own) and the table had not
+-- been written since 2026-09-17. No sign it was ever used.
+--
+-- service_role keeps EXECUTE, and the edge function calls this through the
+-- service-role client (api/index.ts:681), so nothing legitimate changes.
+--
+-- APPLIED to kgacahuzaxqkzdcpyboc on 2026-10-02 as migration 20261002…
+-- (refund_free_revoke_public_execute). Verified after: anon and authenticated
+-- both false, service_role true, ACL now identical to its five siblings.
+--
+-- Re-runnable: revoking a privilege nobody holds is a no-op.
+revoke execute on function public.refund_free(uuid, text, integer)
+  from public, anon, authenticated;
+
+-- NOT revoked here, deliberately: public.handle_new_user() carries the same
+-- stray PUBLIC grant, but it is the on_auth_user_created trigger function. It
+-- returns `trigger`, so PostgREST does not expose it and Postgres refuses to
+-- call it outside a trigger -- there is no reachable exploit. Revoking it
+-- touches the privilege checks around a trigger that every signup depends on,
+-- which is a worse trade than leaving an unreachable grant in place. Left as a
+-- known, deliberate advisor warning rather than a silent one.
