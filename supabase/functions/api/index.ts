@@ -692,13 +692,37 @@ async function spend(fn: string, args: Record<string, unknown>) {
   return data as Spent;
 }
 // Our upstream call failed, so it shouldn't cost them: put it back where it came from.
-async function refund(user: string, s: Spent, kind: "llm" | "search", n: number) {
+/* Every refund is a failure, so this is also where the failure gets WRITTEN
+   DOWN. It did not used to be, and the consequence was bigger than it sounds:
+   usage_events recorded successes only, so absence of a row meant failure
+   rather than absence of a call. That is how 52 lost jobs once looked like four
+   successful scoring calls, and why every average taken from the table was
+   survivorship bias -- at a 4,000-token ceiling the ledger showed pro replies
+   of 3,874 and 3,552, which reads as "97% of budget, holding", when those were
+   simply the only calls that fit.
+
+   Proven live on 2026-10-03: a real search logged 8 yield rows, 5 api, 4 scrape
+   and 1 error, and NOT ONE llm or judge row. Scoring produced nothing and there
+   was no way to tell from the data whether it had failed or never been
+   attempted. One query should have answered that.
+
+   Logging here rather than at the six call sites is deliberate: a path that
+   refunds and forgets to log is exactly the bug being fixed, and there is no
+   way to add one by accident if the refund itself does it. `why` is required
+   for the same reason -- an untyped optional would quietly default to nothing.
+   logUsage swallows its own errors, so this can never turn a refund into a
+   failure. */
+async function refund(user: string, s: Spent, kind: "llm" | "search", n: number, why: string, searchId?: string) {
   if (s.used === "unlimited") return;          // nothing was taken
   // p_n matters now that a call can cost more than one. free_llm counts
   // credits so it gets p_n back; free_search counts searches, and refund_free
   // returns exactly one of those however many credits the search cost.
   if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind, p_n: n });
   else await admin.rpc("add_credits", { p_user: user, p_n: n });
+  // units 0 and a null cost: nothing was delivered and nothing was kept, which
+  // is the same shape the source-failure rows already use.
+  await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(searchId)) ? searchId : null,
+    kind: "error", source: kind, units: 0, note: `refunded ${n}: ${why}`.slice(0, 300) }]);
 }
 async function ownRun(user: string, id: string) {
   const { data } = await admin.from("apify_runs").select("dataset_id").eq("run_id", String(id)).eq("user_id", user).maybeSingle();
@@ -851,7 +875,7 @@ Deno.serve(async (req) => {
             : null;
           // Nothing came back from anywhere: they got nothing, so they pay nothing.
           if (!jobs.length && !run?.id && !scrapers.length) {
-            await refund(user, s, "search", COST.boardSearch);
+            await refund(user, s, "search", COST.boardSearch, `every source empty: ${errors[0] || "no rows anywhere"}`, searchId);
             throw new Http(502, `Job search is down right now${errors[0] ? ` (${errors[0]})` : ""}. No credits were used — try again shortly.`);
           }
           if (run?.id) {
@@ -868,7 +892,9 @@ Deno.serve(async (req) => {
           // refunds nothing, so an unexpected failure here used to be charged
           // for silently. The Http paths above refund themselves, so they are
           // deliberately left alone.
-          if (!(e instanceof Http)) await refund(user, s, "search", COST.boardSearch);
+          // searchId is declared inside the try, so it is not in scope here; the row
+          // still lands, just without the search it belonged to.
+          if (!(e instanceof Http)) await refund(user, s, "search", COST.boardSearch, String((e as Error)?.message || e).slice(0, 120));
           throw e;
         }
       }
@@ -940,7 +966,7 @@ Deno.serve(async (req) => {
           const d = r && r.ok ? await r.json().catch(() => null) : null;
           const text = (d?.choices?.[0]?.message?.content || "").trim();
           if (!text) {                       // their call failed, so it shouldn't cost them
-            await refund(user, s, "llm", cost);
+            await refund(user, s, "llm", cost, `${model}: no answer`, b.search_id);
             throw new Http(502, "The model didn't answer. No credit was used — try again.");
           }
           // Hit the ceiling: the reply is real but cut off mid-token, so its JSON
@@ -949,7 +975,7 @@ Deno.serve(async (req) => {
           // expensive one -- 200 OK, credit kept, nothing scored, and the only
           // trace a grabJSON throw in the browser. Refund it and say so.
           if (d?.choices?.[0]?.finish_reason === "length") {
-            await refund(user, s, "llm", cost);
+            await refund(user, s, "llm", cost, `${model}: truncated at ${LLM_TOK_CAP} tokens`, b.search_id);
             throw new Http(502, `The model ran past its ${LLM_TOK_CAP}-token ceiling and the answer was cut off. No credit was used — try again, or score fewer jobs at once.`);
           }
           // DeepSeek reports cached prompt tokens separately; they're what a stable prompt start saves.
@@ -975,7 +1001,7 @@ Deno.serve(async (req) => {
           // refunds nothing, so an unexpected failure here used to be charged
           // for silently. The Http paths above refund themselves, so they are
           // deliberately left alone.
-          if (!(e instanceof Http)) await refund(user, s, "llm", cost);
+          if (!(e instanceof Http)) await refund(user, s, "llm", cost, `${model}: ${String((e as Error)?.message || e).slice(0, 120)}`, b.search_id);
           throw e;
         }
       }
@@ -1014,7 +1040,7 @@ Deno.serve(async (req) => {
              of it delivers a judgment, so every failure refunds. This used to
              skip the refund for an Http thrown from inside judge() while still
              telling the user no credit had been used. */
-          await refund(user, s, "llm", COST.llm);
+          await refund(user, s, "llm", COST.llm, `jev: ${String((e as Error)?.message || e).slice(0, 120)}`, b.search_id);
           throw new Http(502, "Judgment call failed. No credit was used.");
         }
       }
@@ -1050,7 +1076,7 @@ Deno.serve(async (req) => {
             { model?: string; usage?: { input_tokens?: number; output_tokens?: number } }
           >;
           if (!done.length) {
-            await refund(user, s, "llm", COST.llm);
+            await refund(user, s, "llm", COST.llm, `jev batch: all ${out.length} posting(s) failed`, b.search_id);
             throw new Http(502, "Judgment call failed. No credit was used.");
           }
           // units is how many postings were judged, so the ledger shows what one
@@ -1065,7 +1091,7 @@ Deno.serve(async (req) => {
           }]);
           return json({ judgments: out, ...wallet(s) });
         } catch (e) {
-          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm);
+          if (!(e instanceof Http)) await refund(user, s, "llm", COST.llm, `jev batch: ${String((e as Error)?.message || e).slice(0, 120)}`, b.search_id);
           throw e;
         }
       }
@@ -1086,13 +1112,13 @@ Deno.serve(async (req) => {
           // Not an error: their index simply does not carry this employer. The
           // caller reads 404 as "fall through to Google", so it must stay cheap
           // and quiet rather than surfacing as a failure to the user.
-          if (!hit) { await refund(user, s, "search", CONTACT_COST); throw new Http(404, "MANTIKS_MISS"); }
+          if (!hit) { await refund(user, s, "search", CONTACT_COST, "mantiks: posting not found"); throw new Http(404, "MANTIKS_MISS"); }
           const r = await fetch(`${MANTIKS}/jobs/${encodeURIComponent(hit.jobId)}/best-fitting`, {
             headers: mantiksHeaders(), signal: AbortSignal.timeout(30000),
           }).catch(() => null);
           const d = r?.ok ? await r.json().catch(() => null) : null;
           const p = d?.found ? d.people : null;
-          if (!p?.full_name) { await refund(user, s, "search", CONTACT_COST); throw new Http(404, "MANTIKS_MISS"); }
+          if (!p?.full_name) { await refund(user, s, "search", CONTACT_COST, "mantiks: no contact on the posting"); throw new Http(404, "MANTIKS_MISS"); }
           /* units is 1 because that is what Mantiks charged: their credit is
              spent on a hit and not on a miss, which is the same rule this
              action bills the user by. No cost_inr -- a lead credit is bought on
@@ -1111,7 +1137,7 @@ Deno.serve(async (req) => {
             why: String(p.explanation || "").slice(0, 400),
           }, domain: hit.domain, ...wallet(s) });
         } catch (e) {
-          if (!(e instanceof Http)) await refund(user, s, "search", CONTACT_COST);
+          if (!(e instanceof Http)) await refund(user, s, "search", CONTACT_COST, `mantiks: ${String((e as Error)?.message || e).slice(0, 110)}`);
           throw e;
         }
       }
@@ -1173,7 +1199,7 @@ Deno.serve(async (req) => {
           }).catch(() => null);
           const run = r && r.ok ? await r.json().then((d) => d?.data).catch(() => null) : null;
           if (!run?.id) {
-            await refund(user, s, "search", cost);
+            await refund(user, s, "search", cost, "apify: no run started");
             throw new Http(502, "Search couldn't start. No credits were used.");
           }
           await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
@@ -1184,7 +1210,7 @@ Deno.serve(async (req) => {
           // refunds nothing, so an unexpected failure here used to be charged
           // for silently. The Http paths above refund themselves, so they are
           // deliberately left alone.
-          if (!(e instanceof Http)) await refund(user, s, "search", cost);
+          if (!(e instanceof Http)) await refund(user, s, "search", cost, `apify: ${String((e as Error)?.message || e).slice(0, 110)}`);
           throw e;
         }
       }
