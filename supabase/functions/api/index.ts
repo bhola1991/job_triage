@@ -287,6 +287,37 @@ const remoteok = () => cachedFeed("remoteok", async () =>
     .filter((x) => x && x.position).map((x: Any): Job => ({ title: plain(x.position), company: x.company || "",
       url: x.url || "", location: `${x.location || "Anywhere"} (remote)`, description: plain(x.description).slice(0, 4000),
       posted: isoDay(x.date), publisher: "Remote OK" })));
+/* Workable's OWN aggregated board -- every customer of theirs at once, keyless,
+   searchable. Measured 2026-10-03: 170,321 postings, with descriptions averaging
+   ~4,200 characters, which is the judgeable kind the corpus is short of (it held
+   8,082 full rows against 340,907 thin). This is the discovery route the
+   slug-guessing prober in scripts/index/probe-ats.js cannot reach: no company
+   name needed, because the platform enumerates its own customers.
+
+   Queried per title rather than pulled as a feed, and `location` is honoured --
+   `query=data engineer&location=India` came back 184 strong, every row in a real
+   Indian city -- so this reaches the one region the ATS prober measured at 0%.
+
+   One page per title. The page size caps at TEN whatever `limit` says: 50, 100
+   and 200 all return an empty array, which would have looked like a dead source
+   rather than a capped one. Paging further is possible via nextPageToken and
+   deliberately not done here, because a search should not become a crawl; the
+   deposit banks whatever it finds for the next person instead. */
+async function workable(title: string, where: string): Promise<Job[] | null> {
+  const q = new URLSearchParams({ query: title, limit: "10" });
+  if (where && !/^remote$/i.test(where)) q.set("location", where);
+  const d = await getJson(`https://jobs.workable.com/api/v1/jobs?${q}`);
+  return ((d?.jobs || []) as Any[]).map((x: Any): Job => ({
+    title: plain(x.title),
+    company: (x.company && x.company.title) || "",
+    url: x.url || "",
+    location: (Array.isArray(x.locations) && x.locations[0]) ||
+      [x.location?.city, x.location?.countryName].filter(Boolean).join(", ") || "",
+    description: plain(x.description).slice(0, 4000),
+    posted: isoDay(x.created),
+    publisher: "Workable",
+  })).filter((j: Job) => j.title && j.url);
+}
 function titleMatches(jobs: Job[], titles: string[]) {
   const words = [...new Set(titles.join(" ").toLowerCase().split(/[^a-z+#]+/).filter((w) => w.length >= 4))];
   return jobs.filter((j) => words.some((w) => j.title.toLowerCase().includes(w)));
@@ -470,7 +501,7 @@ const PRICE_USD: Record<string, number> = {
   google: 0.0035,          // per Google query page (Apify google-search-scraper)
   linkedin: 0.005,         // per row; bebity doesn't publish a price, so this is a cautious guess
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
-  adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0,
+  adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0, workable: 0,
   // The shared corpus. Zero because the row was acquired once by a crawl
   // nobody paid per-search for -- but it is listed rather than omitted so
   // search_report accepts it and source_yield can rank the index against the
@@ -615,6 +646,7 @@ async function searchAll(titles: string[], where: string, country: string, since
     ...titles.map((t) => ["adzuna", adzuna(t, where, country, since)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["jooble", jooble(t, where)] as [string, Promise<Job[] | null>]),
     ...titles.map((t) => ["careerjet", careerjet(t, where, country, req)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["workable", workable(t, where)] as [string, Promise<Job[] | null>]),
     ["remotive", remotive().then((j) => titleMatches(j, titles))],
     ["remoteok", remoteok().then((j) => titleMatches(j, titles))],
   ];
