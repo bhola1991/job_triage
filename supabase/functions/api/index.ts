@@ -364,19 +364,20 @@ const SCRAPERS: Record<string, {
   modes: Record<Mode, Tier>;
   input: (c: Ctx, rows: number) => object;
 }> = {
-  // publishedAt is LinkedIn's own r<seconds> filter (the Store page's example is "r604800").
-  // Demoted core -> probe on 2026-09-24 from the ledger, which is what `modes`
-  // is for: 3 searches, 87 rows, ₹38.28, and 5 jobs at 50+ that no other source
-  // found -- ₹7.66 each, against ₹0.81 for Indeed and ₹0.14 for Upwork. At
-  // PROBE_ROWS it costs ₹3.52 a search instead of ₹13.20 and still cannot become
-  // the blind spot that deleting it would create. Note ₹0.44/row is a GUESS
-  // (see PRICE_USD.linkedin), so the real figure can only be worse, never better.
-  // It carries contract roles too, so freelance probes it as well; gig work is
-  // not advertised here at all.
-  linkedin: { actor: "bebity~linkedin-jobs-scraper", label: "LinkedIn",
-    modes: { permanent: "probe", freelance: "probe", gig: "off" },
-    input: (c, rows) => ({ titles: c.titles, locations: c.city ? [c.city] : [], rows, companyProfile: false,
-      publishedAt: `r${bucket(c.since, [1, 7, 30]) * 86400}` }) },
+  /* No linkedin actor, removed 2026-10-03. It was the worst row in the ledger
+     and the last argument for keeping it has gone.
+       cost     ₹7.66 per exclusive 50+ posting, against ₹0.81 for Indeed and
+                ₹0.14 for Upwork -- and ₹0.44/row was a GUESS, because bebity
+                publishes no price, so the real figure could only be worse.
+       kept for 5 jobs at 50+ that no other source found. Deleting it would have
+                left a blind spot, which is why 2026-09-24 demoted it core ->
+                probe instead of removing it.
+       now      JSearch covers it. Measured 2026-10-03, the day the key went in:
+                LinkedIn was the LARGEST publisher it returned, 13 of 40 rows,
+                with descriptions, at ~$0.0025 a request against ₹7.66 a row.
+                The blind spot closed itself.
+     And scraping LinkedIn directly is against their terms in a way reading
+     Google for Jobs is not, which settles it even where the price does not. */
   // A search URL rather than position/location, because only the URL carries
   // Indeed's fromage (days) and sort=date. Titles only: adding skills as a second
   // required term returned nothing for a real niche search.
@@ -421,7 +422,8 @@ const SCRAPERS: Record<string, {
    Paid and unlimited searches run every scraper. Sources that cost us nothing
    (Adzuna, Jooble, Careerjet, Remotive, Remote OK, company feeds) run either way;
    the Google run costs per request, so a free search skips it. */
-const FREE_SCRAPERS = ["linkedin", "indeed", "naukri"];
+// linkedin is gone (see SCRAPERS). pricing.html must not promise it.
+const FREE_SCRAPERS = ["indeed", "naukri"];
 
 async function startScrapers(user: string, c: Ctx, only?: string[]) {
   const errors: string[] = [];
