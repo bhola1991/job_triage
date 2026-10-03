@@ -40,6 +40,45 @@ const ATS = {
       location: x.location || '',
       description: strip(x.descriptionPlain || x.descriptionHtml || ''), posted: (x.publishedAt || '').slice(0, 10) })),
   },
+  /* The three below were added 2026-10-03 because probe-ats.js found boards on
+     them and --write silently dropped every one: it only appends to a
+     sources.json key that already exists, and only greenhouse/lever/ashby did.
+     35 boards of 126 went in the bin on the first real pass. */
+  smartrecruiters: {
+    url: s => `https://api.smartrecruiters.com/v1/companies/${s}/postings?limit=100`,
+    // The ONLY one of the five with no description in its listing -- `ref` is an
+    // API url, not the text. Fetching each posting would be one request per job,
+    // so these arrive without one and push-index.js tiers them thin on its own,
+    // which is the honest outcome rather than a fabricated snippet.
+    rows: (d, s) => (d.content || []).map(x => ({
+      title: x.name || '', company: s,
+      url: x.id ? `https://jobs.smartrecruiters.com/${s}/${x.id}` : '',
+      location: (x.location && (x.location.fullLocation ||
+        [x.location.city, x.location.region].filter(Boolean).join(', '))) || '',
+      description: '', posted: (x.releasedDate || '').slice(0, 10) })),
+  },
+  recruitee: {
+    url: s => `https://${s}.recruitee.com/api/offers/`,
+    rows: (d, s) => (d.offers || []).map(x => ({
+      title: x.title || x.position || '', company: x.company_name || s,
+      url: x.careers_url || '',
+      location: [x.city, x.country].filter(Boolean).join(', ') || x.location || '',
+      description: strip(x.description || x.requirements || ''),
+      posted: String(x.published_at || x.created_at || '').slice(0, 10) })),
+  },
+  // Per-company, which is NOT the same as the jobs.workable.com aggregate the
+  // edge function queries: that caps at ten rows a query, this returns a
+  // company's whole board with descriptions (9,440 characters in the sample).
+  workable: {
+    url: s => `https://apply.workable.com/api/v1/widget/accounts/${s}?details=true`,
+    rows: (d, s) => (d.jobs || []).map(x => ({
+      title: x.title || '', company: (d.name || s),
+      url: x.url || x.shortlink || x.application_url || '',
+      location: (Array.isArray(x.locations) && x.locations[0]) ||
+        [x.city, x.state, x.country].filter(Boolean).join(', ') || '',
+      description: strip(x.description || ''),
+      posted: String(x.published_on || x.created_at || '').slice(0, 10) })),
+  },
 };
 const FEED = {
   remoteok: d => (Array.isArray(d) ? d : []).filter(x => x && x.position).map(x => ({
@@ -125,7 +164,7 @@ const get = async (url) => {
 async function main() {
   const out = path.resolve(process.argv[2] || 'scripts/index/index.jsonl');
   const tasks = [];
-  for (const platform of ['greenhouse', 'lever', 'ashby'])
+  for (const platform of ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'recruitee', 'workable'])
     for (const slug of SRC[platform] || [])
       tasks.push({ name: `${platform}:${slug}`, publisher: platform,
                    run: () => get(ATS[platform].url(slug)).then(d => ATS[platform].rows(d, slug)) });
