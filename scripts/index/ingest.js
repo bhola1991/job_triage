@@ -148,15 +148,40 @@ const PAGED = {
       posted: ((x.metadata || {}).newPostingDate || '').slice(0, 10) }), 20),
 };
 
-const get = async (url) => {
+/* Per-host spacing, because one vendor said so. The first crawl of the Workable
+   per-company boards returned 429 for every one of the eight: with 8 workers and
+   no gap, apply.workable.com sees a burst and refuses the lot. A 429 was then
+   thrown like any other status and the boards just vanished into `failed`.
+   Honoured here rather than worked around -- 429 means slow down, so this slows
+   down, and respects Retry-After when they send one. */
+const HOST_GAP_MS = { 'apply.workable.com': 1100 };
+const lastHit = new Map();
+async function paced(host) {
+  const gap = HOST_GAP_MS[host]; if (!gap) return;
+  const wait = (lastHit.get(host) || 0) + gap - Date.now();
+  if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+  lastHit.set(host, Date.now());
+}
+const get = async (url, tries = 3) => {
   // No url in the user agent: see sitemap-jobs.js — an edge that 403s any UA
   // containing one. (This comment sat INSIDE the object literal for one commit
   // and silently ate the closing brace; ingest.js is not covered by any check,
   // so it stayed broken until the next crawl.)
-  const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index' },
-                               signal: AbortSignal.timeout(30000) });
-  if (!r.ok) throw new Error(`${r.status}`);
-  return r.json();
+  const host = (() => { try { return new URL(url).host; } catch { return ''; } })();
+  for (let attempt = 1; ; attempt++) {
+    await paced(host);
+    const r = await fetch(url, { headers: { 'User-Agent': 'JobTriage index' },
+                                 signal: AbortSignal.timeout(30000) });
+    if (r.ok) return r.json();
+    // 429 and 5xx are "later", not "no". Anything else is a real answer.
+    if ((r.status === 429 || r.status >= 500) && attempt < tries) {
+      const after = Number(r.headers.get('retry-after'));
+      await new Promise((res) => setTimeout(res, Number.isFinite(after) && after > 0
+        ? Math.min(after, 30) * 1000 : 800 * attempt * attempt));
+      continue;
+    }
+    throw new Error(`${r.status}`);
+  }
 };
 
 // One task per source. A source that fails is reported and skipped, never fatal:
@@ -164,7 +189,17 @@ const get = async (url) => {
 async function main() {
   const out = path.resolve(process.argv[2] || 'scripts/index/index.jsonl');
   const tasks = [];
-  for (const platform of ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'recruitee', 'workable'])
+  /* No 'workable' here, and the ATS entry above is kept only so the shape is
+     documented. apply.workable.com enforces a DAILY quota: once tripped it
+     answers 429 with `Retry-After: 85902` -- 23.9 hours -- and the probe plus
+     two crawls tripped it in an afternoon. Eight boards against a 24-hour
+     window is not a crawl, and probing for more boards burns the same quota
+     faster than crawling can spend it.
+     None of which costs us Workable: jobs.workable.com, a DIFFERENT host with
+     no such limit, serves the whole 170,321-posting aggregate and the edge
+     function queries it per title on every search. So Workable arrives through
+     the front door and this back one stays shut. */
+  for (const platform of ['greenhouse', 'lever', 'ashby', 'smartrecruiters', 'recruitee'])
     for (const slug of SRC[platform] || [])
       tasks.push({ name: `${platform}:${slug}`, publisher: platform,
                    run: () => get(ATS[platform].url(slug)).then(d => ATS[platform].rows(d, slug)) });

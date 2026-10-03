@@ -63,6 +63,16 @@ const keyOf = (j) => {
   return 't:' + [j.title, j.company, j.location].map((x) => String(x || '').trim().toLowerCase()).join('|');
 };
 
+/* Truncate without splitting an emoji -- see the note in the edge function's
+   cut(). A cut at CAP can land between a surrogate pair; the lone surrogate has
+   no UTF-8 encoding, so the body ships replacement bytes and PostgREST rejects
+   the entire batch as invalid json. One Ashby posting cost 500 rows a night
+   until this existed. */
+const cut = (s, n) => {
+  const t = String(s).slice(0, n);
+  const last = t.charCodeAt(t.length - 1);
+  return (last >= 0xD800 && last <= 0xDBFF) ? t.slice(0, -1) : t;
+};
 const clean = (v, n) => { const s = String(v == null ? '' : v).trim(); return s ? s.slice(0, n) : null; };
 const date = (v) => (/^\d{4}-\d{2}-\d{2}$/.test(String(v || '')) ? v : null);
 const int = (v) => (Number.isFinite(Number(v)) && String(v).trim() !== '' ? Math.trunc(Number(v)) : null);
@@ -82,7 +92,7 @@ function row(r) {
     company: clean(r.company, 200),
     location: clean(r.location, 200),
     posted: date(r.posted),
-    description: tier === 'full' ? desc.slice(0, CAP) : null,
+    description: tier === 'full' ? cut(desc, CAP) : null,
     tier,
     exp_min: int(r.exp_min), exp_max: int(r.exp_max),
     publisher: clean(r.publisher, 120),
@@ -125,18 +135,53 @@ if (DRY) { console.log('\n--dry: nothing sent.'); process.exit(0); }
     console.log('  They live in supabase/.env, which is gitignored. Run with --dry to see the shape.');
     return;
   }
-  let sent = 0;
-  for (let i = 0; i < rows.length; i += CHUNK) {
-    const body = rows.slice(i, i + CHUNK);
+  const send = async (body) => {
     const r = await fetch(`${url}/rest/v1/job_index?on_conflict=job_key`, {
       method: 'POST',
       headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(body),
     }).catch((e) => ({ ok: false, status: 0, text: async () => e.message }));
-    if (!r.ok) { console.error(`\n  failed at row ${i}: ${r.status} ${(await r.text()).slice(0, 300)}`); process.exit(1); }
+    return r.ok ? null : `${r.status} ${(await r.text()).slice(0, 200)}`;
+  };
+
+  /* One bad chunk used to kill the whole push. On 2026-10-03 it did: row 14,000
+     of 18,503 came back `400 PGRST102 Empty or invalid json` and process.exit(1)
+     threw away the remaining 4,503 rows. The chunk was not the problem -- 1.60
+     MB, no control characters, no lone surrogates, largest row 6.5 KB, and a
+     2.22 MB chunk had already gone through at row 3,000. PostgREST says exactly
+     that when a body arrives truncated, so it was the wire, not the data.
+     Which makes aborting the wrong response twice over: the work is retryable,
+     and a nightly crawl nobody is watching must not lose a quarter of its
+     output to one dropped connection. So: retry with backoff, then halve the
+     chunk in case size really was the issue, and only then give up on THAT
+     chunk and carry on with the rest. */
+  let sent = 0, lost = 0;
+  const failures = [];
+  for (let i = 0; i < rows.length; i += CHUNK) {
+    const body = rows.slice(i, i + CHUNK);
+    let err = await send(body);
+    for (let attempt = 1; err && attempt <= 3; attempt++) {
+      await new Promise((r) => setTimeout(r, 400 * attempt * attempt));
+      err = await send(body);
+    }
+    if (err) {
+      // Maybe it really was too big: try it in halves before writing it off.
+      const mid = Math.ceil(body.length / 2);
+      const a = await send(body.slice(0, mid));
+      const b = a ? null : await send(body.slice(mid));
+      if (!a && !b) { sent += body.length; process.stdout.write(`\r  pushed ${sent}/${rows.length} (split one chunk)`); continue; }
+      failures.push(`row ${i}: ${err}`);
+      lost += body.length;
+      continue;
+    }
     sent += body.length;
     process.stdout.write(`\r  pushed ${sent}/${rows.length}`);
   }
   console.log(`\r  pushed ${sent} row(s) into public.job_index     `);
+  if (lost) {
+    console.error(`  ${lost} row(s) in ${failures.length} chunk(s) did NOT land:`);
+    failures.slice(0, 5).forEach((f) => console.error(`    ${f}`));
+    process.exitCode = 1;        // refresh.sh should notice, but only at the end
+  }
 })();

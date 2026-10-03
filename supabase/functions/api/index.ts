@@ -157,6 +157,20 @@ const MAX_TITLES = 4;
    exist` when the vendor retires a path under you. Both land in usage_events
    as error rows rather than anywhere a user sees. */
 const JSEARCH_API = "https://api.openwebninja.com/jsearch";
+/* Truncate without splitting an emoji. String.slice counts UTF-16 code units, so
+   a cut at 4,000 can land BETWEEN a surrogate pair and leave a lone high
+   surrogate at the end. JSON.stringify emits that quite happily -- it is legal
+   JSON syntax -- but a lone surrogate has no UTF-8 encoding, so the request body
+   goes out with replacement bytes and the far end rejects the whole thing.
+   Found 2026-10-04: one Ashby posting ending "corsi di lingua con Preply - \ud83c"
+   made PostgREST answer `400 PGRST102 Empty or invalid json` and took all 500
+   rows of its batch down with it, reproducibly, through three retries and a
+   split. Any description whose cut falls inside an emoji does the same. */
+function cut(s: string, n: number) {
+  const t = s.slice(0, n);
+  const last = t.charCodeAt(t.length - 1);
+  return (last >= 0xD800 && last <= 0xDBFF) ? t.slice(0, -1) : t;
+}
 async function jsearch(title: string, where: string, country: string, since: number): Promise<Job[] | null> {
   if (!env("JSEARCH_API_KEY")) return null;
   const q = new URLSearchParams({
@@ -182,7 +196,7 @@ async function jsearch(title: string, where: string, country: string, since: num
     company: x.employer_name || "",
     url: x.job_apply_link || x.job_google_link || "",
     location: [x.job_city, x.job_state, x.job_country].filter(Boolean).join(", ") + (x.job_is_remote ? " (remote)" : ""),
-    description: String(x.job_description || "").slice(0, 4000),
+    description: cut(String(x.job_description || ""), 4000),
     posted: isoDay(x.job_posted_at_datetime_utc),
     // The site the posting actually lives on -- LinkedIn, Monster, a careers
     // page. `origin` stays "jsearch" for the ledger, so source_yield keeps one
@@ -280,12 +294,12 @@ async function cachedFeed(key: string, load: () => Promise<Job[]>) {
 const remotive = () => cachedFeed("remotive", async () =>
   ((await getJson("https://remotive.com/api/remote-jobs")).jobs || []).map((x: Any): Job => ({ title: plain(x.title),
     company: x.company_name || "", url: x.url || "", location: `${x.candidate_required_location || "Anywhere"} (remote)`,
-    description: plain(x.description).slice(0, 4000), posted: isoDay(x.publication_date), publisher: "Remotive" })));
+    description: cut(plain(x.description), 4000), posted: isoDay(x.publication_date), publisher: "Remotive" })));
 // RemoteOK's terms: link back to them and name them as the source. url and publisher do both.
 const remoteok = () => cachedFeed("remoteok", async () =>
   ((await getJson("https://remoteok.com/api", { headers: { "User-Agent": "JobTriage (jobtriage.reachbhola.workers.dev)" } })) as Any[])
     .filter((x) => x && x.position).map((x: Any): Job => ({ title: plain(x.position), company: x.company || "",
-      url: x.url || "", location: `${x.location || "Anywhere"} (remote)`, description: plain(x.description).slice(0, 4000),
+      url: x.url || "", location: `${x.location || "Anywhere"} (remote)`, description: cut(plain(x.description), 4000),
       posted: isoDay(x.date), publisher: "Remote OK" })));
 /* Workable's OWN aggregated board -- every customer of theirs at once, keyless,
    searchable. Measured 2026-10-03: 170,321 postings, with descriptions averaging
@@ -313,7 +327,7 @@ async function workable(title: string, where: string): Promise<Job[] | null> {
     url: x.url || "",
     location: (Array.isArray(x.locations) && x.locations[0]) ||
       [x.location?.city, x.location?.countryName].filter(Boolean).join(", ") || "",
-    description: plain(x.description).slice(0, 4000),
+    description: cut(plain(x.description), 4000),
     posted: isoDay(x.created),
     publisher: "Workable",
   })).filter((j: Job) => j.title && j.url);
@@ -589,7 +603,7 @@ async function depositIndex(jobs: Job[]) {
         company: clean(j.company, 200),
         location: clean(j.location, 200),
         posted,
-        description: tier === "full" ? desc.slice(0, INDEX_DESC_CAP) : null,
+        description: tier === "full" ? cut(desc, INDEX_DESC_CAP) : null,
         tier,
         publisher: clean(j.publisher, 120),
         updated_at: new Date().toISOString(),
@@ -623,7 +637,7 @@ function scrapedJob(x: Any, source: string): Job {
     company: plain(pick(x, "companyName", "company", "companyDetail.name", "Company.Name", "company_name", "employer")),
     url,
     location: (Array.isArray(loc) ? loc.map((l: Any) => l?.label || l?.name || l).join(", ") : String(loc)) + (source === "upwork" ? " (remote)" : ""),
-    description: plain(pick(x, "description", "descriptionText", "jobDescription", "snippet")).slice(0, 4000),
+    description: cut(plain(pick(x, "description", "descriptionText", "jobDescription", "snippet")), 4000),
     posted: isoDay(pick(x, "publishedAt", "postedAt", "datePosted", "createdDate", "createdOn", "publishedOn", "date")),
     publisher: SCRAPERS[source].label,
     origin: source,

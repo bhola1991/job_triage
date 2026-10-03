@@ -75,6 +75,11 @@ const ATS = {
     rows: (d) => (d && Array.isArray(d.content) ? d.content.length : 0) },
   recruitee: { url: (s) => `https://${s}.recruitee.com/api/offers/`,
     rows: (d) => (d && Array.isArray(d.offers) ? d.offers.length : 0) },
+  /* No workable probe. apply.workable.com allows a fixed number of calls a DAY
+     -- 429 with Retry-After: 85902 once tripped -- so asking it about 647
+     companies spends a day's quota to find a handful of boards that ingest.js
+     then cannot crawl for 24 hours. Workable comes in through the aggregate at
+     jobs.workable.com instead, which the edge function queries per search. */
 };
 
 /* Legal suffixes carry no identity and never appear in a slug. The list is
@@ -210,11 +215,27 @@ async function pool(items, worker) {
   }
   if (has('write')) {
     const cur = JSON.parse(fs.readFileSync(SOURCES, 'utf8'));
+    /* Which platforms ingest.js can actually crawl, read out of ingest.js rather
+       than listed again here -- a second copy would drift, and the failure is
+       invisible. This existed as `if (!Array.isArray(cur[platform])) continue`,
+       which skipped any platform sources.json had no key for and said nothing:
+       the 2026-10-03 Himalayas pass found 126 boards, wrote 89, and binned 35 on
+       smartrecruiters, recruitee and workable. A discovery tool that discards
+       discoveries quietly is worse than one that crashes. */
+    const crawler = fs.readFileSync(path.join(__dirname, 'ingest.js'), 'utf8');
+    const supported = new Set(Object.keys(ATS).filter((pl) => new RegExp(`^  ${pl}: \\{`, 'm').test(crawler)));
+    const orphans = [...new Set(hits.map((h) => h.platform))].filter((pl) => !supported.has(pl));
     let added = 0;
     for (const h of hits) {
-      if (!Array.isArray(cur[h.platform])) continue;   // feeds etc. are not slug lists
+      if (!supported.has(h.platform)) continue;
+      if (!Array.isArray(cur[h.platform])) cur[h.platform] = [];   // create, never skip
       if (cur[h.platform].includes(h.slug)) continue;
       cur[h.platform].push(h.slug); added++;
+    }
+    if (orphans.length) {
+      const lost = hits.filter((h) => orphans.includes(h.platform));
+      console.log(`\n  !! ${lost.length} board(s) NOT saved: ingest.js has no crawler for ` +
+        `${orphans.join(', ')}. Add one there first, then re-run -- these are found and unusable.`);
     }
     for (const k of Object.keys(cur)) if (Array.isArray(cur[k])) cur[k].sort();
     fs.writeFileSync(SOURCES, JSON.stringify(cur, null, 2) + '\n');
