@@ -97,7 +97,22 @@ for (const [k, v] of Object.entries(sources)) {
 }
 
 const urls = [];
-for (const f of files) { try { urls.push(...urlsIn(read(f))); } catch (e) { console.error(`skipped ${f}: ${e.message}`); } }
+let unread = 0;
+for (const f of files) {
+  // for..of rather than push(...urlsIn(…)): spreading applies the array as
+  // ARGUMENTS, so a file carrying more than ~100k urls overflows the stack.
+  // The corpus hands this 347k, and the old form failed by printing one
+  // `skipped` line and then "Nothing new to add" -- a crash wearing the face
+  // of a clean run, in the one step whose whole job is finding new things.
+  try { for (const u of urlsIn(read(f))) urls.push(u); }
+  catch (e) { console.error(`skipped ${f}: ${e.message}`); unread++; }
+}
+if (unread && !urls.length) {
+  // Nothing was read at all. Exiting non-zero so refresh.sh's `set -e` stops
+  // the pass instead of recording a harvest that never happened.
+  console.error(`\nread none of the ${files.length} input(s) — not a harvest, a failure.`);
+  process.exit(1);
+}
 
 const found = new Map();                       // platform -> Map(lower -> slug as written)
 let matched = 0;
