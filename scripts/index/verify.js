@@ -111,18 +111,33 @@ const parts = new Set([...seen.values()].map((r) => r.part).filter(Boolean));
    one extra day is nothing, and the cost of deleting a live one is a job the
    user never sees. */
 let crawlIncomplete = false;
+/* Sources this run SAMPLED rather than enumerated. The part rule above protects
+   a board whose index comes in files; this protects one that comes in pages.
+   ingest.js caps Himalayas at 50 pages of a 96,023-posting board and
+   MyCareersFuture at 20, and RemoteOK, Remotive and Arbeitnow hand back a
+   single page of the newest jobs -- so most of each of those boards is absent
+   from any given run by construction. Treating that absence as closure closed
+   every row outside today's page window: measured 2026-09-28, himalayas 1,564
+   of 2,543, mycareersfuture 1,997 of 3,915, arbeitnow 532 of 858 -- in each
+   case exactly (stored minus today's slice), which is the signature of the cap
+   deciding rather than the board. Same principle as the part guard: absence
+   from something you did not read through is not evidence. */
+const partialSources = new Set();
 for (const f of files) {
   const meta = f.replace(/\.jsonl$/, '') + '.meta.json';
   if (!fs.existsSync(meta)) continue;
   try {
     const m = JSON.parse(fs.readFileSync(meta, 'utf8'));
     (m.parts || []).forEach((p) => parts.add(p));
+    (m.partial || []).forEach((n) => partialSources.add(n));
     if ((m.failed || []).length) {
       crawlIncomplete = true;
       console.log(`  ${path.basename(f)}: ${m.failed.length} file(s) unreadable — ${m.failed.join(', ')}`);
     }
   } catch { /* an unreadable sidecar is not a reason to fail the diff */ }
 }
+if (partialSources.size)
+  console.log(`  sampled, not enumerated (absence will not close): ${[...partialSources].join(', ')}`);
 
 /* ── the store ── */
 const store = fs.existsSync(STORE) ? JSON.parse(fs.readFileSync(STORE, 'utf8')) : { runs: 0, jobs: {} };
@@ -130,7 +145,12 @@ const now = today();
 const first = store.runs === 0;
 store.runs++;
 
-let fresh = 0, open = 0, closed = 0, reposted = 0, unseen = 0;
+/* How many consecutive absences close a posting. Two, not one: the second run
+   is the cheapest evidence there is -- it costs a day -- and it is what tells
+   an expiry apart from the index rotating under us. */
+const ABSENT_RUNS_TO_CLOSE = 2;
+
+let fresh = 0, open = 0, closed = 0, reposted = 0, unseen = 0, waiting = 0;
 
 for (const [url, row] of seen) {
   const j = store.jobs[url];
@@ -138,12 +158,16 @@ for (const [url, row] of seen) {
     store.jobs[url] = { source: row.source || 'unknown', part: row.part || null,
       title: row.title || '', company: row.company || '',
       location: row.location || '', partial: !!row.partial,
-      first_seen: now, last_seen: now, runs: 1, reposts: 0, closed_on: null };
+      first_seen: now, last_seen: now, runs: 1, reposts: 0, absent_runs: 0, closed_on: null };
     fresh++;
   } else {
     // Back after an absence. The gap is the interesting part: a role taken down
     // and re-advertised is either hard to fill or was never being filled.
     if (j.closed_on) { j.reposts++; j.closed_on = null; j.closed_src = null; reposted++; }
+    // Seen. Whatever run of absences was building, it is over -- consecutive
+    // is the whole point, or a posting missing one run a month would eventually
+    // close from misses that were never next to each other.
+    j.absent_runs = 0;
     j.last_seen = now; j.runs++;
     if (row.part) j.part = row.part;      // a posting can move between files
     open++;
@@ -180,14 +204,28 @@ for (const url of declared) {
   expired++;
 }
 
-/* Absent today, and today's run covered its source: that is a closure, not a
-   gap in our own coverage. Anything from a source this run did not look at is
-   left strictly alone. */
+/* Absent today, and today's run covered its source: that is evidence of a
+   closure. Anything from a source this run did not look at is left strictly
+   alone.
+
+   Evidence, and not yet a verdict. The three guards below decide whether this
+   run is ENTITLED to count an absence at all; a row that passes them then has
+   to be absent twice running before it closes. One miss sits inside the noise
+   -- 20.8% of the Naukri index disappeared across two days on 2026-09-26 and
+   came back -- and the second run costs a day to wait for.
+
+   The guards are unchanged and still come first, so a held row never accrues
+   an absence: "we did not look" must never accumulate into "it is gone". */
 for (const [url, j] of Object.entries(store.jobs)) {
   if (seen.has(url) || j.closed_on || !sources.has(j.source)) continue;
+  // Its source was sampled, not enumerated: this row may simply be on a page
+  // this run never asked for.
+  if (partialSources.has(j.source)) { unseen++; continue; }
   // Its file was not read this run: absence proves nothing about this row.
   if (j.part && !parts.has(j.part)) { unseen++; continue; }
   if (!j.part && crawlIncomplete) { unseen++; continue; }
+  j.absent_runs = (j.absent_runs || 0) + 1;
+  if (j.absent_runs < ABSENT_RUNS_TO_CLOSE) { waiting++; continue; }
   j.closed_on = now; j.closed_src = 'inferred';
   j.open_days = days(j.first_seen, now);
   closed++;
@@ -215,7 +253,8 @@ console.log(`\nrun ${store.runs} · ${now}${arg('asof','') ? ' (--asof)' : ''} �
 console.log(`  new        ${fresh}`);
 console.log(`  still open ${open}`);
 console.log(`  closed     ${closed}${declared.size ? ' (inferred from absence)' : ''}`);
-if (unseen) console.log(`  held       ${unseen} (their sitemap file was not read this run — absence proves nothing)`);
+if (unseen) console.log(`  held       ${unseen} (their file or their page range was not read this run — absence proves nothing)`);
+if (waiting) console.log(`  absent     ${waiting} (missing from a source we did read, and not closed until it has been absent ${ABSENT_RUNS_TO_CLOSE} runs running)`);
 if (declared.size) console.log(`  expired    ${expired} (declared by the board)`);
 console.log(`  reposted   ${reposted}`);
 console.log(`\nstore: ${total} job(s) known, ${live} currently listed`);
@@ -252,7 +291,8 @@ async function push() {
   };
   const rows = Object.entries(store.jobs).map(([url, j]) => ({
     job_key: keyOf({ ...j, url }), source: j.source, first_seen: j.first_seen, last_seen: j.last_seen,
-    runs: j.runs, reposts: j.reposts, closed_on: j.closed_on, closed_src: j.closed_src ?? null,
+    runs: j.runs, reposts: j.reposts, absent_runs: j.absent_runs ?? 0,
+    closed_on: j.closed_on, closed_src: j.closed_src ?? null,
     checked_at: new Date().toISOString(),
   }));
   // PostgREST takes an array, but not 18,806 of them in one body.

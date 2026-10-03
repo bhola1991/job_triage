@@ -7,8 +7,10 @@
 //
 // Rules for editing this file:
 //   * Anchor a declaration, never a line number and never comment text.
-//   * Write {MIN_FIT}, never 50. Values come from source.
+//   * Write {FLASH_INTAKE_CUT}, never 50. Values come from source.
 //   * A node's `note` is the point. The diagram shows shape; the note says why.
+//   * A term that needs explaining goes in `glossary` ONCE and is then used
+//     plainly in the notes. A word defined in four notes drifts in three.
 //   * If a check fails because you renamed something, fix the anchor here in the
 //     same commit. If it fails because you ADDED an action, table or section,
 //     the map is genuinely missing something -- add a node or scope it out.
@@ -19,9 +21,25 @@
 // nothing.
 
 module.exports = {
+  /* Terms the notes use as if everyone knows them. Defined here once and
+     rendered into the index note, because the alternative is defining them in
+     whichever note happened to need them first -- and then not at all in the
+     other six. */
+  glossary: [
+    { term: 'Jev',
+      says: "System One's classifier model; returns typed judgments (confidence, capability, targeting, per-flag probabilities)." },
+    { term: 'noul',
+      says: 'A TypeSafe SDK primitive: one question that comes back as a probability rather than a word. Not a typo, and not ours to rename \u2014 it is imported by name from npm:@typesafe-ai/sdk in supabase/functions/_shared/judge.ts, which is why it turns up in the notes, in eval-matcher.js and in PLAN.md.' },
+    { term: 'System One',
+      says: 'TypeSafe\'s family of small judgment models, of which Jev is the one this project uses. Named for fast, intuitive judgment, as against deliberate reasoning \u2014 which is the other model here, and the reason the two are priced apart.' },
+    { term: 'the TypeSafe API key',
+      says: 'TYPESAFE_API_KEY, held as a Supabase secret and read only by the edge function. It is never sent to the browser, which is why every judgement is a server round trip and why an own-key or local-only session gets no judgement at all.' },
+    { term: 'thin / full',
+      says: 'A corpus row with no description (a board sitemap) against one carrying a real description (an ATS board, RSS or JSON feed). Only a full row can be scored or judged; a thin one is a candidate for a shortlist and never an answer.' },
+  ],
   constants: [
     { name: 'MAX_AGE_DAYS',        file: 'index.html' },
-    { name: 'MIN_FIT',             file: 'index.html' },
+    { name: 'FLASH_INTAKE_CUT',     file: 'index.html' },
     { name: 'SCORE_BATCH',         file: 'index.html' },
     { name: 'AUTO_MAX',            file: 'index.html' },
     { name: 'KEEP_TOP',            file: 'index.html' },
@@ -91,14 +109,17 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-    intro: 'One POST, twelve actions, a service-role key. The server is a credential broker and a meter — there is no job table behind it.',
+    intro: 'One POST, fourteen actions, a service-role key. The server is a credential broker and a meter for thirteen of them \u2014 it holds no per-user job table, and the one action that does read jobs, index_search, reads the SHARED corpus that belongs to nobody.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
       neighbours: ['JT Credits', 'JT Storage'] },
     { id: 'storage', file: 'JT Storage', title: 'Storage and sync',
       intro: 'Where a job actually lives: one row per job, last writer wins within a row \u2014 and the blob it used to live in, still written, no longer read.',
-      neighbours: ['JT Render'] },
+      neighbours: ['JT Render', 'JT Corpus'] },
+    { id: 'corpus', file: 'JT Corpus', title: 'The corpus \u2014 where the free rows come from',
+      intro: 'The half of the system that runs on nobody\u2019s behalf. No user triggers it, no credit is spent in it, and the rows it produces are shared: a nightly crawl of what the boards publish themselves, and the set difference that decides what is still real.',
+      neighbours: ['JT Storage', 'JT Edge Function'] },
     { id: 'credits', file: 'JT Credits', title: 'Credits and the ledger',
       intro: 'Three places money is spent, four places it comes back, and what the usage ledger records about each.',
       neighbours: ['JT Edge Function'] },
@@ -227,14 +248,20 @@ module.exports = {
       anchor: { file: 'supabase/functions/api/index.ts', case: 'order' } },
     'sv.verify':  { diagram: 'server', group: 'actions', kind: 'db', label: 'verify — HMAC, then grant',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'verify' } },
+    'sv.deposit': { diagram: 'server', group: 'actions', kind: 'db', label: 'depositIndex \u2014 a paid search feeds the corpus',
+      anchor: { file: 'supabase/functions/api/index.ts', fn: 'depositIndex' },
+      note: 'job_index used to be written ONLY by the offline crawler, so a user spent 25 credits, the rows went to their own public.jobs, and the corpus learned nothing -- acquisition paid for once and used once, by one person. These are also the rows it is short of: 8,082 full against 340,907 thin, and only a full row can be judged. Deposited BEFORE the caller scores and cuts, because a role wrong for this person is not wrong for everyone. Full rows upsert; thin rows insert only when the key is absent, so a short search snippet can never overwrite a crawler row that had a real description. Best-effort like logUsage: the search is already paid for and a corpus write must never fail it.' },
     'sv.runs':    { diagram: 'server', group: 'actions', kind: 'db', label: 'apify_runs — who owns this run',
       anchor: { file: 'billing.sql', sql: 'public.apify_runs' },
-      note: 'RLS on with zero policies: server-only by construction. Every apify_status and apify_items call checks ownership here first.' },
+      note: 'RLS on with zero policies: server-only by construction. Every apify_status and apify_items call checks ownership here first, and aborted_at records when the reaper below dealt with the row.' },
+    'sv.reap':    { diagram: 'server', group: 'actions', kind: 'net', label: 'reap-apify — scheduled, every 5 min',
+      anchor: { file: 'supabase/functions/reap-apify/index.ts', const: 'ORPHAN_MINUTES' },
+      note: 'The second edge function, and the only thing here nobody clicks. A run whose browser stopped polling -- closed tab, dropped network -- keeps running and keeps billing on our Apify account until its own timeout; 23 runs started against 16 returning results is the measurement that says so. Anything still alive 15 minutes after it started is orphaned by definition, because the longest timeout the api function asks for is 11. Aborts it, stamps aborted_at so the next pass leaves it alone, and writes one usage_events row of kind error with reason orphan_abort -- which is what makes the orphan rate a number rather than a suspicion.' },
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'e89c2a',
-      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'cdd399',
+      note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {FLASH_INTAKE_CUT} intake cut here is applied to flash scores. Each row records which tier scored it in jobs.score_tier, because two numbers on different scales in one column are only comparable if you can tell them apart. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
       note: 'Descriptions cut to 700 chars. A row that already has a trustworthy date sends it, so the model is never asked to guess one.' },
@@ -253,20 +280,20 @@ module.exports = {
     'sc.grab':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'grabJSON',
       anchor: { file: 'index.html', fn: 'grabJSON' }, section: 'LLM',
       note: 'Strips code fences and slices first { to last }. Throws on malformed output, which is caught one level up.' },
-    'sc.keep':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept: fit {MIN_FIT}+',
-      anchor: { file: 'index.html', const: 'MIN_FIT' }, section: "board search: every source's results, scored, 50+ kept" },
-    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}',
+    'sc.keep':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept: fit {FLASH_INTAKE_CUT}+',
+      anchor: { file: 'index.html', const: 'FLASH_INTAKE_CUT' }, section: "board search: every source's results, scored, 50+ kept" },
+    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {FLASH_INTAKE_CUT}',
       anchor: { file: 'index.html', re: 'else below\\+\\+' },
       note: 'The one place a paid-for row is thrown away. It was judged and it lost.' },
     'sc.rescore': { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'runScoring \u2014 the Score button, batches of 6',
       anchor: { file: 'index.html', fn: 'runScoring' }, section: 'scoring run',
-      note: 'The other scoring path, and the small one: a rescore of what is already in the list, guarded by {AUTO_MAX}. Because it is small it can afford a judgement per job; board search cannot.' },
-    'sc.judge':   { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeInto \u2014 {COST.llm} credit per JOB',
-      anchor: { file: 'index.html', fn: 'judgeInto' }, section: 'scoring run',
-      note: 'Per job, where a whole DeepSeek batch of {SCORE_BATCH} is also {COST.llm} credit \u2014 so judging one job this way is about twelve times the price of scoring one. The rescore path can carry that because {AUTO_MAX} caps it; the search path pays once per batch through judgeMany instead. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe key is not reachable from the browser at all, and DeepSeek\'s own flags stand.' },
+      note: 'The other scoring path, and the small one: a rescore of what is already in the list, guarded by {AUTO_MAX}. It scores in batches of 6 and then judges everything it scored in one pass through judgeMany, the same shape scoreAndCut uses -- it used to pay {COST.llm} credit per job, which made a sixty-job rescore cost thirty times a sixty-job search for identical work.' },
+    'sc.judge':   { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeJob — {COST.llm} credit for ONE posting',
+      anchor: { file: 'index.html', fn: 'judgeJob' }, section: 'Credits',
+      note: 'The single-posting form, and no scoring path uses it any more: judging one job costs {COST.llm} credit where a whole batch of {JUDGE_BATCH} costs the same through judgeMany, so both paths batch. Kept because the `judge` action is live on the server and this is the only call site in the browser that reaches it. Returns null rather than throwing: with no account, no credits or an own key the TypeSafe API key (TYPESAFE_API_KEY, held as a Supabase secret and never sent to the browser) cannot be reached at all, and DeepSeek\'s own flags stand.' },
     'sc.judgeMany': { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeMany \u2014 {COST.llm} credit per {JUDGE_BATCH}',
       anchor: { file: 'index.html', fn: 'judgeMany' }, section: 'Credits',
-      note: 'What makes judging a whole search affordable: one charge and one round trip for {JUDGE_BATCH} postings, against one per job on the rescore path. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens.' },
+      note: 'What makes judging affordable, and now the only way either path judges: one charge and one round trip for {JUDGE_BATCH} postings. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens.' },
     'sc.merge':   { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'mergeJudgment \u2014 Jev fires, DeepSeek explains',
       anchor: { file: 'index.html', fn: 'mergeJudgment' }, section: 'scoring run',
       note: 'Jev decides which flags are true above {FLAG_P}; the fact behind each comes from DeepSeek. A flag Jev raises that DeepSeek never mentioned shows with no fact rather than borrowing one from its neighbour.' },
@@ -372,6 +399,56 @@ module.exports = {
       note: 'Fit and reachability are two axes on purpose. A perfect-fit role at a famous employer scores high on one and low on the other.' },
     'rd.cap':      { diagram: 'render', group: 'order', kind: 'sync', label: 'LIST_CAP — {LIST_CAP} rows per fold',
       anchor: { file: 'index.html', const: 'LIST_CAP' }, section: 'theme' },
+  /* ── the corpus ───────────────────────────────────────── */
+    /* Nothing in this group runs in a browser or on a request. It is the only
+       part of the system with no user attached, which is exactly why it can be
+       shared -- and why it is the part most likely to be forgotten, since no
+       screen goes blank when it stops. */
+    'cx.refresh': { diagram: 'corpus', group: 'the nightly pass', kind: 'entry', label: 'refresh.sh \u2014 crawl, deposit, harvest, verify',
+      anchor: { file: 'scripts/index/refresh.sh', re: '^say "1/6' },
+      note: 'Six steps, and deliberately a shell script: each one is already a program with its own flags and its own failure mode, so an orchestrator would only add a layer that can fail in ways none of them can. set -e means a failed step stops the pass rather than pushing a half-built corpus over a good one. The value is in the SERIES, not any single run -- liveness is a set difference, so run one closes nothing and every run after it closes what left the boards since.' },
+    'cx.urls':    { diagram: 'corpus', group: 'the nightly pass', kind: 'db', label: 'corpus-urls.js - what the corpus took in',
+      anchor: { file: 'scripts/index/corpus-urls.js', re: '^const SB = ' },
+      note: 'job_index has no url column on purpose (dropping it returned 81 MB), so the key IS the url and rebuilding it is a substring rather than a guess. Reads the last week rather than all of it: a naukri sitemap row is never an ATS link, and 340k of them re-read every morning is a slow way to learn nothing.' },
+    'cx.harvest': { diagram: 'corpus', group: 'the nightly pass', kind: 'sync', label: 'harvest-slugs.js - a paid row buys a free board',
+      anchor: { file: 'scripts/index/harvest-slugs.js', fn: 'slugOf' },
+      note: 'The only version of acquisition that gets CHEAPER as it runs. A paid row is not just a job: for anyone on Greenhouse/Lever/Ashby it carries a slug, and a slug is the whole board of that company, free, for as long as they keep hiring - about 103 jobs each, measured on the seed list. --verify asks each board for its jobs before the list grows, because a slug that 404s is not a discovery but a failed crawl tomorrow. New slugs land in sources.json and are pulled by the NEXT pass. The host patterns are sliced out of the ATS table in index.html rather than copied, so they cannot drift.' },
+    'cx.sitemap': { diagram: 'corpus', group: 'what the boards publish', kind: 'net', label: 'sitemap-jobs.js \u2014 a board\u2019s own index',
+      anchor: { file: 'scripts/index/sitemap-jobs.js', fn: 'rowsFrom' },
+      note: 'Every board needs Google for Jobs traffic, and Google requires a sitemap listing every job page -- so boards publish their COMPLETE index, publicly and deliberately, for crawlers. That is the one door they hold open while defending the search endpoint this app had been paying Apify to squeeze through. Naukri\u2019s Pune file alone is 18,806 urls, 3.85 MB, no key and no actor, against 30 rows for \u20b913.20 from a paid LinkedIn pull.' },
+    'cx.slug':    { diagram: 'corpus', group: 'what the boards publish', kind: 'sync', label: 'postedFromId \u2014 the id IS the date',
+      anchor: { file: 'scripts/index/sitemap-jobs.js', fn: 'postedFromId' },
+      note: 'A Naukri job page is a client-rendered shell: 200 OK, ~36 KB, no JSON-LD, no __NEXT_DATA__, zero job text. So the slug is all there is -- and it carries title, company, city and experience for free. The id is DDMMYY plus a sequence, parsing on 18,789 of 18,806 rows (99.9%). The sitemap\u2019s own lastmod is the same generation timestamp on every row and worth nothing, which is why it is not used.' },
+    'cx.part':    { diagram: 'corpus', group: 'what the boards publish', kind: 'sync', label: 'the part stamp \u2014 which file this row came from',
+      anchor: { file: 'scripts/index/sitemap-jobs.js', re: 'for \\(const r of rows\\) r\\.part = part;' },
+      note: 'Every row records the file it was read from. This exists because a count-based floor cannot catch the failure it is for: each Naukri file carries the same source tag, so nineteen files minus one still reads as 348,764 -> 325,251, or 93%, comfortably inside noise. The signal was never in the totals.' },
+    'cx.sidecar': { diagram: 'corpus', group: 'what the boards publish', kind: 'db', label: 'the .meta.json sidecar \u2014 what could not be read',
+      anchor: { file: 'scripts/index/sitemap-jobs.js', re: 'meta\\.json' },
+      note: 'The part stamp protects rows that carry one; rows indexed before tagging existed do not, and those are exactly the ones a broken file would silently close. So the crawler writes down which parts it read and which it could not, and the verifier refuses to close any part-less row on a run where anything failed. Written even on a clean run, because an absent file would be ambiguous between \u201cnothing failed\u201d and \u201cold crawler\u201d, and the verifier should not have to guess which.' },
+    'cx.ingest':  { diagram: 'corpus', group: 'what the boards publish', kind: 'net', label: 'ingest.js \u2014 ATS boards and keyless APIs',
+      anchor: { file: 'scripts/index/ingest.js', fn: 'paged' },
+      note: 'Greenhouse, Lever and Ashby boards plus Remotive, RemoteOK, Arbeitnow, Himalayas and MyCareersFuture. These are the FULL rows -- the ones carrying a real description, so the only ones a judge can read. Page size is the source\u2019s choice and the per-run caps exist for space, not politeness: 187k full rows at the 4,000-char cap is roughly 750 MB against a 500 MB database.' },
+    'cx.census':  { diagram: 'corpus', group: 'what the boards publish', kind: 'db', label: 'the census sidecar \u2014 enumerated, or only sampled?',
+      anchor: { file: 'scripts/index/ingest.js', re: '^  fs\\.writeFileSync\\(out\\.replace' },
+      note: 'An ATS board hands back a company\u2019s WHOLE list, so absence from it means something. A capped or single-page source does not: Himalayas is read 50 pages deep into 96,023 postings, MyCareersFuture 20, and RemoteOK, Remotive and Arbeitnow return the newest page and stop. ingest.js now writes down which sources it enumerated and which it merely sampled, because the rows alone cannot tell you -- and paged() reports whether it ran out of pages or ran into the cap, which is the same distinction one level down.' },
+    'cx.push':    { diagram: 'corpus', group: 'deposit and diff', kind: 'db', label: 'push-index.js \u2014 deposit into the corpus',
+      anchor: { file: 'scripts/index/push-index.js', fn: 'row' },
+      note: 'Upserts on job_key, so runs accumulate rather than repeat and a source that drips 1,000 a night converges instead of thrashing. Both snapshot shapes land here, thin and full.' },
+    'cx.verify':  { diagram: 'corpus', group: 'deposit and diff', kind: 'sync', label: 'verify.js \u2014 what is still real',
+      anchor: { file: 'scripts/index/verify.js', fn: 'push' },
+      note: 'Liveness as a set difference over the boards\u2019 own daily indexes, never a fetch: every job url sampled returned 403 to a datacentre IP, and naukri.com/robots.txt disallows claudebot, Claude-User, gptbot and perplexitybot outright while allowing User-agent: * the job pages. So an AI agent must not be the crawler. It also asks Jev nothing -- every signal here is a count or a date, and Jev is asked judgements, never counts.' },
+    'cx.guard':   { diagram: 'corpus', group: 'deposit and diff', kind: 'branch', label: 'was this row\u2019s own file read this run?',
+      anchor: { file: 'scripts/index/verify.js', re: '^const parts = new Set' },
+      note: 'The rule that makes an unattended run safe. Verifying only the Pune sitemap must never mark Mumbai closed; this is that rule applied per FILE rather than per board. It was written after the first unattended pass reported 57,581 closures because Naukri served one file as ten bytes mid-regeneration -- those jobs were alive, and a false closure propagates: the app says \u201cgone from the board\u201d on a live role and prune_index deletes it thirty days later.' },
+    'cx.sampled': { diagram: 'corpus', group: 'deposit and diff', kind: 'branch', label: 'was this row\u2019s source enumerated, or only sampled?',
+      anchor: { file: 'scripts/index/verify.js', re: '^const partialSources = new Set' },
+      note: 'The second coverage guard, and the one that was missing. The part rule protects a board whose index arrives in FILES; this protects one that arrives in PAGES. Without it the first unattended run closed every row outside today\u2019s page window -- himalayas 1,564 of 2,543, mycareersfuture 1,997 of 3,915, arbeitnow 532 of 858, each exactly (stored minus today\u2019s slice), which is the signature of the cap deciding rather than the board. 4,100 false closures, and the same sentence fixes all of them: absence from something you did not read through is not evidence.' },
+    'cx.held':    { diagram: 'corpus', group: 'deposit and diff', kind: 'drop', label: 'held \u2014 absence proves nothing here',
+      anchor: { file: 'scripts/index/verify.js', re: 'crawlIncomplete\\) \\{ unseen\\+\\+' },
+      note: 'Conservative deliberately: holding a dead row one more day costs nothing, deleting a live one costs a job the user never sees. Measured against the same broken file, before the guard 57,581 closed and 0 held; after it, 0 closed and 58,385 held. Same input, opposite outcome, and the second one is right.' },
+    'cx.declared': { diagram: 'corpus', group: 'deposit and diff', kind: 'sync', label: 'closed_src = declared \u2014 the board said so',
+      anchor: { file: 'scripts/index/verify.js', re: "closed_src = 'declared'" },
+      note: 'Naukri publishes its own expired list, and a board saying \u201cthis is expired\u201d is better evidence than absence from a snapshot, which carries rotation noise. Both kinds of closure are recorded and which one closed a row is kept, because 20.8% of dated postings left the index in two days -- too high to read as closure without checking, and the age gradient (16.6% at 8-14 days rising to 42.8% at 61-90) says part is real expiry and part is the index rotating.' },
   },
 
   edges: [
@@ -393,11 +470,43 @@ module.exports = {
     { from: 'bd.atsPull', to: 'bd.closed', label: 'not in the feed', style: 'drop' },
 
     { from: 'sv.auth', to: 'sv.switch' },
-    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    // Every action the router can reach. This list went stale once already:
+    // index_search and mantiks_contact were added to the edge function, given
+    // nodes here, and never wired to the switch -- so the diagram drew twelve
+    // branches of a fourteen-way router and the anchor check stayed green,
+    // because an orphaned node still resolves. Adding an action means adding it
+    // here too.
+    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'idxsearch', 'mantiks', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'st.index', to: 'st.checks', label: 'still listed?' },
     { from: 'sv.idxsearch', to: 'st.search', label: 'search_index()' },
     { from: 'st.search', to: 'st.index', label: 'title match, deduped' },
+
+    /* the corpus: a pass nobody requested, feeding tables nobody owns */
+    { from: 'cx.refresh', to: 'cx.sitemap' }, { from: 'cx.refresh', to: 'cx.ingest' },
+    { from: 'cx.sitemap', to: 'cx.slug' }, { from: 'cx.sitemap', to: 'cx.part' },
+    { from: 'cx.part', to: 'cx.sidecar' },
+    { from: 'cx.ingest', to: 'cx.census' },
+    { from: 'cx.census', to: 'cx.sampled', label: 'which sources were only sampled' },
+    { from: 'cx.verify', to: 'cx.sampled' },
+    { from: 'cx.sampled', to: 'cx.held', label: 'sampled: it may be on a page we never asked for', style: 'drop' },
+    { from: 'cx.sampled', to: 'cx.guard', label: 'enumerated' },
+    { from: 'cx.sitemap', to: 'cx.push', label: 'thin rows' },
+    { from: 'cx.ingest', to: 'cx.push', label: 'full rows' },
+    { from: 'cx.push', to: 'st.index' },
+    { from: 'sv.board', to: 'sv.deposit', label: 'the API sources' },
+    { from: 'sv.apItems', to: 'sv.deposit', label: 'the scraper rows, later' },
+    { from: 'sv.deposit', to: 'st.index' },
+    { from: 'cx.refresh', to: 'cx.urls' },
+    { from: 'cx.urls', to: 'cx.harvest', label: 'urls it already paid for' },
+    { from: 'cx.harvest', to: 'cx.ingest', label: 'new slugs, next pass' },
+    { from: 'cx.refresh', to: 'cx.verify' },
+    { from: 'cx.verify', to: 'cx.guard' },
+    { from: 'cx.sidecar', to: 'cx.guard', label: 'what could not be read' },
+    { from: 'cx.guard', to: 'cx.held', label: 'its file was not read', style: 'drop' },
+    { from: 'cx.guard', to: 'st.checks', label: 'closed: absent from a file we DID read' },
+    { from: 'cx.declared', to: 'st.checks', label: 'closed: the board published it as expired' },
+    { from: 'cx.verify', to: 'st.prune', label: '--prune 30' },
     { from: 'sv.mantiks', to: 'sv.apStart', label: 'miss → Google' },
     { from: 'sv.apStart', to: 'sv.runs' }, { from: 'sv.apStat', to: 'sv.runs', label: 'owns it?' },
 
@@ -406,14 +515,15 @@ module.exports = {
     { from: 'sc.claude', to: 'sc.deepseek', label: 'our key, {COST.llm} credit' },
     { from: 'sc.deepseek', to: 'sc.refund', label: 'empty or 502', style: 'drop' },
     { from: 'sc.deepseek', to: 'sc.grab' },
-    { from: 'sc.grab', to: 'sc.keep', label: 'fit {MIN_FIT}+' },
-    { from: 'sc.grab', to: 'sc.below', label: 'under {MIN_FIT}', style: 'drop' },
+    { from: 'sc.grab', to: 'sc.keep', label: 'fit {FLASH_INTAKE_CUT}+' },
+    { from: 'sc.grab', to: 'sc.below', label: 'under {FLASH_INTAKE_CUT}', style: 'drop' },
     { from: 'sc.batch', to: 'sc.unscored', label: 'batch threw', style: 'drop' },
     { from: 'sc.rescore', to: 'sc.batch' },
-    { from: 'sc.rescore', to: 'sc.judge', label: 'one call per job' },
+    { from: 'sc.rescore', to: 'sc.judgeMany', label: 'once for the whole rescore' },
     { from: 'sc.cut', to: 'sc.judgeMany', label: 'once for the whole search' },
     { from: 'sc.judgeMany', to: 'sc.merge' },
-    { from: 'sc.judge', to: 'sc.merge' }, { from: 'sc.grab', to: 'sc.merge' },
+    { from: 'sv.reap', to: 'sv.runs', label: 'stamps aborted_at' },
+    { from: 'sc.grab', to: 'sc.merge' },
     { from: 'sc.merge', to: 'sc.span' },
 
     { from: 'st.save', to: 'st.put' }, { from: 'st.put', to: 'st.localOnly', label: 'a key?' },

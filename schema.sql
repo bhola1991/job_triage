@@ -301,6 +301,13 @@ create table if not exists public.jobs (
   -- migrating them together once is better than migrating one of them twice.
   ai_judgment text,
   ai_reason text,
+  -- Which model produced ai_score. Board-search intake scores on flash
+  -- (scoreAndCut), the Score button rescores on pro (runScoring), and the two
+  -- numbers are not comparable -- so a list holding both has to be able to say
+  -- which is which. Null on every row written before this column existed: they
+  -- were scored by one tier or the other and nothing recorded it, and a guess
+  -- here would be worse than a blank.
+  score_tier text check (score_tier is null or score_tier in ('flash', 'pro')),
   -- See profiles.extras. On a job this earns its keep at the CSV door, which
   -- copies cells in untouched: a date_applied of "12/03/2025" is not a date
   -- to Postgres, and follow_up_date is legitimately in the future, so the
@@ -317,6 +324,13 @@ create table if not exists public.jobs (
   updated_at timestamptz not null default now(),
   unique (profile_id, job_key)
 );
+
+-- For databases created before the column above existed (safe to re-run), the
+-- same pairing supabase/migrations/20260929_01_score_tier.sql applies.
+alter table public.jobs add column if not exists score_tier text;
+alter table public.jobs drop constraint if exists jobs_score_tier_check;
+alter table public.jobs add constraint jobs_score_tier_check
+  check (score_tier is null or score_tier in ('flash', 'pro'));
 
 create index if not exists jobs_user_updated on public.jobs (user_id, updated_at desc);
 create index if not exists jobs_profile      on public.jobs (profile_id);
@@ -475,11 +489,29 @@ create table if not exists public.job_checks (
   -- floor under it. A render that says "gone from the board" should be able to
   -- tell knowing from guessing.
   closed_src text        check (closed_src is null or closed_src in ('declared', 'inferred')),
+  -- Consecutive runs this posting was absent from a source we actually read
+  -- through. One absence is not a closure: 20.8% of the Naukri index vanished
+  -- across two days on 2026-09-26 and came back, so a single miss sits inside
+  -- the noise. Two in a row does not. Only runs entitled to count increment it
+  -- -- a run that did not read the row's file leaves it alone -- and any
+  -- sighting resets it to 0. Declared expiry ignores it entirely.
+  absent_runs integer     not null default 0 check (absent_runs >= 0),
   checked_at timestamptz not null default now()
 );
 
+-- For databases created before the column above existed (safe to re-run); the
+-- same change is supabase/migrations/20260929_02_absent_runs.sql.
+alter table public.job_checks add column if not exists absent_runs int not null default 0;
+alter table public.job_checks drop constraint if exists job_checks_absent_runs_check;
+alter table public.job_checks add constraint job_checks_absent_runs_check
+  check (absent_runs >= 0);
+
 create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
-create index if not exists job_checks_open        on public.job_checks (closed_on) where closed_on is null;
+-- No index on (closed_on) where closed_on is null. There was one; it took
+-- 3,360 kB and pg_stat_user_indexes recorded ZERO scans over the life of the
+-- table, because nothing looks a posting up by "still open" -- search_index
+-- reaches job_checks through the primary key on the join, and prune_index wants
+-- the opposite predicate, which job_checks_closed_src already covers.
 create index if not exists job_checks_closed_src  on public.job_checks (closed_src) where closed_on is not null;
 
 -- Readable by every signed-in user, writable by nobody through the API.
@@ -551,7 +583,13 @@ create table if not exists public.job_index (
   ) stored
 );
 
-create index if not exists job_index_dedup   on public.job_index (dedup_key);
+-- No index on (dedup_key), deliberately, and this one is worth explaining
+-- because the column is load-bearing while the index was not. search_index
+-- collapses duplicates with `distinct on (dedup_key)` over a CTE that has
+-- ALREADY been cut to a few hundred candidates, and sorts that in memory; no
+-- query anywhere looks a row up BY dedup_key, and there is not one WHERE clause
+-- on it in this file, the edge function or scripts/index/. It cost 39 MB -- 7%
+-- of a 500 MB tier -- for one recorded scan in the table's lifetime.
 create index if not exists job_index_source  on public.job_index (source, posted desc nulls last);
 create index if not exists job_index_posted  on public.job_index (posted desc nulls last) where tier = 'full';
 

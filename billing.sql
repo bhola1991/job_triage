@@ -51,6 +51,14 @@ create table if not exists public.apify_runs (
   created_at timestamptz not null default now()
 );
 alter table public.apify_runs add column if not exists source text;
+-- When the reaper dealt with this run: aborted because it was still going long
+-- after anything could still be watching it, or found already over. Without it
+-- the reaper has no memory and would re-abort and re-log the same run on every
+-- pass. Same change as supabase/migrations/20260929_03_orphan_abort.sql, which
+-- also carries the schedule.
+alter table public.apify_runs add column if not exists aborted_at timestamptz;
+create index if not exists apify_runs_unreaped
+  on public.apify_runs (created_at) where aborted_at is null;
 alter table public.apify_runs enable row level security;
 
 -- Every pot check sits in an UPDATE's WHERE clause, so two parallel calls can't
@@ -151,6 +159,14 @@ end $$;
 
 revoke all on function public.spend_llm(uuid, integer)      from public, anon, authenticated;
 revoke all on function public.spend_search(uuid, integer, boolean) from public, anon, authenticated;
+-- This revoke must travel with the function. CHANGING refund_free's SIGNATURE
+-- CREATES A NEW FUNCTION OBJECT, which picks up Supabase's default PUBLIC
+-- execute grant -- and PUBLIC is inherited by anon. That is exactly what
+-- happened: the (uuid, text) -> (uuid, text, integer) change shipped as
+-- migration 20260926131717 without this line, and for six days any caller
+-- holding the public anon key could add arbitrary free credits to any account
+-- (closed 2026-10-02, supabase/migrations/20261002_01_refund_free_revoke.sql).
+-- A migration that re-creates any function below must re-run its revoke.
 revoke all on function public.refund_free(uuid, text, integer) from public, anon, authenticated;
 grant execute on function public.spend_llm(uuid, integer)   to service_role;
 grant execute on function public.spend_search(uuid, integer, boolean) to service_role;

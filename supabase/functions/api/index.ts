@@ -9,7 +9,7 @@
 //   MANTIKS_API_KEY (contact finder)
 //   optional job sources: JSEARCH_API_KEY (OpenWeb Ninja — NOT a RapidAPI key, see below),
 //     ADZUNA_APP_ID, ADZUNA_APP_KEY, JOOBLE_API_KEY, CAREERJET_API_KEY
-// SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
+// SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { judge } from "../_shared/judge.ts";
@@ -88,7 +88,36 @@ const secret = (k: string) => {
   if (!v) throw new Error(`server is missing the ${k} secret`);
   return v;
 };
+/* Two clients, and which one a query uses is a security decision rather than a
+   style one.
+
+   `admin` holds the service role, so it bypasses row-level security entirely.
+   That is correct for exactly three kinds of work and nothing else: the shared,
+   non-personal corpus (job_index); the tables a user must never be able to write
+   or read directly, however well-behaved the browser is (apify_runs, orders,
+   usage_events); and the credit RPCs, whose whole point is that a balance cannot
+   be moved from DevTools.
+
+   `asCaller` carries the caller's own JWT against the anon key, so every policy
+   in schema.sql and billing.sql applies to it exactly as it would in the
+   browser. Anything scoped to one person that RLS already covers belongs here,
+   because then a mistake in a WHERE clause is caught by the database instead of
+   being the only thing standing between two users.
+
+   What is NOT here, and is the reason this file touches so few per-user tables:
+   jobs, profiles and user_state are never read or written from this function at
+   all. The browser reaches them through PostgREST directly with the anon key and
+   its own session, already under the policies at schema.sql:24-38 and 328-370.
+   The boundary for a person's own data is the database, not this broker. */
 const admin = createClient(secret("SUPABASE_URL"), secret("SUPABASE_SERVICE_ROLE_KEY"));
+
+const asCaller = (token: string) =>
+  createClient(secret("SUPABASE_URL"), secret("SUPABASE_ANON_KEY"), {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    // A server handling many callers must never keep one caller's session
+    // around to be picked up by the next request.
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 
 const cors = {
   "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "*",
@@ -502,6 +531,117 @@ async function logUsage(rows: Record<string, unknown>[]) {
 
 /* Actors disagree on field names, so take the first one present. */
 const pick = (x: Any, ...keys: string[]) => { for (const k of keys) { const v = k.split(".").reduce((o, p) => o?.[p], x); if (v !== undefined && v !== null && v !== "") return v; } return ""; };
+/* ── the flywheel ───────────────────────────────────────────────────────────
+   Every posting a paid search touches, deposited into the shared corpus.
+
+   Until now job_index was written ONLY by scripts/index/push-index.js, the
+   offline crawler. A user spent 25 credits, the rows went to their own
+   public.jobs, and the corpus learned nothing -- so acquisition was paid for
+   once and used once, by one person. That is the opposite of why the table is
+   shared: a posting costs ~16x more to acquire than to decide about, so a row
+   bought once and served to everyone is the only one that scales.
+
+   These are also the rows the corpus is short of. It holds 8,082 `full` rows
+   against 340,907 `thin` ones, and a thin row carries no description, so it can
+   never be judged -- only shortlisted. Search rows come from Adzuna, Jooble,
+   Careerjet, JSearch and the scrapers WITH their descriptions, which is exactly
+   the scarce kind.
+
+   Deposited BEFORE the caller's own scoring. scoreAndCut drops anything under
+   MIN_FIT for that person, and a role wrong for them is not wrong for everyone
+   -- cutting first would make this a shared shortlist instead of a shared
+   corpus.
+
+   Two writes, not one, and the split is the point: a `full` row upserts, because
+   newer full data should win; a `thin` row is inserted only when the key is
+   ABSENT. Without that split a short search snippet would overwrite a crawler
+   row that had a real description -- a silent downgrade of the corpus by the
+   feature meant to enrich it.
+
+   Best-effort throughout, like logUsage: the user has already paid for this
+   search and a corpus write must never be able to fail it. index.html holds the
+   same rule from the other side, where index_search is wrapped so the
+   optimisation can never stop a search someone paid for. */
+const INDEX_MAX_AGE_DAYS = 35;   // as scripts/index/push-index.js: do not store
+const INDEX_DESC_CAP = 4000;     // what search_index could never return anyway
+const INDEX_DEPOSIT_CAP = 600;
+/* TODO (product/legal, not a code question — do not "fix" this in passing).
+   Everything below is deposited into public.job_index, which is the SHARED
+   corpus: readable by every signed-in user ("shared: select", schema.sql:573).
+   One person pays for a search and the rows it returns become everybody's.
+   That is the deliberate economics of the corpus and it is what makes
+   index_search free — but where a row came FROM is not all alike, and two of
+   these arrive by scraping sites whose terms are their own matter.
+
+   What currently reaches this function, exhaustively:
+
+     via board_search (searchAll) — API sources, queried under our own keys:
+       jsearch, adzuna, jooble, careerjet, remotive, remoteok
+
+     via apify_items — site scrapers, gated on SCRAPERS membership:
+       linkedin    (bebity~linkedin-jobs-scraper)
+       indeed      (misceres~indeed-scraper)
+       naukri      (memo23~naukri-scraper)
+       indiatech   (seemuapps~india-tech-jobs-scraper — Instahyre/CutShort/Foundit)
+       upwork      (valig~upwork-jobs-scraper)
+
+   What does NOT reach it: the Google search-scraper run. apify_items only
+   deposits when b.source is a known SCRAPERS key, and "google" is not one, so
+   those rows go to the caller and nowhere else.
+
+   The question this TODO exists to raise, and which is the owner's to answer:
+   LinkedIn and Indeed rows are scraped, and they are redistributed here to
+   every user of the product rather than only to the person whose search paid
+   for them. Retaining them for the searcher is one posture; pooling them is a
+   different one. If the answer is that they should not pool, the change is to
+   filter by source in this function — the deposit already happens in one
+   place, deliberately, so that it can be. Nothing here is changed by the
+   commit that added this note. */
+async function depositIndex(jobs: Job[]) {
+  try {
+    const clean = (v: unknown, n: number) => { const t = String(v ?? "").trim(); return t ? t.slice(0, n) : null; };
+    const seen = new Map<string, Record<string, unknown>>();
+    for (const j of jobs) {
+      // keyOf() in index.html, mirrored: the identity public.jobs and
+      // public.job_checks already use, so all three join without translation.
+      const u = String(j?.url || "").trim();
+      if (!j || !String(j.title || "").trim() || !u || u === "nan") continue;
+      const posted = /^\d{4}-\d{2}-\d{2}$/.test(String(j.posted || "")) ? String(j.posted) : null;
+      if (posted && (Date.now() - Date.parse(posted)) / 864e5 > INDEX_MAX_AGE_DAYS) continue;
+      const desc = String(j.description || "");
+      const tier = desc.length > 200 ? "full" : "thin";
+      seen.set("u:" + u.toLowerCase(), {
+        job_key: "u:" + u.toLowerCase(),
+        source: clean(j.publisher, 80) || "search",
+        title: clean(j.title, 300) || "(untitled)",
+        company: clean(j.company, 200),
+        location: clean(j.location, 200),
+        posted,
+        description: tier === "full" ? desc.slice(0, INDEX_DESC_CAP) : null,
+        tier,
+        publisher: clean(j.publisher, 120),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    const rows = [...seen.values()].slice(0, INDEX_DEPOSIT_CAP);
+    if (!rows.length) return;
+    const full = rows.filter((r) => r.tier === "full");
+    const thin = rows.filter((r) => r.tier === "thin");
+    if (full.length) {
+      const { error } = await admin.from("job_index").upsert(full, { onConflict: "job_key" });
+      if (error) console.error("index deposit (full):", error.message);
+    }
+    if (thin.length) {
+      const { error } = await admin.from("job_index")
+        .upsert(thin, { onConflict: "job_key", ignoreDuplicates: true });
+      if (error) console.error("index deposit (thin):", error.message);
+    }
+  } catch (e) {
+    // Never the user's problem: they paid for a search, not for a corpus write.
+    console.error("index deposit:", (e as Error).message);
+  }
+}
+
 function scrapedJob(x: Any, source: string): Job {
   let url = String(pick(x, "jobUrl", "url", "link", "staticUrl", "JdURL", "applyUrl", "externalApplyLink"));
   if (source === "naukri" && url && !/^https?:/.test(url)) url = "https://www.naukri.com/" + url.replace(/^\//, "");
@@ -573,6 +713,10 @@ async function refund(user: string, s: Spent, kind: "llm" | "search", n: number)
   if (s.used === "free") await admin.rpc("refund_free", { p_user: user, p_what: kind, p_n: n });
   else await admin.rpc("add_credits", { p_user: user, p_n: n });
 }
+// Service role, and the .eq("user_id") below is therefore the whole check rather
+// than a belt over RLS's braces. apify_runs has row-level security ON and NO
+// policies at all (billing.sql:54), which is the deny: the caller's own client
+// could not read this row, so ownership has to be asserted here or nowhere.
 async function ownRun(user: string, id: string) {
   const { data } = await admin.from("apify_runs").select("dataset_id").eq("run_id", String(id)).eq("user_id", user).maybeSingle();
   if (!data) throw new Http(404, "run not found");
@@ -660,6 +804,9 @@ Deno.serve(async (req) => {
     const { data: auth } = await admin.auth.getUser(token);
     const user = auth?.user?.id;
     if (!user) throw new Http(401, "sign in first");
+    // The same token, now as a client the database will police. See the note by
+    // `admin` above for which queries are allowed to use which.
+    const me = asCaller(token);
 
     const b = await req.json().catch(() => ({}));
     switch (b.action) {
@@ -731,6 +878,9 @@ Deno.serve(async (req) => {
             await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
             await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
           }
+          // Into the shared corpus on the way out. Before the caller scores and
+          // cuts them, so the corpus keeps what was wrong for THIS person.
+          await depositIndex(jobs);
           return json({ jobs, runId: run?.id || null, queries, scrapers, searchId, since, free, sourceErrors: errors, ...wallet(s) });
         } catch (e) {
           // Anything that throws after the credit was taken has to put it back.
@@ -753,13 +903,21 @@ Deno.serve(async (req) => {
         // to come from a real search of this caller's. This was the one mutating
         // action that spent nothing and proved nothing: any uuid and any figures
         // were accepted, 30 rows at a time, unmetered and unbounded.
+        // Both reads below stay on the service role on purpose. usage_events is
+        // revoked from `authenticated` outright (billing.sql:245) -- the ledger
+        // is not something the browser is allowed to read at all -- so the
+        // caller's own client would get nothing back and this check would pass
+        // for everyone. The .eq("user_id") is the scoping.
         const { data: own } = await admin.from("usage_events")
           .select("created_at").eq("search_id", sid).eq("user_id", user)
           .order("created_at", { ascending: true }).limit(1).maybeSingle();
         if (!own) throw new Http(404, "unknown search");
         if (Date.now() - new Date(own.created_at as string).getTime() > REPORT_WINDOW_MS)
           throw new Http(409, "search too old to report");
-        // One report per search: a retry must not double the row count.
+        // One report per search: a retry must not double the row count. This one
+        // is deliberately NOT scoped to the caller -- it asks whether the search
+        // has been reported by anybody, and scoping it would reintroduce the
+        // double-count it exists to stop.
         const { count: already } = await admin.from("usage_events")
           .select("id", { count: "exact", head: true }).eq("search_id", sid).eq("kind", "yield");
         if (already) throw new Http(409, "already reported");
@@ -1074,7 +1232,14 @@ Deno.serve(async (req) => {
           const rows = items as Any[];
           await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
             kind: "scrape", source: b.source, units: rows.length, cost_inr: inr(rows.length * (PRICE_USD[b.source] || 0)) }]);
-          return json({ items: rows.map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url) });
+          // The scraper half of the same search. These arrive on a later request
+          // than board_search -- a run is polled until it finishes -- so they
+          // need their own deposit or the paid rows never reach the corpus at
+          // all. They are also the dearest rows in the product: LinkedIn was
+          // measured at 7.66 per exclusive posting against upwork's 0.14.
+          const jobs = rows.map((x) => scrapedJob(x, b.source)).filter((j) => j.title && j.url);
+          await depositIndex(jobs);
+          return json({ items: jobs });
         }
         return json({ items });
       }
@@ -1096,6 +1261,9 @@ Deno.serve(async (req) => {
         });
         const o = await r.json();
         if (!r.ok || !o.id) throw new Http(502, "Couldn't start the payment. Nothing was charged.");
+        // Service role: orders carries only `own orders: select` (billing.sql:36),
+        // so a caller can read their orders but must never write one -- a row
+        // here is a claim about money that the browser does not get to make.
         const { error } = await admin.from("orders").insert({ id: o.id, user_id: user, pack: b.pack, credits: pack.credits, amount: pack.paise });
         if (error) throw error;
         // key_id is Razorpay's publishable id; checkout needs it in the browser.
@@ -1109,7 +1277,10 @@ Deno.serve(async (req) => {
         const { data: order } = await admin.from("orders").select("user_id").eq("id", String(order_id)).maybeSingle();
         if (order?.user_id !== user) throw new Http(404, "order not found");
         await admin.rpc("mark_order_paid", { p_order: order_id, p_payment: payment_id });
-        const { data: c } = await admin.from("credits").select("balance").eq("user_id", user).maybeSingle();
+        // Read back through the caller's own client: `own credits: select`
+        // (billing.sql:21-23) scopes this to their row, so the .eq() below is a
+        // second lock rather than the only one.
+        const { data: c } = await me.from("credits").select("balance").eq("user_id", user).maybeSingle();
         return json({ balance: c?.balance ?? 0 });
       }
     }

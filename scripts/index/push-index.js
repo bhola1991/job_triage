@@ -28,7 +28,25 @@ const CHUNK = 500;            // rows per request; descriptions make these bodie
 
 const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
-const files = args.filter((a) => !a.startsWith('--'));
+/* Do not store what the app cannot search. index.html:3450 clamps since_days to
+   `Math.min(30, ...)` and search_index filters `posted >= current_date - p_days`,
+   so a corpus row older than 30 days is unreachable by any search this product
+   can make. Measured 2026-09-28: 69,624 such rows, about 54 MB of a 500 MB tier
+   -- dead weight that also came back every night.
+
+   Capped HERE and deliberately not in sitemap-jobs.js, which has its own
+   --max-age. That flag filters the snapshot FILE, and verify.js reads that same
+   file to decide what is still listed -- so capping the crawl would make every
+   older posting look absent and close it. That is the mass false closure of
+   185184c all over again, from the other end. job_index is the SEARCH corpus and
+   wants only what is searchable; job_checks is the liveness record and wants the
+   whole history. The cap belongs to the first and never to the second.
+
+   35 rather than 30: a few days of margin, so a row does not flicker out of the
+   corpus on the boundary and get re-pushed the next night. --max-age 0 disables. */
+const VALUED = new Set(['--max-age']);
+const MAX_AGE = args.includes('--max-age') ? Number(args[args.indexOf('--max-age') + 1]) || 0 : 35;
+const files = args.filter((a, i, all) => !a.startsWith('--') && !VALUED.has(all[i - 1]));
 if (!files.length) {
   console.error('usage: node scripts/index/push-index.js <snapshot.jsonl…> [--dry]');
   console.error('  snapshots come from sitemap-jobs.js or ingest.js; either shape is accepted.');
@@ -73,7 +91,7 @@ function row(r) {
 }
 
 const seen = new Map();       // job_key -> row; last one wins within a run
-let read = 0, skipped = 0;
+let read = 0, skipped = 0, stale = 0;
 for (const f of files) {
   for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
     const s = line.trim(); if (!s) continue;
@@ -82,6 +100,9 @@ for (const f of files) {
     // A row with no url and no title cannot be identified or shown.
     if (!r || (!r.url && !r.title)) { skipped++; continue; }
     const v = row(r);
+    // Unknown is not old: a row with no date is KEPT, the same rule the app's
+    // own age cut follows. Only a date that is actually too old drops the row.
+    if (MAX_AGE && v.posted && (Date.now() - Date.parse(v.posted)) / 864e5 > MAX_AGE) { stale++; continue; }
     seen.set(v.job_key, v);
   }
   console.log(`  read ${path.relative(ROOT, f)}`);
@@ -91,6 +112,7 @@ const rows = [...seen.values()];
 const full = rows.filter((r) => r.tier === 'full').length;
 const bytes = rows.reduce((n, r) => n + (r.description ? r.description.length : 0), 0);
 console.log(`\n${read} row(s) read, ${skipped} unusable, ${rows.length} distinct job_key`);
+if (stale) console.log(`  ${stale} row(s) older than ${MAX_AGE}d not stored (the app cannot search them; liveness still tracks them)`);
 console.log(`  full ${full} · thin ${rows.length - full}`);
 console.log(`  description payload: ${(bytes / 1e6).toFixed(1)} MB after the ${CAP}-char cap`);
 

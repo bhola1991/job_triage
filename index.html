@@ -581,7 +581,7 @@ const COLS = ["title","company","location","url","description","status","date_ap
   "follow_up_date","pitch_sent","notes","source","query",
   "ai_score","ai_reason","ai_flags","ai_judgment","ai_confidence","ai_reachability","channel",
   "stage","last_touch","contacts","events","added",
-  "posted","posted_lo","posted_hi","posted_src"];
+  "posted","posted_lo","posted_hi","posted_src","score_tier"];
 
 /* ═══ when was this posted ═══
    'added' is when a row reached this app, which says nothing about the job.
@@ -1237,15 +1237,45 @@ async function migrateRows(){
     return;
   }
   MIGRATED = true;
+  MIGRATED_AT = Date.now();
   await put('triage:current', DB.current||'');
-  await put('triage:migrated','1');
+  /* An ISO stamp rather than '1', because the blob's retirement is measured
+     from this moment and '1' is not a date. '1' is still read as migrated
+     below -- every account that migrated before today holds one -- it just has
+     to be given a date the first time it is seen. */
+  await put('triage:migrated', new Date(MIGRATED_AT).toISOString());
 }
 
-/* The blob is written on every save whether or not this account has migrated.
+/* How long the blob keeps being written after an account moves onto rows.
+   It is a rollback copy, and a rollback copy has a shelf life: two weeks of
+   successful row saves is long enough to have noticed a migration that went
+   wrong, and past that the blob is no longer insurance -- it is a full second
+   copy of every job and every CV, rewritten on every keystroke-driven save,
+   for a rollback nobody is going to perform. */
+const BLOB_SUNSET_DAYS = 14;
+
+/* When this account migrated, as epoch ms; null when it has not, or when the
+   stamp could not be read. Null means keep writing -- never stop on a date we
+   are unsure of. */
+let MIGRATED_AT = null;
+
+/* Whether the blob is still worth writing.
+
+   Three ways to be true, and the last two matter as much as the first:
+     - not migrated: the blob IS the storage.
+     - the cloud is not reachable: rows cannot be written, so the blob is the
+       only thing keeping this device's work, sunset or not.
+     - migrated recently: still inside the rollback window. */
+function blobLive(){
+  if(!MIGRATED || !cloudNow() || !MIGRATED_AT) return true;
+  return (Date.now() - MIGRATED_AT) < BLOB_SUNSET_DAYS * 864e5;
+}
+
+/* The blob was written on every save whether or not this account had migrated.
    Once it has, nothing reads it -- it is the offline copy and the rollback,
-   and a rollback copy is only worth keeping if it is current. */
+   and a rollback copy is only worth keeping while it could still be used. */
 async function save(){
-  await put('triage:db', JSON.stringify(DB));
+  if(blobLive()) await put('triage:db', JSON.stringify(DB));
   if(!cloudNow() || !MIGRATED) return;
   /* Which profile is open is the one thing in DB that is not a row. It rode
      inside the blob, and once the blob stops being read it needs its own key
@@ -1255,12 +1285,36 @@ async function save(){
   catch(e){
     cloudDown(e);
     console.warn('row save failed:', e && e.message);
-    syncNote("Saved on this device \u2014 " + ((e&&e.message)||'could not reach the server')
+    /* Locally, and whatever the sunset says. The note below promises the work
+       is not lost, and once the blob is retired the row save is the only thing
+       that was keeping that promise -- so the moment it fails is the moment
+       the copy earns its keep again. Local only: the cloud is what just
+       refused us. */
+    try{ await putLocal('triage:db', JSON.stringify(DB)); }catch(_){}
+    syncNote("Saved on this device — " + ((e&&e.message)||'could not reach the server')
              + ". Your work is not lost.");
   }
 }
 async function load(){
-  MIGRATED = (await get('triage:migrated')) === '1';
+  /* Anything non-empty means migrated. Accounts that migrated before the stamp
+     existed hold '1', which says it happened but not when -- so they are given
+     today's date and their fortnight starts now. Backdating them instead would
+     retire the blob on the same load that introduced the idea, which is not a
+     window, it is a switch. */
+  const mig = (await get('triage:migrated')) || '';
+  MIGRATED = !!mig;
+  /* Shape-checked before parsing, and that is not belt-and-braces. The legacy
+     value is the string '1', and Date.parse('1') does not fail -- it returns
+     the 1st of January 2001, which is twenty-five years past any window and
+     would retire the blob on the spot for every account that predates the
+     stamp. Only something ISO-shaped counts as a date here. */
+  const at = /^\d{4}-\d{2}-\d{2}T/.test(mig) ? Date.parse(mig) : NaN;
+  MIGRATED_AT = isNaN(at) ? null : at;
+  if(MIGRATED && MIGRATED_AT === null){
+    MIGRATED_AT = Date.now();
+    try{ await put('triage:migrated', new Date(MIGRATED_AT).toISOString()); }
+    catch(e){ console.warn('could not stamp the migration date:', e && e.message); }
+  }
   let fromRows = false;
   if(cloudNow() && MIGRATED){
     try{
@@ -1541,7 +1595,11 @@ async function hosted(action, body){
   return data;
 }
 /* Jev (TypeSafe System One) judges one job: how much of the posting is visible,
-   the two fit scores, and the ten flag codes. Called per job from runScoring. */
+   the two fit scores, and the ten flag codes. Nothing calls this per job any
+   more -- both scoring paths go through judgeMany below, which pays once per
+   JUDGE_BATCH -- and it is kept as the single-posting form of the same call:
+   the `judge` action is live on the server and this is the only thing in the
+   browser that reaches it. */
 async function judgeJob(posting, candidate){
   return hosted('judge', { posting, candidate });
 }
@@ -1584,6 +1642,7 @@ async function buyDialog(){
     <div class="btn-row" style="margin-top:14px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div></div>`);
   try{
     const {packs,costs}=await hosted('packs',{});
+    if(costs && costs.boardSearch) BOARD_COST=costs.boardSearch;
     if(costs) d.querySelector('#packs').insertAdjacentHTML('beforebegin',
       /* Two prices for scoring because there are two models and they differ 4x.
          A board search scores its own intake on the fast one; asking for a
@@ -3023,22 +3082,6 @@ const candidateOf = (prof, track) => {
   };
 };
 
-/* One job, judged. Returns null rather than throwing: a judgement is an
-   improvement on the DeepSeek flags, not a precondition for having any, and a
-   scoring run that already cost money must not be lost to it. Null is also
-   what every local-only and own-key run gets, because the TypeSafe key lives
-   on the server and deliberately never reaches the browser. */
-async function judgeInto(j, cand){
-  if(!cloudNow()) return null;
-  try{
-    return await judgeJob({
-      title: String(j.title||''), company: String(j.company||''),
-      location: String(j.location||''),
-      description: String(j.description||'').slice(0,4000),
-    }, cand);
-  }catch(e){ console.warn('judgment skipped:', e && e.message); return null; }
-}
-
 /* Jev decides which flags are true; DeepSeek says what in the posting makes
    each one true. A flag Jev raises that DeepSeek never mentioned still shows,
    with no fact and no quote -- which is the honest rendering of "we think so
@@ -3099,38 +3142,31 @@ async function runScoring(all, auto){
   if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
   busy=true; render();
   const SIZE=6, total=targets.length; let done=0, failed=0;
+  /* Everything that scored, judged in ONE pass once the loop is done, exactly
+     as scoreAndCut does it. This used to fire judgeInto per job -- one credit
+     each -- while the search path paid one credit per fifty through judgeMany
+     for the same work. A sixty-job rescore cost sixty credits where a
+     sixty-job search cost two, and nothing about a rescore justifies the
+     difference. Collected here rather than judged in the loop because the
+     batch that makes it cheap is fifty, and the scoring batch is six. */
+  const scored=[];
   for(let i=0;i<targets.length;i+=SIZE){
     const batch=targets.slice(i,i+SIZE);
     try{
       const res=await scoreBatch(batch,p.profile,p.track);
-      /* One judgement per job, and one credit per judgement. This is the small
-         path -- a rescore, capped at AUTO_MAX -- so it can carry that; the
-         search path judges through judgeMany instead, which pays once for a
-         whole batch. In parallel across the batch, not across the run: SIZE
-         calls in flight is enough to keep it quick without turning a rescore
-         into a burst of paid traffic. */
-      const cand=candidateOf(p.profile, p.track);
-      const judged=await Promise.all(batch.map(b=>{
-        const r=res[String(b.i)];
-        return r ? judgeInto(p.jobs[b.i], cand) : null;
-      }));
       batch.forEach((b,k)=>{ const r=res[String(b.i)]; if(!r) return;
-        const j=p.jobs[b.i], jv=judged[k];
+        const j=p.jobs[b.i];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
-        /* rankOf keys on the long names, and Jev's choice already answers in
-           them, so this is a straight swap. When there is no judgement it is
-           DeepSeek's own reading -- dropping confidence entirely would move
-           every unjudged job in the ranking. */
-        j.ai_confidence = (jv && jv.confidence) || r.conf;
-        j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
-        /* The whole judgement, kept. Every number the app derives from it --
-           the fit pair, reachability, the confidence weight in rankOf -- is
-           computed from this in the browser, so changing any of those weights
-           re-ranks what is already judged without paying to judge it again. */
-        if(jv) j.ai_judgment = JSON.stringify(jv);
+        j.score_tier='pro';          // scoreBatch with no tier resolves to pro
+        /* DeepSeek's own reading for now. The judgement below raises it when
+           one arrives; dropping confidence entirely while waiting would move
+           every job in the ranking for as long as the loop runs. */
+        j.ai_confidence = r.conf;
+        j.ai_flags = JSON.stringify(addSpans(r.flags, j.description));
         // Only ever fills a gap. A date from a feed outranks the model's
         // reading of the same posting, and re-scoring must not overwrite it.
-        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
+        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
+        scored.push({j, r}); });
     }catch(e){
       if(e.message==='NEEDKEY'){
         busy=false;
@@ -3145,6 +3181,34 @@ async function runScoring(all, auto){
     setInfo(`${done} of ${total} done${failed?` · ${failed} failed`:''}`);
     await save();
   }
+
+  /* One judgement call per fifty, and a failure costs the flags rather than the
+     scoring already paid for: a job with no judgement keeps DeepSeek's own
+     reading and its score, which is what judgeMany returning null for it
+     means. rankOf keys on the long names and Jev's choice already answers in
+     them, so the swap below is straight. */
+  if(scored.length && cloudNow()){
+    try{
+      const cand=candidateOf(p.profile, p.track);
+      const judged=await judgeMany(scored.map(({j})=>({
+        title:String(j.title||''), company:String(j.company||''),
+        location:String(j.location||''),
+        description:String(j.description||'').slice(0,4000),
+      })), cand);
+      scored.forEach(({j, r}, k)=>{
+        const jv=judged[k];
+        if(!jv) return;
+        j.ai_confidence=jv.confidence||r.conf;
+        j.ai_flags=JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
+        /* The whole judgement, kept. Every number the app derives from it --
+           the fit pair, reachability, the confidence weight in rankOf -- is
+           computed from this in the browser, so changing any of those weights
+           re-ranks what is already judged without paying to judge it again. */
+        j.ai_judgment=JSON.stringify(jv);
+      });
+    }catch(e){ console.warn('judgement skipped for this rescore:', e && e.message); }
+  }
+
   busy=false;
   setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
   await save(); render();
@@ -3189,7 +3253,7 @@ function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
      1. boardFilter  - free: drop what is plainly not a new, recent, relevant posting
      2. fromAts      - free: company-feed hits get their full description, and
                        ones the company no longer lists are dropped as closed
-     3. scoreAndCut  - full scoring against the CV; below MIN_FIT is dropped */
+     3. scoreAndCut  - full scoring against the CV; below FLASH_INTAKE_CUT is dropped */
 const MAX_AGE_DAYS = 30;
 
 /* A normalized server result (API source or site scraper) as a job row.
@@ -3254,12 +3318,17 @@ function boardFilter(jobs, trk, seen){
 }
 
 /* Full scoring against the CV, the same scoring every job card shows, run on
-   each source's results as they land. Jobs below MIN_FIT are dropped; the rest
+   each source's results as they land. Jobs below FLASH_INTAKE_CUT are dropped; the rest
    come back already scored. Batches of 12 (vs 6 for rescoring) because a search
    can return hundreds. If a batch's call fails, those results were already paid
    for, so they are kept unscored rather than lost: "Score new jobs" picks them up. */
 const SCORE_BATCH = 12;
-const MIN_FIT = 50;
+/* The intake cut, and it is a FLASH cut: this path scores on deepseek-flash and
+   compares the result against this number. The Score button rescores the same
+   job on pro and the two scales do not agree, so naming it after the model is
+   the point -- a single FLASH_INTAKE_CUT read as one law over both tiers, which it never
+   was. The value is unchanged. */
+const FLASH_INTAKE_CUT = 50;
 async function scoreAndCut(jobs, prof, track){
   const kept=[], unscored=[], scored=[]; let below=0;
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
@@ -3270,12 +3339,13 @@ async function scoreAndCut(jobs, prof, track){
       // of 300 jobs is 25 calls), and it is the one whose output is a number
       // against a fixed rubric rather than prose anyone reads. Rescoring from the
       // Score button stays on pro, so a list can hold scores from both -- see
-      // MIN_FIT below, which is applied to these flash scores at intake.
+      // FLASH_INTAKE_CUT below, which is applied to these flash scores at intake.
       const res=await scoreBatch(part.map((j,k)=>({i:k, j})), prof, track, TOK_CAP, 'flash');
       part.forEach((j,k)=>{
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
+        j.score_tier='flash';        // scoreBatch above was asked for flash
         j.ai_confidence=r.conf;
         j.ai_flags=JSON.stringify(addSpans(r.flags, j.description));
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
@@ -3315,13 +3385,13 @@ async function scoreAndCut(jobs, prof, track){
 
   // The cut stays on the DeepSeek score until the eval set says the composed
   // one ranks at least as well — see PLAN.md 2e, which is the gate for that.
-  scored.forEach(({j, r})=>{ if(r.score>=MIN_FIT) kept.push(j); else below++; });
+  scored.forEach(({j, r})=>{ if(r.score>=FLASH_INTAKE_CUT) kept.push(j); else below++; });
   return {kept, unscored, below};
 }
 
 /* The live results while a search runs. Each source's jobs go in through
    add(): free filter, then full postings from company feeds (dropping closed
-   ones), then scoring, and what scores MIN_FIT+ joins the list. */
+   ones), then scoring, and what scores FLASH_INTAKE_CUT+ joins the list. */
 function liveBoard(trk, prof, track){
   const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
   const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, old:0, dupe:0}};
@@ -3333,7 +3403,7 @@ function liveBoard(trk, prof, track){
   const seenIn=new Map();
   const idsOf=j=>[keyOf(j)].concat(j.company&&!j.company.startsWith('[')?['tc:'+(j.title+'|'+j.company).toLowerCase()]:[]);
   const draw=(extra)=>{
-    setSearchInfo(`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
+    setSearchInfo(`${st.found} found · ${st.kept.length} score ${FLASH_INTAKE_CUT}+ · ${st.below} below ${FLASH_INTAKE_CUT}`
       + (st.checking?` · scoring ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
     const el=$('#searchLive'); if(!el) return;
     el.innerHTML=st.kept.slice(0,10).map(j=>
@@ -3417,6 +3487,60 @@ async function fromAts(jobs, onStatus){
   return {jobs:out, closed};
 }
 
+/* What the corpus search left on the table, so the paid search can be a second
+   click rather than the same click. Holds the track it belongs to: switching
+   track must not leave an offer behind that would spend credits on the titles
+   of a track nobody is looking at. Null whenever there is nothing to offer --
+   no cloud session, an own Apify token, or the paid search already made. */
+let PAID_OFFER = null;
+/* What the live-board search costs, for the button that offers it. The server
+   is the authority (COST.boardSearch) and hands the real figure over with the
+   packs; this is the same number written down so the button can be drawn before
+   anyone has opened the credits dialog. Refreshed from the server whenever that
+   dialog does fetch them. */
+let BOARD_COST = 25;
+
+/* The shared tail of both phases: what was kept goes into the list, the search
+   is reported if it was a metered one, and the person is told what happened.
+   `paid` is what makes the two summaries differ -- a free corpus pass that
+   found little is an invitation to spend, and needs to say so. */
+async function finishSearch(trk, live, failed, paid){
+  const p=P(); const st=live.st, d=st.dropped;
+  const n=addJobs(st.kept.concat(st.unscored));
+  if(SEARCH_ID){
+    hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
+    // Only a search on our keys moves the "new since" point; it's what that window is for.
+    p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
+  }
+  SEARCH_ID=null;
+  /* save, then redraw, then say what happened -- in that order, because
+     render() rebuilds #root and would wipe a summary written before it. */
+  await save(); busy=false; render();
+  const why=[st.below&&`${st.below} scored below ${FLASH_INTAKE_CUT}`, d.listing&&`${d.listing} listing pages`,
+    d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
+    st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
+  if(failed.length) console.warn('sources failed:', failed);
+  const found=(n
+      ? `Added ${st.kept.length} jobs scoring ${FLASH_INTAKE_CUT}+ from ${st.found} results.`
+        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
+      : `Searched ${st.found} results, none new scoring ${FLASH_INTAKE_CUT}+.`);
+  setSearchInfo(found + (why?` Skipped: ${why}.`:'')
+    + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:'')
+    + (paid?'':' The live boards are a separate search, and a paid one.'));
+}
+
+/* Phase one, and free.
+
+   The corpus is hundreds of thousands of postings already acquired and already
+   paid for, served to everyone, so reading it costs nothing and answers at
+   once. It used to run here and then fall straight through into a board search
+   in the same click, which meant nobody ever got the chance to look at the free
+   answer and decide the paid one was unnecessary. Now it stops, shows what it
+   has, and offers the paid search as its own action.
+
+   The own-Apify-token path below is untouched: that person spends on their own
+   account through their own key, there is no credit of ours to save them, and
+   a second click in front of it would buy nothing. */
 async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
   // Portals first, then any specialist registry the track named that is not
@@ -3428,7 +3552,7 @@ async function runBoards(trk, where){
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   const qs=buildBoardQueries(titles,boards,where);
-  busy=true; render();
+  busy=true; PAID_OFFER=null; render();
   try{
     // Pinned to the person's country so Google ranks for where they can
     // actually work. The location term in the query does the real narrowing;
@@ -3438,78 +3562,75 @@ async function runBoards(trk, where){
     const cc=p.profile.country_code||"";
     const live=liveBoard(trk, p.profile, p.track), failed=[];
     if(!ownApify() && cloudNow()){
-      // Our keys: the API sources answer at once; the Google run and the site
-      // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
-      // Each batch is CV-checked the moment it arrives. One source failing
-      // loses only its own results. One charge for the lot.
-      const registries=boards.filter(b=>!PORTALS.includes(b));
-      const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
       // New jobs only: every site is asked for what was posted since this track
       // was last searched (rounded up, plus a day of overlap), 30 days the first time.
       const last=Date.parse((p.searchedAt||{})[trk.id]||'');
       const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
-      setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
-      /* The shared corpus first, because it is free and instant. These rows
-         were acquired once and are served to everyone, so nothing is metered
-         and nothing is waited on -- they are on screen before the paid sources
-         have started. The boards then fill what the index does not have, which
-         is mostly the last few days: outside Naukri's latest-jd feed the
-         corpus lags about a week, so this does not replace a search, it makes
-         one cheaper to justify.
-         Wrapped because the index is an optimisation and must never be able to
-         stop a search the user has already paid for. */
+      setSearchInfo(since_days<30 ? `reading the index for jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'reading the index…');
       try{
         const ix=await hosted('index_search',{titles:titles.slice(0,4), since_days, limit:60});
         const rows=(ix&&ix.jobs)||[];
-        if(rows.length){
-          await live.add(rows.map(jsearchRow));
-          live.draw(`${rows.length} from the index · searching the boards for the rest…`);
-        }
+        if(rows.length) await live.add(rows.map(jsearchRow));
       }catch(e){ console.warn('index search skipped:', e.message); }
-
-      // fallback: portal queries the server runs on Google if every API source comes back empty.
-      const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
-        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
-      SEARCH_ID=r.searchId||null;
-      failed.push(...(r.sourceErrors||[]));
-      let left=(r.scrapers||[]).length+(r.runId?1:0);
-      const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
-      const land=(label, promise)=>promise
-        .then(jobs=>live.add(jobs||[]))
-        .catch(e=>{ failed.push(`${label}: ${e.message}`); })
-        .finally(()=>{ left--; live.draw(note()); });
-      const work=[live.add((r.jobs||[]).map(jsearchRow))];
-      (r.scrapers||[]).forEach(s=>work.push(land(s.label,
-        apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
-          .then(items=>(items||[]).map(jsearchRow)))));
-      if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
-      live.draw(note());
-      await Promise.all(work);
+      /* The same titles, the same window and the same place, carried rather than
+         recomputed: a second click must search what the first one searched, or
+         the free pass was not a preview of anything. Set BEFORE finishSearch,
+         because that is what redraws the panel the offer appears in. */
+      PAID_OFFER={trackId:trk.id, where, since_days};
+      await finishSearch(trk, live, failed, false);
     } else {
       await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
+      await finishSearch(trk, live, failed, true);
     }
-    const st=live.st, d=st.dropped;
-    const n=addJobs(st.kept.concat(st.unscored));
-    if(SEARCH_ID){
-      hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
-      // Only a search on our keys moves the "new since" point; it's what that window is for.
-      p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
-    }
-    SEARCH_ID=null;
-    await save(); busy=false; render();
-    const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`,
-      d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
-      st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
-    if(failed.length) console.warn('sources failed:', failed);
-    setSearchInfo((n
-      ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
-        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
-      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`) + (why?` Skipped: ${why}.`:'')
-      + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
   }catch(e){
     busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
+    setSearchInfo(e.message);
+  }
+}
+
+/* Phase two, and the one that costs credits: the live boards. Only ever reached
+   from the button runBoards offers, never automatically.
+
+   Our keys: the API sources answer at once; the Google run and the site
+   scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later. Each
+   batch is CV-checked the moment it arrives. One source failing loses only its
+   own results. One charge for the lot. */
+async function runPaidBoards(trk, where, since_days){
+  const p=P(); if(!p||busy) return;
+  const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
+  const titles=(trk.titles||[]);
+  if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
+  busy=true; PAID_OFFER=null; render();
+  try{
+    const cc=p.profile.country_code||"";
+    const live=liveBoard(trk, p.profile, p.track), failed=[];
+    const registries=boards.filter(b=>!PORTALS.includes(b));
+    const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
+    setSearchInfo('searching the live boards…');
+    // fallback: portal queries the server runs on Google if every API source comes back empty.
+    const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+      where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
+      fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+    SEARCH_ID=r.searchId||null;
+    failed.push(...(r.sourceErrors||[]));
+    let left=(r.scrapers||[]).length+(r.runId?1:0);
+    const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
+    const land=(label, promise)=>promise
+      .then(jobs=>live.add(jobs||[]))
+      .catch(e=>{ failed.push(`${label}: ${e.message}`); })
+      .finally(()=>{ left--; live.draw(note()); });
+    const work=[live.add((r.jobs||[]).map(jsearchRow))];
+    (r.scrapers||[]).forEach(s=>work.push(land(s.label,
+      apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
+        .then(items=>(items||[]).map(jsearchRow)))));
+    if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
+    live.draw(note());
+    await Promise.all(work);
+    await finishSearch(trk, live, failed, true);
+  }catch(e){
+    busy=false; SEARCH_ID=null; render();
+    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runPaidBoards(trk,where,since_days)); return; }
     setSearchInfo(e.message);
   }
 }
@@ -4075,8 +4196,20 @@ function jobCard(j,i){
      A rank on a posting that no longer exists is not a low score, it is a
      wrong one, so the number goes rather than shrinking. */
   const gone = liveOf(j) === false;
+  /* Which model produced the number, said in the label rather than the number.
+     A flash score came off the intake path and a pro score off the Score
+     button, and they do not share a scale -- so a row showing one next to a row
+     showing the other has to say so, or the list quietly invites a comparison
+     that does not hold.
+     It goes in the eyebrow on purpose. The colour law says a score is never an
+     accent (CLAUDE.md 1), and this is a fact ABOUT a score: it takes the
+     eyebrow's muted grey, adds no class to the value, and leaves accentOf
+     untouched, so no row gains a second accent from it. Blank on rows scored
+     before score_tier existed, which is honest -- we do not know. */
+  const tier = String(j.score_tier || '');
+  const fitLab = 'fit / reach' + (tier === 'flash' ? ' · fast' : '');
   const fitReach = gone ? fact('listing', 'gone from the board', 'quiet')
-                 : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
+                 : scored ? fact(fitLab, `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
@@ -4085,7 +4218,7 @@ function jobCard(j,i){
     : st==='sent' ? (due ? fact('silent for', `${daysSilent(j)} days`, 'due') : fact('state', 'waiting', 'awaiting'))
                     + fact('sent', j.date_applied?esc(mmdd(j.date_applied)):'—', 'quiet')
     : st==='live' ? fact('state', 'in conversation', 'go') + fact('last', ev[0]?esc(mmdd(ev[0].on)):'—', 'quiet')
-    : fact('state', 'closed', 'quiet') + (scored ? fact('fit / reach', `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
+    : fact('state', 'closed', 'quiet') + (scored ? fact(fitLab, `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
 
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
   const rankCls = st!=='new' ? 'quiet' : '';
@@ -4354,6 +4487,13 @@ function renderApp(){
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  /* On our keys the first click reads the free corpus and the paid boards are a
+     second, separate one. With an own Apify token there is no credit of ours to
+     save, so that path keeps its single button and its old wording. */
+  const freeFirst=!ownApify() && cloudNow();
+  /* Scoped to THIS track. An offer left behind by another track would spend the
+     board-search charge on titles nobody is looking at. */
+  const offer=!!(PAID_OFFER && PAID_OFFER.trackId===trk.id);
 
   $('#root').innerHTML=`
   <div class="topbar">
@@ -4406,12 +4546,21 @@ function renderApp(){
           value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
         <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
         <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
-          ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
-        ${(trk.boards||[]).length
+          ${busy?'<span class="spin"></span> Searching…':(freeFirst?'Search the free index':'Search the job boards')}</button>
+        ${freeFirst
+          ? `<p class="hint">Hundreds of thousands of postings already collected and shared, read free and answered at once. The live boards are the paid search below.</p>`
+          : (trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
              <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
           : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
+        ${offer
+          ? `<button class="btn-sm" id="btnPaidBoards" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
+               Search live boards — ${BOARD_COST} credits</button>
+             ${(trk.boards||[]).length
+               ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>` : ''}
+             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
+          : ''}
         <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 
         <details class="fold" data-fold="add" ${FOLDS.add?'open':''}>
@@ -4610,6 +4759,10 @@ function renderApp(){
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
+  if($('#btnPaidBoards')) $('#btnPaidBoards').onclick=()=>{
+    const o=PAID_OFFER; if(!o) return;
+    runPaidBoards(trk, o.where, o.since_days);
+  };
   const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
   if($('#tbTools')) $('#tbTools').onclick=toggleTools;
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
