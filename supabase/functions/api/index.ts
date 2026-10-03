@@ -994,7 +994,11 @@ Deno.serve(async (req) => {
           await logUsage([{ user_id: user, search_id: /^[0-9a-f-]{36}$/i.test(String(b.search_id)) ? b.search_id : null,
             kind: "llm", source: "deepseek", units: 1, tokens_in: tin, tokens_cached: cached, tokens_out: tout, note: model,
             cost_inr: px ? inr(((tin - cached) * px.in + cached * px.in_cached + tout * px.out) / 1e6) : null }]);
-          return json({ text, ...wallet(s) });
+          // The model goes back to the caller so a scored row can say which one
+          // produced it. Nothing could before: usage_events.note had the model,
+          // public.jobs had the score, and no column joined them -- so "is pro
+          // worth 4.9x flash" was unanswerable from the data we were collecting.
+          return json({ text, model, ...wallet(s) });
         } catch (e) {
           // Anything that throws after the credit was taken has to put it back.
           // The outer handler collapses a non-Http error into "Server error" and

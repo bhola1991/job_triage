@@ -239,7 +239,7 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'e89c2a',
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'fd405e',
       note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Those same hundreds are why this path alone scores on {DS_MODELS.flash}: rescoring from the Score button stays on {DS_MODELS.pro}, so one list can hold scores from both tiers and the {MIN_FIT} intake cut here is applied to flash scores. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',

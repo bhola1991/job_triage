@@ -579,7 +579,12 @@ document.addEventListener('click', e => {
 
 const COLS = ["title","company","location","url","description","status","date_applied",
   "follow_up_date","pitch_sent","notes","source","query",
-  "ai_score","ai_reason","ai_flags","ai_judgment","ai_confidence","ai_reachability","channel",
+  "ai_score","ai_reason","ai_flags","ai_judgment","ai_confidence","ai_reachability",
+  // Which model produced ai_score. JOB_TEXT derives from COLS, so this one line
+  // carries it through jobRow, coerceJob and the CSV. It is what makes "is the
+  // pro tier worth 4.9x flash" a question the data can answer: the ledger knew
+  // the model, public.jobs knew the score, and nothing joined them.
+  "ai_model","channel",
   "stage","last_touch","contacts","events","added",
   "posted","posted_lo","posted_hi","posted_src"];
 
@@ -2167,10 +2172,29 @@ const LLM = {
 // tier is "flash" or undefined (= "pro"). The hosted path sends the NAME, never
 // a model id: the server holds our key, so it picks the model from its own
 // whitelist and an unknown tier falls back to pro rather than reaching DeepSeek.
+/* Which model answered the LAST hosted call. A latch rather than a return value
+   because claude() answers with a string and a dozen callers expect that;
+   threading a pair through all of them to carry one label is a worse trade.
+   Read immediately after the await, where it is still the right answer --
+   scoreBatch and scoreAndCut both do. Null on an own-key call, because then the
+   model is the user's choice and not ours to record.
+
+   On globalThis deliberately, not a bare `let`. The selfcheck scripts slice
+   individual functions out of this file and eval them, so a bare identifier
+   declared elsewhere is a ReferenceError inside the slice -- and scoreAndCut
+   catches everything and calls it "keeping it unscored", so the first version of
+   this silently sent all 30 jobs of selfcheck-boards down the unscored path
+   instead of failing loudly. globalThis always exists, so reading it cannot
+   throw however little of this file is in scope. */
 async function claude(prompt, maxTok, tier){
   // No key of their own but signed in: the server calls DeepSeek with ours and takes a credit.
   // search_id ties the call to the board search it belongs to, for the usage ledger.
-  if(!KEY && cloudNow()) return (await hosted('llm',{prompt, max_tokens:maxTok||TOK_CAP, tier, search_id:SEARCH_ID})).text;
+  if(!KEY && cloudNow()){
+    const d=await hosted('llm',{prompt, max_tokens:maxTok||TOK_CAP, tier, search_id:SEARCH_ID});
+    globalThis.LAST_MODEL=d.model||null;
+    return d.text;
+  }
+  globalThis.LAST_MODEL=null;
   const cfg = LLM[PROV] || LLM.deepseek;
   // Anthropic inside the Claude viewer needs no key; DeepSeek always does.
   if(!KEY && PROV!=="anthropic") throw new Error("NEEDKEY");
@@ -3117,6 +3141,7 @@ async function runScoring(all, auto){
       batch.forEach((b,k)=>{ const r=res[String(b.i)]; if(!r) return;
         const j=p.jobs[b.i], jv=judged[k];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
+        if(globalThis.LAST_MODEL) j.ai_model=globalThis.LAST_MODEL;
         /* rankOf keys on the long names, and Jev's choice already answers in
            them, so this is a straight swap. When there is no judgement it is
            DeepSeek's own reading -- dropping confidence entirely would move
@@ -3276,6 +3301,7 @@ async function scoreAndCut(jobs, prof, track){
         const r=res[String(k)];
         if(!r){ unscored.push(j); return; }          // the model skipped it: keep, unjudged
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
+        if(globalThis.LAST_MODEL) j.ai_model=globalThis.LAST_MODEL;
         j.ai_confidence=r.conf;
         j.ai_flags=JSON.stringify(addSpans(r.flags, j.description));
         if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);

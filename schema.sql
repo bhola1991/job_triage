@@ -300,6 +300,12 @@ create table if not exists public.jobs (
   -- reason as ai_flags above: both are JSON held in a string by the app, and
   -- migrating them together once is better than migrating one of them twice.
   ai_judgment text,
+  -- Which model produced ai_score. usage_events.note already recorded the model
+  -- per CALL and this table recorded the score per JOB, with nothing joining
+  -- them -- so comparing deepseek-v4-pro against deepseek-flash, a 4.9x price
+  -- difference, could not be done from the data being collected. Null for a row
+  -- scored on the user's own key, where the model is their choice to make.
+  ai_model text,
   ai_reason text,
   -- See profiles.extras. On a job this earns its keep at the CSV door, which
   -- copies cells in untouched: a date_applied of "12/03/2025" is not a date
