@@ -722,8 +722,20 @@ begin
        and to_tsvector('simple', i.title) @@ v_filter
   ),
   one as (
+    -- Which copy of a job survives the collapse. `chan` leads, so relevance
+    -- still decides: promoting a full row that only matched `partial` over a
+    -- thin one that matched the phrase would demote the whole group in the
+    -- outer ranking, which is a worse trade than a missing description.
+    -- Within one channel a dedup_key means the SAME job -- the key is
+    -- normalised title+company -- so there the row carrying a real description
+    -- wins, because a thin row can be shortlisted and never judged. Latent
+    -- until the board_search deposit lands: as of 2026-10-03 no dedup group
+    -- holds both tiers, and every one of them will once searches start
+    -- depositing a full copy of a posting the crawler already has thin.
     select distinct on (dedup_key) *, count(*) over (partition by dedup_key) as dupes
-      from cand order by dedup_key, chan, posted desc nulls last
+    -- cand.tier, qualified: `tier` on its own is also an OUT column of this
+    -- function's RETURNS TABLE, and plpgsql rejects the reference as ambiguous.
+      from cand order by dedup_key, chan, (cand.tier = 'full') desc, posted desc nulls last
   ),
   hit as (
     select * from one
