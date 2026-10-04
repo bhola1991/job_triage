@@ -46,10 +46,17 @@ const ATS = {
      35 boards of 126 went in the bin on the first real pass. */
   smartrecruiters: {
     url: s => `https://api.smartrecruiters.com/v1/companies/${s}/postings?limit=100`,
-    // The ONLY one of the five with no description in its listing -- `ref` is an
-    // API url, not the text. Fetching each posting would be one request per job,
-    // so these arrive without one and push-index.js tiers them thin on its own,
-    // which is the honest outcome rather than a fabricated snippet.
+    /* The ONLY one of the five with no description in its listing -- `ref` is an
+       API url, not the text -- so these arrive thin and push-index.js tiers them
+       as such.
+       WHICH NOW MEANS THEY ARE DROPPED. From 2026-10-04 push-index.js refuses
+       every thin row, because a row scored from four words of slug is a guessed
+       number wearing the same colour as an informed one. That rule is right for
+       Naukri, whose description is unobtainable at any price, and wrong here:
+       SmartRecruiters publishes the text, it is just one request per posting
+       away. So these 21 boards contribute nothing until someone fetches the
+       detail -- about 400 extra requests on the measured board sizes, which is
+       cheap and simply not written yet. Not a decision, a gap. */
     rows: (d, s) => (d.content || []).map(x => ({
       title: x.name || '', company: s,
       url: x.id ? `https://jobs.smartrecruiters.com/${s}/${x.id}` : '',
