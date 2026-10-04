@@ -153,6 +153,19 @@
   .pill.closing{color:var(--closing);background:var(--closing-tint);border-color:var(--closing-line)}
   .pill.awaiting{color:var(--awaiting);background:var(--awaiting-tint);border-color:var(--awaiting-line)}
 
+  /* The day's floor. Reads doneToday, which the app has always computed and
+     never shown. Not an accent and not on a row, so the colour law's one-per-row
+     rule is not engaged -- it borrows --good the way .pill.on and .sdot.on do. */
+  .floor{display:flex;align-items:center;gap:7px;padding:3px 9px 3px 8px;
+    border-radius:999px;border:1px solid var(--line);background:var(--panel2)}
+  .floor .fdots{display:flex;gap:4px}
+  .fdot{width:9px;height:9px;border-radius:50%;box-sizing:border-box;
+    border:1.5px solid var(--line);transition:background-color .18s,border-color .18s}
+  .fdot.on{background:var(--good);border-color:var(--good)}
+  .floor .flab{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .floor.met{border-color:var(--good-line);background:var(--good-tint)}
+  .floor.met .flab{color:var(--good)}
+
   /* Tappable UI shouldn't behave like text on a touch screen — without this a
      tap that lingers a few ms selects the label or throws up a callout menu
      instead of registering as a click. */
@@ -295,6 +308,7 @@
     .side button,.side select,.side .drop,.side summary{min-height:44px}
     /* Everything in an open panel is a touch target too, not just the sidebar. */
     .qd button{min-height:44px}
+    .qacts .rowmenu>summary,.rowmenu-pop .btn-sm{min-height:44px}
     #toolbar{display:flex}
     #scrim.on{display:block}
   }
@@ -383,6 +397,26 @@
   .btn-due:hover:not(:disabled){background:var(--due);border-color:var(--due);color:var(--on-due);filter:brightness(1.08)}
   .btn-await{background:var(--awaiting-tint);border-color:var(--awaiting-line);color:var(--awaiting)}
   .btn-await:hover:not(:disabled){border-color:var(--awaiting);color:var(--awaiting)}
+  /* The row's overflow. Always visible rather than revealed on hover, because a
+     hover-reveal does not exist on a touch screen and a fair amount of triage
+     happens on one. A <details> rather than a scripted menu, so it closes
+     itself on the re-render that every action in it causes. */
+  .rowmenu{position:relative}
+  .rowmenu[open]{z-index:20}
+  .rowmenu>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;padding:5px 9px;font-family:var(--mono);font-size:12px;
+    line-height:1.35;border:1px solid var(--line);border-radius:5px;
+    background:var(--panel2);color:var(--muted)}
+  .rowmenu>summary::-webkit-details-marker{display:none}
+  .rowmenu>summary::marker{content:''}
+  .rowmenu>summary:hover{border-color:var(--signal);color:var(--signal)}
+  .rowmenu-pop{position:absolute;right:0;top:calc(100% + 5px);z-index:21;
+    display:flex;flex-direction:column;gap:4px;min-width:212px;padding:6px;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    box-shadow:var(--shadow-lg)}
+  .rowmenu-pop .btn-sm{text-align:left;background:transparent;border-color:transparent}
+  .rowmenu-pop .btn-sm:hover:not(:disabled){background:var(--panel2);
+    border-color:transparent;transform:none}
   /* Too narrow for five columns: the facts drop under the title, then the
      actions under both. Same row, same order, stacked rather than squeezed. */
   @media(max-width:1240px){
@@ -395,6 +429,9 @@
     .qrow{grid-template-columns:5px 32px minmax(0,1fr);gap:0 12px}
     .qbar{grid-row:1 / span 3}
     .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
+    /* The actions sit at the left edge now, so a menu hung off their right
+       edge would open past the left of the screen. Anchor it the other way. */
+    .rowmenu-pop{right:auto;left:0}
   }
 
   /* ═══ one job, opened ═══
@@ -698,6 +735,12 @@ function ageLabel(j){
    Storing it would mean rewriting rows on a timer just to keep them honest. */
 const STAGES = ["new","sent","live","closed"];
 const FOLLOWUP_DAYS = 7;
+/* The day's floor, and deliberately low. A floor is not a streak: a job search
+   has bad weeks -- illness, a run of rejections, a week where resting is the
+   right move -- and a counter that punishes a missed day costs the most to the
+   people already having the worst one. This resets every morning and nothing
+   is lost by missing it. */
+const DAY_FLOOR = 3;
 
 /* Every LLM call in this file uses the same number, and deliberately so. A thinking model
    spends tokens reasoning before it answers and those come out of the same
@@ -2840,6 +2883,36 @@ function setStage(j,st){
   j.last_touch=today();
 }
 
+/* Everything setStage and logEvent touch on one row, held so an optimistic
+   apply can be put back whole rather than approximately. events is already a
+   JSON string on the record, so keeping the string IS the deep copy. */
+function snapStage(j){
+  const s={ stage:j.stage, status:j.status, date_applied:j.date_applied,
+            follow_up_date:j.follow_up_date, last_touch:j.last_touch,
+            events:j.events, pid:DB.current };
+  return async ()=>{
+    /* The closure holds the row object itself. Undoing after a profile switch
+       would write a row from one profile through a save of another. */
+    if(DB.current!==s.pid){
+      alert('That was applied under a different profile, so it cannot be undone from here.');
+      return;
+    }
+    j.stage=s.stage; j.status=s.status; j.date_applied=s.date_applied;
+    j.follow_up_date=s.follow_up_date; j.last_touch=s.last_touch; j.events=s.events;
+    await save(); render();
+  };
+}
+
+/* Reuses the background-task toasts rather than adding a second toast layer:
+   #tasks already sits outside #root, so this survives the re-render that
+   moving the row into Applied causes. */
+function undoToast(j,undo){
+  const t={ id:'t'+(++TASKSEQ), state:'done', label:'Marked applied',
+            status:[j.title,j.company].filter(Boolean).join(' · ')||'this role', undo };
+  TASKS.push(t); renderTasks();
+  setTimeout(()=>dropTask(t.id), 9000);
+}
+
 /* ═══ CSV ═══ */
 function parseCSV(text){
   text=text.replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
@@ -4183,9 +4256,31 @@ function jobCard(j,i){
   // btn() interpolates its label raw, so anything from a job record is escaped
   // before it gets there. follow_up_date arrives from CSV import and backups.
   const chaseOn = esc(mmdd(followUpOn(j)));
+  /* The posting, in the slot the eye reaches first. Every other thing the app
+     does -- two scores rather than one, the ranking, the sections -- exists to
+     produce this one click, and it used to be a text link folded inside the
+     detail panel while the filled button went to a writing task. Recording the
+     application is bookkeeping: it happens as a consequence of applying, and
+     the deliberate version of it sits in the menu with the rest.
+     No link saved means there is nothing to open, so the row falls back to
+     marking by hand rather than offering a button that cannot work. */
+  const url = httpUrl(String(j.url||'').trim());
+  const more = items => `<details class="rowmenu"><summary title="More actions">\u22ef</summary>
+      <div class="rowmenu-pop">${items.filter(Boolean).join('')}</div></details>`;
   const acts =
-      st==='new'  ? btn('sent', ch==='cold'?'Mark contacted':'Mark applied') + details
-                    + btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', 'btn-go')
+      st==='new'  ? (ch==='cold'
+                      /* A cold row has no posting to open, so the one thing to
+                         do is write to a person. The accent stays on that. */
+                      ? btn('pitch','Write the DM','btn-go') + details
+                        + more([btn('sent','Mark contacted'),
+                                btn('hrfind','Find contacts'),
+                                btn('close','Not interested')])
+                      : (url ? btn('apply','Apply \u2197','btn-go')
+                             : btn('sent','Mark applied','btn-go')) + details
+                        + more([url?btn('sent','Mark applied without opening'):'',
+                                btn('pitch','Draft outreach'),
+                                btn('hrfind','Find contacts'),
+                                btn('close','Not interested')]))
     : st==='sent' ? btn('live','They replied') + details
                     + (due ? btn('chase','Write the chase','btn-due')
                            : btn('chase', chaseOn?`Chase on ${chaseOn}`:'Chase', 'btn-await'))
@@ -4470,7 +4565,11 @@ function renderApp(){
   const applied=p.jobs.filter(j=>j.status==='Applied').length;
   const posted=p.jobs.filter(j=>chOf(j)==='posted').length;
   const cold=p.jobs.filter(j=>chOf(j)==='cold').length;
-  const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
+  /* The day's tally, which this function has always computed and never shown.
+     Counts cold outreach alongside applications: setStage stamps date_applied
+     whichever it was, and a day spent on cold approaches is the same work --
+     reading 0 of 3 after a morning of them would be a lie about the effort. */
+  const doneToday=p.jobs.filter(j=>j.date_applied===today()).length;
   const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
@@ -4484,6 +4583,12 @@ function renderApp(){
     <h1>Job Triage</h1>
     <div class="who"><div class="av">${esc(initials)}</div>
       <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}${trk.label?' · '+esc(trk.label):''}</div></div></div>
+    <div class="floor${doneToday>=DAY_FLOOR?' met':''}" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
+      <span class="fdots">${Array.from({length:DAY_FLOOR},(_,k)=>
+        `<i class="fdot${k<doneToday?' on':''}"></i>`).join('')}</span>
+      <span class="flab">${doneToday>=DAY_FLOOR
+        ? `${doneToday} today · floor cleared`
+        : `${doneToday} of ${DAY_FLOOR} today`}</span></div>
     <div class="spacer"></div>
     ${law.due?`<span class="pill due">${law.due} overdue</span>`:''}
     ${law.closing?`<span class="pill closing">${law.closing} closing</span>`:''}
@@ -5095,11 +5200,16 @@ function renderTasks(){
     <div class="ts">${esc(t.status||'')}</div>
     ${t.state==='running'?'':`<div class="btn-row" style="margin-top:9px">
       ${t.state==='done'&&(t.result||[]).length?`<button class="btn-go btn-sm" data-task-open="${t.id}">Review</button>`:''}
+      ${t.undo?`<button class="btn-sm" data-task-undo="${t.id}">Undo</button>`:''}
       <button class="btn-sm" data-task-drop="${t.id}">Dismiss</button></div>`}
   </div>`).join('');
   el.querySelectorAll('[data-task-open]').forEach(b=>b.onclick=()=>{
     const t=TASKS.find(x=>x.id===b.dataset.taskOpen); if(!t) return;
     dropTask(t.id); hrPick(t);
+  });
+  el.querySelectorAll('[data-task-undo]').forEach(b=>b.onclick=async()=>{
+    const t=TASKS.find(x=>x.id===b.dataset.taskUndo); if(!t||!t.undo) return;
+    dropTask(t.id); await t.undo();
   });
   el.querySelectorAll('[data-task-drop]').forEach(b=>b.onclick=()=>dropTask(b.dataset.taskDrop));
 }
@@ -5325,13 +5435,25 @@ Return only the message text.`});
 document.addEventListener('click',async e=>{
   // Anywhere on a row that is not one of its own controls opens it, by pressing
   // the row's Details button -- one toggle, however it was reached.
-  if(!e.target.closest('button,a,input,select,textarea,label')){
+  /* A row menu left open while the page is clicked elsewhere would hang over
+     whatever is underneath it, so anything outside one closes them all. */
+  if(!e.target.closest('.rowmenu')){
+    document.querySelectorAll('.rowmenu[open]').forEach(d=>{ d.open=false; });
+  }
+  if(!e.target.closest('button,a,input,select,textarea,label,summary,.rowmenu')){
     const d=e.target.closest('.qrow')?.querySelector('button[data-act="open"]');
     if(d){ d.click(); return; }
   }
   const b=e.target.closest('button[data-act]'); if(!b) return;
   const i=parseInt(b.dataset.i,10), p=P(), j=p&&p.jobs[i]; if(!j) return;
   const a=b.dataset.act;
+  /* Synchronous, and before anything in this handler is awaited: a popup
+     blocker only lets window.open through inside the gesture that caused it,
+     so this cannot wait until after the save. */
+  if(a==='apply'){
+    const u=httpUrl(String(j.url||'').trim());
+    if(u) window.open(u,'_blank','noopener');
+  }
   // Two different intents that used to share one verb. 'open' toggles a card
   // that is already on screen; 'goto' is pressed from somewhere the card is
   // NOT -- the dashboard's feed -- and has to travel to it first.
@@ -5352,11 +5474,18 @@ document.addEventListener('click',async e=>{
   // One route for every stage change, from the card's shortcut or the panel's
   // full row, so they log the same thing and set the same fields.
   const to = a==='stage' ? b.dataset.to
-           : a==='sent' ? 'sent' : a==='live' ? 'live'
+           : (a==='sent'||a==='apply') ? 'sent' : a==='live' ? 'live'
            : a==='close' ? 'closed' : a==='reopen' ? 'new' : '';
   if(to && STAGES.includes(to)){
+    /* An apply is optimistic: the row is marked sent on the way out to the
+       posting, before anyone knows whether the application was finished. That
+       is only honest if it can be taken back, so snapshot first and let the
+       toast carry the way back. Every other stage change here is deliberate
+       and already reversible by hand. */
+    const undo = a==='apply' ? snapStage(j) : null;
     setStage(j,to);
     logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
+    if(undo) undoToast(j,undo);
   }
   await save(); render();
 });
