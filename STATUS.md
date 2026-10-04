@@ -31,8 +31,8 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 | | 2026-09-28 | now |
 | --- | --- | --- |
-| `job_index` | 347,092 | **364,345** |
-| of which `full` (judgeable) | 8,082 | **22,962** |
+| `job_index` | 347,092 | **22,962** — every row judgeable |
+| of which `full` | 8,082 | **22,962** (thin: 341,383 -> **0**) |
 | distinct sources | ~40 | **309** |
 | ATS boards crawled | 44 | **324** |
 | `job_checks` | 429,018 | 429,018 (76,857 closed) |
@@ -147,7 +147,10 @@ and not a matcher result — the jobs table has 164 rows at 50+, 94 at 65+, 41 a
 
 ## The thin rows: a settled answer
 
-340,907 of the corpus rows are `thin` — title, company, city and an experience
+**Removed 2026-10-04 — see the section after this one.** What follows is why
+they could never be improved, which is the reason they went.
+
+340,907 of the corpus rows were `thin` — title, company, city and an experience
 range parsed out of a Naukri sitemap slug, no description, so they can be
 shortlisted and never judged. Three independent routes to a description were
 tried and all three are shut:
@@ -166,8 +169,10 @@ assumes.
 
 So a thin row is a **lead** — title, company, city, date, and a url a human can
 click, which works because the reCAPTCHA stops our server and not a browser.
-Whether 340,907 of those earn their storage is a product call, not a technical
-one; there is no engineering left to try. Decided on 2026-10-03 to keep them.
+Whether 340,907 of those earned their storage was a product call, not a
+technical one; there was no engineering left to try. Kept on 2026-10-03,
+**deleted on 2026-10-04** once the question was put properly: someone uploading
+a CV is owed a score, and a thin row is scored from four words of slug.
 
 A fetch cannot settle liveness either: probing 12 closed and 12 open postings
 returned 200 at ~35 KB for both, indistinguishable.
@@ -302,6 +307,92 @@ Jev cannot replace all of it, and the reasons are in the notes:
 
 ---
 
+## Only rows that can be scored, and RLS verified
+
+Two things settled on 2026-10-04, both of which had been open for a while as
+opinions rather than measurements.
+
+### The corpus holds 22,962 rows and every one of them is judgeable
+
+`job_index` went 364,345 -> **22,962**; the 341,383 thin rows are gone and
+`push-index.js` refuses more. The argument that decided it was not storage —
+564 MB of 8 GB on Pro — and not accumulation either. It was this: `live.add`
+sends every index row through `scoreAndCut`, so a thin row **is** scored, on
+four words of slug, with `thin` raised and confidence low. The eval set puts
+that at fit 55 from a title alone. Measured on a real video-editor search, that
+was **52 of 60 rows** carrying a guessed number beside 8 carrying an informed
+one — and the colour law cannot tell them apart, because a guessed 62 and a real
+62 render identically. Someone uploading a CV to be told what to apply for is
+owed the second kind.
+
+Accumulation was the one worth checking before deleting, and it is unaffected:
+
+| indexed | full added | thin added |
+| --- | --- | --- |
+| 2026-09-26 | 2,941 | 291,274 |
+| 2026-09-28 | 3,245 | 49,632 |
+| 2026-10-03 | **16,776** | **477** |
+
+Thin rows were a plateau, not a curve — a board's live inventory does not grow,
+so mirroring it once is all there is. Full rows are accelerating because every
+ATS board found adds ~100 permanently and `f219f3d` harvests new boards out of
+what searches deposit.
+
+**Kept on purpose:** all 429,018 `job_checks` rows (107 of the 402 tracked jobs
+join them — that is how a row says "gone from the board"), the Naukri sitemap
+crawl and its expired list (`verify.js` needs the snapshots for tracked-job
+liveness, and the expired list is the only source of a DECLARED closure), and
+the `thin` tier itself, which is still a true thing a source can produce.
+
+**One casualty, found and fixed the same day:** SmartRecruiters' listing carries
+no description either, so the same gate took all 21 of its boards to zero. That
+gate is right for Naukri, whose text is unobtainable, and wrong for
+SmartRecruiters, which publishes it one request per posting away. Now fetched in
+two hops: 640 rows, **639 of them full**, averaging 4,907 characters.
+`companyDescription` is dropped deliberately — identical across a company's
+postings, and it would spend the 4,000-character budget the qualifications need.
+
+### RLS is verified, not just valid
+
+Previously recorded here as "verified **valid**, not **correct**", because PGlite
+has no real `auth.uid()`. Exercised against production on 2026-10-04, every test
+inside a rolled-back transaction:
+
+| as | jobs | profiles | user_state | job_index |
+| --- | --- | --- | --- | --- |
+| the real owner | 402 | 1 | — | — |
+| **a different user** | **0** | **0** | **0** | **22,962** |
+| anon, through PostgREST with the key from `config.js` | `[]` | `[]` | `[]` | — |
+
+The anon row is the end-to-end one: the real key, the real path a browser takes,
+and empty results rather than errors — correctly filtered rather than
+accidentally blocked. `job_index` staying visible to the stranger is the design
+working and not a leak: postings are shared, pipelines are not.
+
+Writes, which inspection cannot settle:
+
+| attempt | result |
+| --- | --- |
+| see another user's `profile_id` | invisible |
+| insert a job onto someone else's profile | **blocked** — `new row violates row-level security policy` |
+| update a stranger's rows | **0 rows** |
+| delete a stranger's rows | **0 rows** |
+
+The third is the one worth having: `jobs`' insert policy requires owning the
+profile being attached to, and it held even when the attacker was handed the
+victim's profile id directly rather than having to guess it.
+
+**Two limits, stated rather than glossed.** The write tests used a simulated JWT
+(`set local request.jwt.claims`) rather than a signed token through PostgREST,
+because creating real users means side effects in production auth. And
+`relforcerowsecurity` is false, so the table owner still bypasses RLS — that is
+`postgres` and `service_role`, which is intended, and `af74459` is what narrowed
+this function's use of it.
+
+So the thing that gated letting 20–30 people in is cleared.
+
+---
+
 ## Work happening in parallel, which nobody was tracking
 
 This is the largest gap in the project and it is not technical.
@@ -363,7 +454,7 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 | Three SmartRecruiters boards | Return exactly 100 rows, which is a page cap — there is more behind them unread. |
 | `MONSTER_JOBS_API_KEY` | Set as a secret; no code reads it. Parse MCP registered but unauthorised. Measure it against JSearch, which reaches Foundit free. |
 | `mantiks_contact` | Deployed and **never once executed live**. |
-| RLS on the shared tables | `job_index` and `job_checks` are `select` to `authenticated` with no other policy — shared by design, which is the point of the corpus. **`public.jobs` and `public.profiles` have never been exercised against a real `auth.uid()` through PostgREST**, and that is the thing to verify before 20–30 users, not the corpus. |
+| RLS | **Verified 2026-10-04, read the section below.** Was "valid, not correct"; it is now correct. |
 | `handle_new_user()` | Still RPC-callable by `anon`. |
 | `a8667db` | Missing its `Co-Authored-By`. Pushed, so fixing it means a rewrite. |
 
@@ -414,9 +505,7 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 1. **Schedule `refresh.sh`.** One timer, already written and validated. The
    corpus decays daily without it and `index_search` now reads what it produces.
 1a. ~~Deploy the edge function~~ — done 2026-10-04, v38.
-2. **Verify RLS on `public.jobs` and `public.profiles` with two real accounts**
-   — prove through PostgREST that user A cannot read user B's pipeline. This is
-   the one thing that gates letting people in, and PGlite cannot test it.
+2. ~~Verify RLS on `public.jobs` and `public.profiles`~~ — done 2026-10-04.
 3. **Fix `kept_50`.** Report yield after scoring, or the source economics the
    whole acquisition strategy rests on stay wrong.
 4. **Write more eval cases with a clean holdout**, from the 22,962 judgeable
@@ -428,9 +517,10 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 
 ### The decision that is not a task
 
-The corpus is no longer the open question — it has 22,962 judgeable rows, 309
-sources, a flywheel that grows it on every paid search, and a settled answer on
-the 340,907 rows that cannot be improved. What has not moved is **who it is
+The corpus is no longer the open question — 22,962 rows, every one of them
+judgeable, 309 sources, a flywheel that grows it on every paid search, and the
+341,383 rows that could never be scored are gone. RLS is verified. The nightly
+crawl is scheduled. What has not moved is **who it is
 for**: `public.jobs` holds 402 rows and `matcher_outcomes` holds 10, so every
 quality claim in this document is agreement between models rather than evidence
 about whether anyone got a job. Ten outcomes is the smallest number in here and
