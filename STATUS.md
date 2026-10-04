@@ -1,11 +1,14 @@
-# Where this stands — 2026-10-04
+# Where this stands — 2026-10-04 (second pass)
 
 Six days in which the corpus stopped being a thing that sat in a table and
 became the cheapest source in the product, and in which four bugs were found by
 looking at the ledger rather than at the code. Every number below was measured;
 where something is unmeasured it says so.
 
-All three layers verified against `cf3b267` rather than assumed.
+Then seven commits were merged off a branch nobody had looked at, and the
+discovery that matters most in this edition is in **Work happening in
+parallel** below: there are SIX worktrees on this repo, and two of them already
+do the things the previous edition listed as blocking.
 
 Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.dev/>
 
@@ -15,10 +18,10 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 | Layer | Version | How it was checked |
 | --- | --- | --- |
-| Frontend | **`cf3b267`** | live page fetched and sha256-compared: `bf3ba60e10f8` both sides. The Worker took ~30s from the push. |
-| Edge function `api` | **v37** | all three files fetched back and compared — `index.ts` `b7ddded6…`, `judge.ts` `679d9b4d…`, `api-clients.ts` `e7d47522…`. All match. |
+| Frontend | `cf3b267` **+ 7** | `cf3b267` was verified live (`bf3ba60e10f8`, Worker took ~30s). `9384809` is pushed and will have replaced it; **not re-verified**. |
+| Edge function `api` | **v37 — BEHIND** | v37 matched local exactly when checked. `af74459` and `3a0cf2c` have changed `index.ts` since: local is `7abbfda9…` against the deployed `b7ddded6…`. The service-role narrowing is **not live**, and that is a behavioural change rather than a comment. |
 | Database | `ai_model` added to `public.jobs`; `search_index` carries the tier preference | columns and function body read back from the live catalogue |
-| `main` | `cf3b267` | pushed, clean, `origin/main..main` empty |
+| `main` | **`9384809`** | pushed, clean, `origin/main..main` empty |
 | Supabase plan | **Pro** (`tier_pro`) | bought 2026-10-03. 8 GB against the 500 MB the free tier gave. |
 
 ### The corpus, as it actually sits
@@ -56,6 +59,21 @@ All pass as of `cf3b267`, **checked by exit code**. That qualifier is new and it
 is there because piping a check into `tail` hid a crash twice in one day: the
 pipeline-map spec was committed with a syntax error because `node … | tail -1`
 reports the pipe's success, not node's. Check `$?`, not the last line.
+
+Seven commits came off `pipeline-fixes` on 2026-10-04 and are on `main`:
+the `refund_free` revoke record (production was already fixed — verified by
+reading the ACL), the Apify reaper and its service-role auth, **two consecutive
+absences before a posting closes**, the harvest loop that reads `job_index`
+rather than files, the service-role narrowing, `BLOB_SUNSET_DAYS = 14`, and the
+free-pass split so corpus rows land before 25 credits are committed.
+
+Resolving those turned up two things worth keeping. `FLASH_INTAKE_CUT` arrived
+undefined because it belongs to a commit I had duplicated, and its whole reason
+— that the search path scores on flash and the Score button on pro, so one
+constant could not be a law over both — had been **removed** by moving both
+paths to flash; `MIN_FIT` is correct again. And the map described the old
+`runBoards` and passed anyway, for the third time in a day: `pipeline-map`
+verifies anchors and coverage and **never the arrows**.
 
 New tools, none of them gates:
 
@@ -281,10 +299,58 @@ Jev cannot replace all of it, and the reasons are in the notes:
 
 ---
 
+## Work happening in parallel, which nobody was tracking
+
+This is the largest gap in the project and it is not technical.
+
+A second Claude Code session has been alive on this machine for **5 days 12
+hours** (2h09 of CPU, last commit 25 hours ago, now idle at a prompt). It wrote
+the `pipeline-fixes` branch from a nine-task brief. Seven of its thirteen
+commits are now on `main`; **two of them I had already rebuilt from scratch**
+on 2026-10-04 without looking at the branch — `ai_model` against its
+`score_tier`, and the rescore batching — and I wrote both up as new findings.
+
+There are **six worktrees**, not one:
+
+| worktree / branch | head | what it holds |
+| --- | --- | --- |
+| `pipeline-fixes` | `c063abc` | 13 commits; 7 merged, 2 duplicated by me, 4 remaining |
+| `worktree-grow-eval-set` | `66d40c6` | **the eval set at 31 cases**, +3,913 lines: `judgments.json`, `record-eval.ts`, `tune-flag-thresholds.js` |
+| `jev-pin-and-threshold` | `6cc19a6` | **`FLAG_P` raised to a measured 0.8** and Jev pinned to `jev-1.13.0`, plus re-deciding already-judged rows when the threshold moves |
+| `worktree-apply-first-steps-1-2` | `d70916f` | locked. Puts the posting in the row's filled button. |
+| `add-google-signin` | `bfeb3e7` | nothing ahead of main |
+| `worktree-pipeline-map-flywheel` | `5fd475b` | a second `depositIndex`; superseded by `cfa6a92`, local only |
+
+The two in bold are the exact items the first pass of this document listed as
+blocking: *"more cases and an uncontaminated holdout come before the flip"* and
+*"`FLAG_P = 0.5`, the worst available cut point"*. Both were solved on branches
+while being described here as open.
+
+**Three independent implementations of the same measurement now exist.** This
+pass built `record-jev.ts` plus section 9 of the eval; `grow-eval-set` built
+`record-eval.ts` and `tune-flag-thresholds.js`; `jev-pin-and-threshold` built
+`record-judgments.ts` and `tune-flag-threshold.js`. They share a
+`scripts/eval/judgments.json` that differs between them. Merging any two will
+conflict in `cases.json`, `baseline.json` and `eval-matcher.js`.
+
+So the next piece of work on the matcher is **not** more measurement. It is
+choosing which of the three to keep and retiring the other two, and that is a
+decision rather than a task. Nothing here should be merged until it is made:
+`FLAG_P` 0.5 -> 0.8 re-decides every judged row in the database, and doing that
+twice from two branches is worse than doing it late.
+
+**How this was missed:** `git branch -a` ran in the first command of the
+2026-09-28 session and the branch names were in its output. They were not read.
+After `pipeline-fixes` turned up, the check was not widened to the rest.
+
+---
+
 ## Drift and open items
 
 | Item | State |
 | --- | --- |
+| **The edge function is undeployed** | Local `index.ts` is ahead of v37 by `af74459` (service-role narrowing) and `3a0cf2c`. That first one changes behaviour, so it wants a deliberate deploy and a check, not a drift. |
+| **The reaper is inert** | `reap-apify` is committed with its migration and deployed nowhere. It needs `pg_cron` and `pg_net` installed (neither is), the function deployed, and two vault entries that do not exist. Re-verified 2026-10-04. Worth finishing: `billing.sql` records **23 Apify runs started against 16 returning**, so seven billed with nothing naming them. |
 | **Nothing schedules `refresh.sh`** | Units written and validated at `~/.config/systemd/user/jobtriage-refresh.{service,timer}`, still **disabled**. `cron` is not installed and there are no systemd user timers. The closure logic is sound and the push now survives a bad chunk, so the remaining question was never the code. |
 | **`kept_50` reads 0 on deferred scoring** | The browser reports yield before scoring finishes, so `source_yield.inr_per_exclusive_50` is wrong for any such search. Unfixed. |
 | **`ai_model` is recorded but empty** | 0 of 402 rows carry it: every scored row predates the column. It also answers "which tier built this list", **not** an A/B — a row holds one `ai_model` and one `ai_score`, the last to write them, so scoring twice reads as whichever went second. A real comparison wants both readings kept (a `score_trials` table), which is the same instrumentation `eval-matcher --live` needs. |
@@ -338,8 +404,14 @@ Jev cannot replace all of it, and the reasons are in the notes:
 
 ## Next, in order
 
+0. **Decide which eval implementation survives** — this pass's, `grow-eval-set`,
+   or `jev-pin-and-threshold`. Three exist, they conflict with each other, and
+   `FLAG_P` 0.5 -> 0.8 re-decides every judged row in the database. Doing that
+   twice from two branches is worse than doing it late. Nothing else on the
+   matcher should move first.
 1. **Schedule `refresh.sh`.** One timer, already written and validated. The
    corpus decays daily without it and `index_search` now reads what it produces.
+1a. **Deploy the edge function**, which is behind by a behavioural change.
 2. **Verify RLS on `public.jobs` and `public.profiles` with two real accounts**
    — prove through PostgREST that user A cannot read user B's pipeline. This is
    the one thing that gates letting people in, and PGlite cannot test it.
