@@ -146,6 +146,10 @@
     font-family:var(--mono);font-size:12px;color:var(--signal);flex-shrink:0}
   .who .nm{font-size:13px;line-height:1.2}
   .who .lc{font-size:11px;color:var(--muted);line-height:1.2}
+  /* Direction, in the bar. The base select rule is sized for a sidebar's full
+     width; here it has to sit on a row of buttons without shouting. */
+  select.trkbar{width:auto;max-width:min(260px,38vw);font-size:12px;padding:5px 8px;
+    border-radius:5px;background:var(--panel2);color:var(--text)}
   .pill{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;
     border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   .pill.on{color:var(--good);border-color:var(--good-line)}
@@ -239,11 +243,28 @@
   .tag.easy{color:var(--good)} .tag.hard{color:var(--warn)} .tag.mid{color:var(--cool)}
 
   /* ── main app ── */
-  .wrap{display:grid;grid-template-columns:288px 1fr}
-  .side{border-right:1px solid var(--line);padding:18px;background:var(--panel);
-    min-height:calc(100vh - 60px)}
+  /* ═══ one column of work ═══
+     The sidebar used to be a permanent 288px column holding Direction, the
+     colour key, Find work, Score, and Data & keys. All five are supply: ways
+     to get more jobs. The list beside them is demand: jobs to act on. Running
+     another search feels like progress and is the most comfortable way to not
+     apply to anything, and it was always one click away and always on screen.
+     So it is a drawer at every width now rather than only on a phone, and the
+     queue gets the canvas. Nothing was taken out of it -- every input, every
+     drop target and every button is still in there, and still in the DOM where
+     the command palette dispatches by clicking them. */
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;top:0;bottom:0;left:0;width:min(336px,92vw);z-index:45;
+    overflow-y:auto;background:var(--panel);padding:18px;
+    border-right:1px solid var(--line);box-shadow:var(--shadow-lg);
+    transform:translateX(-101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
+  .side.open{transform:translateX(0)}
   .main{padding:20px 22px 60px;min-width:0}
-  .sheet-head{display:none}
+  /* The drawer's own header, with the way out of it. Was display:none because
+     a column needs no header; a drawer does, at every width. */
+  .sheet-head{display:flex;align-items:center;gap:10px;margin:-4px 0 16px;
+    position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
+  #scrim.on{display:block}
 
   /* ═══ the decision pane ═══
      One job, read and acted on beside the queue instead of inside it. The list
@@ -256,7 +277,7 @@
      the sidebar already uses when it stops being a column.
      The ladder, bottom to top: #scrim 43, #toolbar 44, .side 45,
      #panescrim 46, .pane 47, .palscrim 48, .palbox 49, .modal 50. */
-  .wrap.paned{grid-template-columns:288px minmax(0,1fr) 400px}
+  .wrap.paned{grid-template-columns:minmax(0,1fr) 400px}
   .pane{border-left:1px solid var(--line);background:var(--panel);min-width:0;
     position:sticky;top:60px;align-self:start;max-height:calc(100vh - 60px);
     overflow-y:auto;padding:16px 18px 26px}
@@ -278,10 +299,11 @@
     /* Everything in the sheet is a touch target, as in the sidebar. */
     .pane button,.pane summary{min-height:44px}
   }
-  /* Two columns again once the pane is out of the flow, but not one: the
-     sidebar is still a column at these widths. */
-  @media(max-width:1199px) and (min-width:901px){
-    .wrap.paned{grid-template-columns:288px minmax(0,1fr)}
+  /* One column again once the pane is out of the flow. There is no longer a
+     sidebar column to account for, so this is the same answer at every width
+     below the dock and the bands no longer have to be mutually exclusive. */
+  @media(max-width:1199px){
+    .wrap.paned{grid-template-columns:minmax(0,1fr)}
   }
 
   /* Sidebar disclosures. Everything in this column is either something you do
@@ -334,16 +356,17 @@
   @media(max-width:900px){
     /* .wrap.paned carries two classes and so outranks a bare .wrap; it has to
        be named here or the phone layout keeps the sidebar's column. */
-    .wrap,.wrap.paned{grid-template-columns:1fr}
-    .side{position:fixed;left:0;right:0;bottom:0;z-index:45;
+    .wrap,.wrap.paned{grid-template-columns:minmax(0,1fr)}
+    /* A drawer off the left edge is a desktop gesture. On a phone it comes up
+       from the bottom, where the thumb is -- so top, width and the axis it
+       slides on are all overridden rather than inherited. */
+    .side{left:0;right:0;bottom:0;top:auto;width:auto;
       max-height:82vh;overflow:auto;min-height:0;
       border-right:none;border-top:1px solid var(--line);
-      border-radius:12px 12px 0 0;box-shadow:var(--shadow-lg);
+      border-radius:12px 12px 0 0;
       padding-bottom:calc(18px + env(safe-area-inset-bottom));
-      transform:translateY(101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
+      transform:translateY(101%)}
     .side.open{transform:translateY(0)}
-    .sheet-head{display:flex;align-items:center;gap:10px;margin:-4px 0 16px;
-      position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
     .main{padding-bottom:96px}
     /* Everything in the sheet is a touch target now, not a pointer target. */
     .side button,.side select,.side .drop,.side summary{min-height:44px}
@@ -352,6 +375,8 @@
     .qacts .rowmenu>summary,.rowmenu-pop .btn-sm{min-height:44px}
     #toolbar{display:flex}
     #scrim.on{display:block}
+    /* #toolbar already offers this, full width and under the thumb. */
+    #tbOpen{display:none}
   }
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
@@ -4679,8 +4704,14 @@ function renderApp(){
   $('#root').innerHTML=`
   <div class="topbar">
     <h1>Job Triage</h1>
+    <button class="btn-sm" id="tbOpen">Find work &amp; tools</button>
     <div class="who"><div class="av">${esc(initials)}</div>
-      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}${trk.label?' · '+esc(trk.label):''}</div></div></div>
+      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}</div></div></div>
+    <!-- Changing direction re-ranks every job in the app. That is a lens over
+         the whole tool, not a tool in a drawer, so it reads and changes from
+         the bar rather than from inside the thing it reorders. -->
+    <select id="trackSel" class="trkbar" title="Direction — changing it re-ranks everything">${(prof.tracks||[]).map(t=>
+      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
     <div class="floor${doneToday>=DAY_FLOOR?' met':''}" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
       <span class="fdots">${Array.from({length:DAY_FLOOR},(_,k)=>
         `<i class="fdot${k<doneToday?' on':''}"></i>`).join('')}</span>
@@ -4700,7 +4731,6 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
-    <button class="btn-sm" id="btnSwitch">Switch profile</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -4713,12 +4743,12 @@ function renderApp(){
         <button class="btn-sm" id="tbClose">Close</button>
       </div>
       <div class="block"><span class="eyebrow">Direction</span>
-        <select id="trackSel">${(prof.tracks||[]).map(t=>
-          `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
-        <div class="hint">${esc(trk.why||'')}</div>
+        <div class="hint" style="margin-top:0">${esc(trk.why||'')}</div>
         <div class="btn-row" style="margin-top:9px">
           <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnSwitch" style="width:100%">Switch profile</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
       </div>
       <div class="block"><span class="eyebrow">What the colours mean</span>
@@ -4954,6 +4984,9 @@ function renderApp(){
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
   const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
+  // Three ways in and out, because the drawer is now the only route to any of
+  // this: the bar at every width, the thumb bar on a phone, and its own Close.
+  if($('#tbOpen'))  $('#tbOpen').onclick=toggleTools;
   if($('#tbTools')) $('#tbTools').onclick=toggleTools;
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
   // Tapping the dimmed page behind the sheet is the gesture everyone tries first.
@@ -5444,7 +5477,10 @@ document.addEventListener('keydown',e=>{
                     && e.target.closest('input,textarea,select,[contenteditable]'));
   if(typing) return;
   if(e.key==='/'){ e.preventDefault(); return openPalette(); }
+  /* Topmost first: the pane sits over the drawer, so that is what escape
+     means while both are open. */
   if(e.key==='Escape' && SEL_JOB){ e.preventDefault(); SEL_JOB=null; return render(); }
+  if(e.key==='Escape' && TOOLS){ e.preventDefault(); TOOLS=false; return render(); }
   if(e.key==='j' || (e.key==='ArrowDown' && SEL_JOB)){ e.preventDefault(); return moveSel(1); }
   if(e.key==='k' || (e.key==='ArrowUp'   && SEL_JOB)){ e.preventDefault(); return moveSel(-1); }
 });

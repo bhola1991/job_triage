@@ -543,6 +543,7 @@ module.exports = {
       'the queue': 'CSS',
       'one job, opened': 'CSS',
       'the decision pane': 'CSS — where jobDetail is docked, not what reaches it',
+      'one column of work': 'CSS — the layout that stopped giving the supply-side controls a permanent column; the controls themselves are unchanged and still on the map',
       'theme': 'presentation, no data flow',
       'state': 'globals, drawn where they are used',
       'when was this posted': 'the posted_lo/posted_hi date quartet — a data model, worth its own map one day',
