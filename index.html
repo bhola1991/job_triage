@@ -377,6 +377,9 @@
     #scrim.on{display:block}
     /* #toolbar already offers this, full width and under the thumb. */
     #tbOpen{display:none}
+    /* No keyboard at this width, so naming two keys is just noise in a header
+       that is already doing well to fit. */
+    .pane-head .hint{display:none}
   }
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
@@ -612,6 +615,18 @@
   .tabct{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:8px;
     background:var(--panel2);color:var(--muted);vertical-align:1px}
   .tabct.due{background:var(--warn-chip);color:var(--warn)}
+  @media(max-width:640px){
+    /* Reclaims a wrapped row of the bar. Overdue stays, because it is the only
+       one of these that is a request rather than a readout -- the rest is said
+       again by the section headings and the Applied tab's own count. */
+    .topbar .pill:not(.due){display:none}
+    select.trkbar{max-width:min(240px,60vw)}
+    /* The palette is a keyboard affordance and there is no keyboard here. It
+       costs a wrapped row, and every command in it dispatches to a control in
+       the drawer, which the thumb bar opens -- so nothing becomes unreachable
+       by dropping the way in that needed two hands. */
+    #btnPal{display:none}
+  }
   @media(max-width:480px){
     .tabs{flex-wrap:wrap;row-gap:10px}
     .tabs .spacer{flex-basis:100%;height:0}
@@ -657,8 +672,8 @@
   .palrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
     background:transparent;border:1px solid transparent;border-radius:5px;
     padding:9px 11px;font-size:13px}
-  .palrow .pl{flex:1;min-width:0}
-  .palrow .pg{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
+  .palrow .plab{flex:1;min-width:0}
+  .palrow .pgrp{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
     text-transform:uppercase;color:var(--muted);flex-shrink:0}
   .palrow:hover:not(:disabled){background:var(--panel2);border-color:transparent;
     color:var(--text);transform:none}
@@ -5438,7 +5453,7 @@ function renderPalette(){
         placeholder="What do you want to do?" value="${esc(PAL.q)}">
       <div class="pallist">${hits.length
         ? hits.map((c,n)=>`<button class="palrow${n===PAL.sel?' on':''}" data-pal="${n}">
-            <span class="pl">${esc(c.label)}</span><span class="pg">${esc(c.g)}</span></button>`).join('')
+            <span class="plab">${esc(c.label)}</span><span class="pgrp">${esc(c.g)}</span></button>`).join('')
         : '<div class="palnone">Nothing matches that.</div>'}</div>
       <div class="palfoot"><span class="kb">↑↓</span> move · <span class="kb">↵</span> run · <span class="kb">esc</span> close</div>
     </div>`;
