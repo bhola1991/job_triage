@@ -2987,6 +2987,46 @@ function scoreFromDist(ans){
    a role someone can do but is not aiming at is still an application they could
    win, while the reverse is a wish. */
 const FIT_W = {fit_capability:0.6, fit_targeting:0.4};
+/* Probabilities by code, from the flags array Jev always returns in full. */
+function flagProbs(jv){
+  const p = {};
+  if(jv && Array.isArray(jv.flags)) jv.flags.forEach(f => { p[f.code] = Number(f.probability); });
+  return p;
+}
+/* Fit is GATED, not just composed, and the gate is the whole reason this did
+   not ship when it was first written. Composing capability and targeting alone
+   answers "could they do it and do they want it" and nothing else -- so the
+   eval measured loc-onsite-berlin at fit 92 against a label of 0-35, a posting
+   in the wrong city with no remote allowance, which Jev had correctly flagged
+   `loc` at 0.95. The number said "excellent match" about a job the person
+   cannot take. DeepSeek's single `s` had those disqualifiers folded in; the
+   composition threw them away.
+
+   Only two codes gate, and which two is measured rather than assumed:
+
+     loc    eligibility. A job that cannot be taken has no fit however well the
+            work suits them, so fit scales by (1 - p).
+     thin   abstention, NOT a disqualifier. The posting leaves the work
+            unstated, so a fit of 82 and a fit of 20 are both guesses -- it is
+            pulled toward the middle instead, symmetrically, because "we cannot
+            tell" is the honest answer in either direction.
+
+   `cred` deliberately does NOT gate, and that one is counter-intuitive enough
+   to be worth the line: cred-degree carries cred at 0.96 and its label wants
+   fit 55-95. A credential gate does not stop someone doing the work, it stops
+   them clearing the filter -- which is reachability, where cred already carries
+   -0.30. Gating fit on it would have broken a case that passes today.
+   `shape` does not gate either, because it needs no help: Jev already answers
+   targeting at 0.00 on both shape cases, so the composition handles it. */
+const FIT_BLOCK = ['loc'];
+/* How hard a noul gates, measured from FLAG_P rather than from zero. The first
+   version scaled straight from p=0 and the eval caught what that does:
+   rare-combination carries loc at 0.06 and thin at 0.14 -- neither is a signal,
+   both are noise -- and together they took its fit from 88 to 73, out of a
+   75-100 band it had been inside. A probability the app would not even raise as
+   a flag must not move a score. So nothing below FLAG_P gates at all, and above
+   it the strength is how far into the remaining range it reached. */
+const gateStrength = p => (isNaN(p) || p <= FLAG_P) ? 0 : Math.min(1, (p - FLAG_P) / (1 - FLAG_P));
 function fitFromJudgment(jv){
   if(!jv || !jv.scores) return null;
   let acc = 0, w = 0;
@@ -2995,7 +3035,13 @@ function fitFromJudgment(jv){
     if(v === null) return;
     acc += v * FIT_W[d]; w += FIT_W[d];
   });
-  return w ? Math.round(acc / w) : null;
+  if(!w) return null;
+  let v = acc / w;
+  const p = flagProbs(jv);
+  FIT_BLOCK.forEach(c => { v *= (1 - gateStrength(p[c])); });
+  const thin = gateStrength(p.thin);
+  if(thin) v = 50 + (v - 50) * (1 - thin);
+  return Math.max(0, Math.min(100, Math.round(v)));
 }
 
 /* Reachability is deliberately not asked. Asking for it would mean one question
@@ -3008,12 +3054,20 @@ function fitFromJudgment(jv){
    Signs are the direction each pushes: crowding, a hard gate and a bar above
    the candidate all make a reply less likely; an employer open to unusual
    routes makes it more likely. */
-const REACH_W = {comp:-0.30, cred:-0.30, sen_hi:-0.25, open:0.15};
+/* rare and loc were added 2026-10-04, both from the eval rather than from
+   taste. `rare` is the one the cases argued for most plainly: rare-combination
+   composed to reach 35 against a label of 45-100, and the case is literally a
+   role that rewards a combination few people have -- which is less competition
+   FOR THIS CANDIDATE, so it belongs here as a positive and was being thrown
+   away at the flag threshold like comp and open once were. `loc` is negative
+   for the obvious reason: a posting the candidate is ineligible for is not one
+   they are likely to hear back from, and loc-onsite-berlin was over its reach
+   ceiling at 47 against 0-45 while carrying loc at 0.95. */
+const REACH_W = {comp:-0.30, cred:-0.30, sen_hi:-0.25, open:0.15, rare:0.15, loc:-0.15};
 const REACH_BASE = 55;
 function reachFromJudgment(jv){
   if(!jv || !Array.isArray(jv.flags)) return null;
-  const p = {};
-  jv.flags.forEach(f => { p[f.code] = Number(f.probability); });
+  const p = flagProbs(jv);
   let v = REACH_BASE, seen = 0;
   Object.keys(REACH_W).forEach(c => {
     if(isNaN(p[c])) return;
