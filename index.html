@@ -569,6 +569,35 @@
   /* Background-task toasts. Fixed to the corner and above the app but BELOW
      the modal layer, so opening the picker doesn't leave a toast floating
      over its own dialog. */
+  /* The command surface. Sits above the sidebar sheet and the mobile toolbar
+     but below .modal, because a command that opens a dialog closes the palette
+     first and the two are never on screen together. */
+  .palscrim{position:fixed;inset:0;z-index:47;background:var(--veil-lite)}
+  .palbox{position:fixed;z-index:48;left:50%;transform:translateX(-50%);
+    top:calc(8vh + env(safe-area-inset-top, 0px));width:min(520px,calc(100vw - 32px));
+    max-height:min(560px,74vh);background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow-lg);overflow:hidden;
+    display:flex;flex-direction:column}
+  #palIn{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;
+    background:transparent;font-family:var(--disp);font-size:15px;padding:14px 16px}
+  #palIn:focus{outline:none;border-color:var(--line)}
+  .pallist{overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+  .palrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:transparent;border:1px solid transparent;border-radius:5px;
+    padding:9px 11px;font-size:13px}
+  .palrow .pl{flex:1;min-width:0}
+  .palrow .pg{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--muted);flex-shrink:0}
+  .palrow:hover:not(:disabled){background:var(--panel2);border-color:transparent;
+    color:var(--text);transform:none}
+  .palrow.on{background:var(--signal-tint);border-color:var(--go-line)}
+  .palrow.on:hover:not(:disabled){background:var(--signal-tint);border-color:var(--go-line)}
+  .palnone{padding:15px 12px;font-size:13px;color:var(--muted)}
+  .palfoot{border-top:1px solid var(--hair);padding:8px 13px;
+    font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.03em}
+  .palfoot .kb{border:1px solid var(--line);border-radius:3px;padding:0 4px;
+    margin-right:2px;color:var(--muted)}
+
   #tasks{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;
     flex-direction:column;gap:9px;width:min(330px,calc(100vw - 32px))}
   .task{background:var(--panel);border:1px solid var(--line);
@@ -589,7 +618,7 @@
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
-<div id="app"><div id="root"></div><div id="tasks"></div></div>
+<div id="app"><div id="root"></div><div id="tasks"></div><div id="palette"></div></div>
 
 <script>
 (function(){
@@ -2883,31 +2912,40 @@ function setStage(j,st){
   j.last_touch=today();
 }
 
-/* Everything setStage and logEvent touch on one row, held so an optimistic
-   apply can be put back whole rather than approximately. events is already a
-   JSON string on the record, so keeping the string IS the deep copy. */
-function snapStage(j){
-  const s={ stage:j.stage, status:j.status, date_applied:j.date_applied,
-            follow_up_date:j.follow_up_date, last_touch:j.last_touch,
-            events:j.events, pid:DB.current };
+/* Every field an action in the queue can change on one row. The list fields
+   are JSON strings on the record, so holding the strings IS the deep copy. */
+const UNDO_FIELDS = ['stage','status','date_applied','follow_up_date','last_touch',
+                     'events','contacts','notes','pitch_sent'];
+
+/* One row, held so any action on it can be put back whole rather than
+   approximately. Undo is not a nicety here: the queue's whole job is to make
+   acting cheap, and an action is only cheap if being wrong about it is. */
+function snapRow(j){
+  const s={ pid:DB.current };
+  UNDO_FIELDS.forEach(k=>{ s[k]=j[k]; });
   return async ()=>{
     /* The closure holds the row object itself. Undoing after a profile switch
        would write a row from one profile through a save of another. */
     if(DB.current!==s.pid){
-      alert('That was applied under a different profile, so it cannot be undone from here.');
+      alert('That happened under a different profile, so it cannot be undone from here.');
       return;
     }
-    j.stage=s.stage; j.status=s.status; j.date_applied=s.date_applied;
-    j.follow_up_date=s.follow_up_date; j.last_touch=s.last_touch; j.events=s.events;
+    UNDO_FIELDS.forEach(k=>{ j[k]=s[k]; });
     await save(); render();
   };
 }
 
+/* What the toast says a stage change did. stageNote is the log's voice
+   ("applied"); this is the confirmation's ("Marked applied"), and they are not
+   the same sentence -- a log is a record and a toast is an answer. */
+const stageToast = (j,st) => st==='sent' ? (chOf(j)==='cold'?'Marked contacted':'Marked applied')
+  : st==='live' ? 'Marked as replied' : st==='closed' ? 'Closed' : 'Reopened';
+
 /* Reuses the background-task toasts rather than adding a second toast layer:
-   #tasks already sits outside #root, so this survives the re-render that
-   moving the row into Applied causes. */
-function undoToast(j,undo){
-  const t={ id:'t'+(++TASKSEQ), state:'done', label:'Marked applied',
+   #tasks already sits outside #root, so this survives the re-render that every
+   one of these actions causes. */
+function undoToast(j,undo,label){
+  const t={ id:'t'+(++TASKSEQ), state:'done', label:label||'Done',
             status:[j.title,j.company].filter(Boolean).join(' · ')||'this role', undo };
   TASKS.push(t); renderTasks();
   setTimeout(()=>dropTask(t.id), 9000);
@@ -4601,8 +4639,9 @@ function renderApp(){
         ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg> Light'
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
+    <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
-    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits" onclick="buyDialog()">${esc(creditsLabel())}</button>
+    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
@@ -4771,6 +4810,7 @@ function renderApp(){
     await putLocal('triage:theme', THEME);
     render();
   };
+  $('#btnPal').onclick=openPalette;
   $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB=blankOnb(); render(); };
   $('#btnPaste').onclick=pasteJobDialog;
   $('#btnScore').onclick=()=>runScoring(false);
@@ -4804,6 +4844,10 @@ function renderApp(){
     // Turning it on with a backlog already sitting there should clear it.
     if(AUTO) await autoScore(); else setInfo('');
   };
+  /* Bound here like every other control. It carried an inline onclick, which
+     could never have worked: this file is one IIFE, so the attribute resolved
+     buyDialog against global scope and threw on click. */
+  if($('#btnCredits')) $('#btnCredits').onclick=buyDialog;
   if($('#btnSignOut')) $('#btnSignOut').onclick=async()=>{
     // While CLOUD_DOWN is latched, put() has been writing to this device only,
     // so local IS the only copy of everything saved since. Say so, and leave it
@@ -5215,6 +5259,119 @@ function renderTasks(){
 }
 function dropTask(id){ TASKS=TASKS.filter(t=>t.id!==id); renderTasks(); }
 
+/* ═══ the command surface ═══
+   Every verb in the app in one typed list, so the sidebar stops being the only
+   way to reach any of them. Each entry points at the control that already does
+   the work rather than repeating it: one source of truth per verb, including
+   the confirm dialogs several of them carry, and no way for a command to drift
+   from the button it mirrors. A control inside a closed fold still fires -- a
+   programmatic click does not care whether the element is visible. */
+let PAL = null;   // null closed, else { q, sel }
+
+function commands(){
+  const list=[
+    ['Find work','Search the job boards','#btnBoards'],
+    ['Find work','Suggest companies for me','#btnSuggest'],
+    ['Find work','Pull a company I already know','#btnAts'],
+    ['Find work','Add a job by hand','#btnPaste'],
+    ['Find work','Add a company to approach','#btnCold'],
+    ['Score','Score new jobs','#btnScore'],
+    ['Score','Rescore everything','#btnRescore'],
+    ['Profile','My profile','#btnProfile'],
+    ['Profile','Add a direction','#btnAddTrack'],
+    ['Profile','Switch profile','#btnSwitch'],
+    ['Data', KEY?'Keys':'Set up keys','#btnKey'],
+    ['Data','Backup & transfer','#btnData'],
+    ['Data','Export CSV','#btnExport'],
+    ['Data','Trim to top '+KEEP_TOP,'#btnTrim'],
+    ['Data','Clear jobs','#btnClear'],
+    ['View','Theme','#btnTheme']
+  ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
+  // The four views are state rather than controls, so these set it directly.
+  [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
+    .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  if(CLOUD&&USER){
+    list.push({ g:'Account', label:'Credits', el:'#btnCredits' });
+    list.push({ g:'Account', label:'Sign out', el:'#btnSignOut' });
+  }
+  return list;
+}
+
+/* Substring over the label and its group, which is enough for a list this
+   size and never surprises anyone by matching something they cannot see. */
+function palHits(){
+  const q=String(PAL&&PAL.q||'').trim().toLowerCase();
+  const all=commands();
+  return q ? all.filter(c=>(c.label+' '+c.g).toLowerCase().includes(q)) : all;
+}
+
+function openPalette(){ PAL={q:'',sel:0}; renderPalette(); }
+function closePalette(){ PAL=null; renderPalette(); }
+
+function runCommand(n){
+  const c=palHits()[n]; if(!c) return;
+  closePalette();
+  if(c.run) return c.run();
+  const b=$(c.el);
+  if(!b){ alert('That one is not available on this screen.'); return; }
+  /* A click on a disabled button does not fire its handler, so dispatching
+     into one would be a silent no-op -- the palette would look broken rather
+     than busy. The disabled state is already the honest answer; say it. */
+  if(b.disabled){ alert('Not right now \u2014 a run is already going. The toast in the corner says where it is up to.'); return; }
+  b.click();
+}
+
+function renderPalette(){
+  const el=$('#palette'); if(!el) return;
+  if(!PAL){ el.innerHTML=''; return; }
+  const hits=palHits();
+  if(PAL.sel>=hits.length) PAL.sel=Math.max(0,hits.length-1);
+  el.innerHTML=`<div class="palscrim"></div>
+    <div class="palbox" role="dialog" aria-modal="true" aria-label="Commands">
+      <input id="palIn" type="text" autocomplete="off" spellcheck="false"
+        placeholder="What do you want to do?" value="${esc(PAL.q)}">
+      <div class="pallist">${hits.length
+        ? hits.map((c,n)=>`<button class="palrow${n===PAL.sel?' on':''}" data-pal="${n}">
+            <span class="pl">${esc(c.label)}</span><span class="pg">${esc(c.g)}</span></button>`).join('')
+        : '<div class="palnone">Nothing matches that.</div>'}</div>
+      <div class="palfoot"><span class="kb">↑↓</span> move · <span class="kb">↵</span> run · <span class="kb">esc</span> close</div>
+    </div>`;
+  const inp=$('#palIn');
+  inp.focus();
+  // Caret to the end rather than the whole value selected, so the next
+  // keystroke continues the query instead of replacing it.
+  try{ inp.setSelectionRange(PAL.q.length, PAL.q.length); }catch(e){}
+  inp.oninput=()=>{ PAL.q=inp.value; PAL.sel=0; renderPalette(); };
+  inp.onkeydown=e=>{
+    const n=palHits().length;
+    if(e.key==='Escape'){ e.preventDefault(); closePalette(); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); PAL.sel=Math.min(PAL.sel+1,n-1); renderPalette(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); PAL.sel=Math.max(PAL.sel-1,0); renderPalette(); }
+    else if(e.key==='Enter'){ e.preventDefault(); runCommand(PAL.sel); }
+  };
+  el.querySelector('.palscrim').onclick=closePalette;
+  el.querySelectorAll('[data-pal]').forEach(b=>
+    b.onclick=()=>runCommand(parseInt(b.dataset.pal,10)));
+}
+
+/* Opened from the keyboard, or from the top bar -- a shortcut alone would make
+   the whole surface unreachable on a phone, where there is no ⌘ to press. */
+document.addEventListener('keydown',e=>{
+  if(VIEW!=='app') return;
+  // A modal is a question only the person can answer; nothing goes over it.
+  if(document.querySelector('.modal')) return;
+  if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){
+    e.preventDefault();
+    if(PAL) closePalette(); else openPalette();
+    return;
+  }
+  if(PAL) return;                 // the palette's own input owns the rest
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const typing = !!(e.target && e.target.closest
+                    && e.target.closest('input,textarea,select,[contenteditable]'));
+  if(!typing && e.key==='/'){ e.preventDefault(); openPalette(); }
+});
+
 function hrRow(c,i){
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
     <input type="checkbox" data-hr="${i}" checked style="margin-top:4px;width:auto">
@@ -5467,9 +5624,13 @@ document.addEventListener('click',async e=>{
   if(a==='hrfind') return hrDialog(i);
   if(a==='inmail') return draftInmail(i, parseInt(b.dataset.ci,10));
   if(a==='ctdel'){
+    // Destructive, and it used to happen in silence. A found contact can cost
+    // an Apify run to find again, so this one especially wants a way back.
+    const undo=snapRow(j);
     const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ci,10),1);
     setList(j,'contacts',arr);
     logEvent(j,'contact','removed a contact');
+    undoToast(j,undo,'Contact removed');
   }
   // One route for every stage change, from the card's shortcut or the panel's
   // full row, so they log the same thing and set the same fields.
@@ -5477,15 +5638,14 @@ document.addEventListener('click',async e=>{
            : (a==='sent'||a==='apply') ? 'sent' : a==='live' ? 'live'
            : a==='close' ? 'closed' : a==='reopen' ? 'new' : '';
   if(to && STAGES.includes(to)){
-    /* An apply is optimistic: the row is marked sent on the way out to the
-       posting, before anyone knows whether the application was finished. That
-       is only honest if it can be taken back, so snapshot first and let the
-       toast carry the way back. Every other stage change here is deliberate
-       and already reversible by hand. */
-    const undo = a==='apply' ? snapStage(j) : null;
+    /* Snapshotted before the change, and every stage change gets one -- not
+       just the optimistic apply. Reopening a row rewrites its follow-up clock
+       and closing one takes it out of the queue, and neither is obvious to
+       put back by hand once the row has moved tab. */
+    const undo = snapRow(j);
     setStage(j,to);
     logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
-    if(undo) undoToast(j,undo);
+    undoToast(j, undo, stageToast(j,to));
   }
   await save(); render();
 });

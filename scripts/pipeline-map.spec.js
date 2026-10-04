@@ -560,6 +560,7 @@ module.exports = {
       'Applied — review': 'after the application, past the pipeline this map covers',
       'Dashboard': 'a view over jobs that already arrived',
       'plot drag': 'a UI gesture',
+      'the command surface': 'a second way to reach controls that are already on the map under the sidebar — it dispatches by clicking them, so nothing flows through it',
       'shared bits': 'dialog helpers',
       'sign in': 'auth, drawn as the server auth gate',
       'storage': 'drawn as putLocal in JT Storage',
