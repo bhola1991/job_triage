@@ -3180,7 +3180,17 @@ async function runScoring(all, auto){
   for(let i=0;i<targets.length;i+=SIZE){
     const batch=targets.slice(i,i+SIZE);
     try{
-      const res=await scoreBatch(batch,p.profile,p.track);
+      /* flash, not the default pro, measured 2026-10-04 rather than assumed.
+         Both tiers scored the same ten labelled postings through this very
+         prompt (scripts/record-deepseek.js): calibration 0.9 each, flag recall
+         0.867 each, and pro ahead only on flag precision, 0.765 to 0.684.
+         That one advantage does not reach a user: mergeJudgment throws
+         DeepSeek's flag set away whenever a judgement exists and keeps only its
+         `fact` strings, so Jev's probabilities decide which flags appear on
+         every judged row. Pro was being paid 2.8x for a field that is
+         overwritten -- 0.475 INR a posting against 0.171 -- and for a score
+         that measured identically. */
+      const res=await scoreBatch(batch,p.profile,p.track,TOK_CAP,'flash');
       /* One judgement per job, and one credit per judgement. This is the small
          path -- a rescore, capped at AUTO_MAX -- so it can carry that; the
          search path judges through judgeMany instead, which pays once for a
