@@ -1546,7 +1546,17 @@ async function hosted(action, body){
   return data;
 }
 /* Jev (TypeSafe System One) judges one job: how much of the posting is visible,
-   the two fit scores, and the ten flag codes. Called per job from runScoring. */
+   the two fit scores, and the ten flag codes.
+
+   NOTHING CALLS THIS as of 2026-10-04. runScoring was its last caller and now
+   judges through judgeMany like the search path, so both remaining references
+   -- judgeInto below, and this -- are reachable from no button. They are left
+   in place rather than deleted because this is the only `hosted('judge')` call
+   site, and scripts/pipeline-map.js asserts the hosted call sites map 1:1 onto
+   the edge function's actions: removing them makes that gate fail and the right
+   fix is then to retire the `judge` ACTION too, which judge_batch subsumes at
+   one posting. That is a deliberate change to a deployed endpoint and not a
+   side effect of a batching fix, so it is flagged here instead of smuggled in. */
 async function judgeJob(posting, candidate){
   return hosted('judge', { posting, candidate });
 }
@@ -3106,6 +3116,7 @@ const candidateOf = (prof, track) => {
    scoring run that already cost money must not be lost to it. Null is also
    what every local-only and own-key run gets, because the TypeSafe key lives
    on the server and deliberately never reaches the browser. */
+// Unreferenced since runScoring moved to judgeMany -- see judgeJob above.
 async function judgeInto(j, cand){
   if(!cloudNow()) return null;
   try{
@@ -3177,6 +3188,18 @@ async function runScoring(all, auto){
   if(!targets.length){ setInfo(all?'No jobs to score yet.':'Everything is already scored.'); return; }
   busy=true; render();
   const SIZE=6, total=targets.length; let done=0, failed=0;
+  /* Everything scored this run, judged ONCE after the loop instead of per job.
+     It used to call judgeJob for each row, in parallel across each batch of
+     SIZE, on the reasoning that a rescore is the small path and could carry it.
+     The ledger disagreed: one run on 2026-10-03 logged 168 judge calls at
+     COST.llm each, 168 credits, roughly 2.5 Starter packs for a single scoring
+     pass. judge_batch takes MAX_JUDGE_BATCH postings for one credit -- the
+     server still makes one Jev call per posting, since Jev takes one state per
+     request, so what is batched is the round trip and the CHARGE -- which turns
+     those 168 credits into 4. AUTO_MAX caps this path at 60 rows, so it was
+     never going to be ruinous, but 60 credits against 2 is not a rounding
+     error either, and the search path has judged this way since ecf0358. */
+  const scoredRows=[];
   for(let i=0;i<targets.length;i+=SIZE){
     const batch=targets.slice(i,i+SIZE);
     try{
@@ -3191,35 +3214,19 @@ async function runScoring(all, auto){
          overwritten -- 0.475 INR a posting against 0.171 -- and for a score
          that measured identically. */
       const res=await scoreBatch(batch,p.profile,p.track,TOK_CAP,'flash');
-      /* One judgement per job, and one credit per judgement. This is the small
-         path -- a rescore, capped at AUTO_MAX -- so it can carry that; the
-         search path judges through judgeMany instead, which pays once for a
-         whole batch. In parallel across the batch, not across the run: SIZE
-         calls in flight is enough to keep it quick without turning a rescore
-         into a burst of paid traffic. */
-      const cand=candidateOf(p.profile, p.track);
-      const judged=await Promise.all(batch.map(b=>{
-        const r=res[String(b.i)];
-        return r ? judgeInto(p.jobs[b.i], cand) : null;
-      }));
       batch.forEach((b,k)=>{ const r=res[String(b.i)]; if(!r) return;
-        const j=p.jobs[b.i], jv=judged[k];
+        const j=p.jobs[b.i];
         j.ai_score=String(r.score); j.ai_reachability=String(r.reach);
         if(globalThis.LAST_MODEL) j.ai_model=globalThis.LAST_MODEL;
-        /* rankOf keys on the long names, and Jev's choice already answers in
-           them, so this is a straight swap. When there is no judgement it is
-           DeepSeek's own reading -- dropping confidence entirely would move
-           every unjudged job in the ranking. */
-        j.ai_confidence = (jv && jv.confidence) || r.conf;
-        j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
-        /* The whole judgement, kept. Every number the app derives from it --
-           the fit pair, reachability, the confidence weight in rankOf -- is
-           computed from this in the browser, so changing any of those weights
-           re-ranks what is already judged without paying to judge it again. */
-        if(jv) j.ai_judgment = JSON.stringify(jv);
+        // DeepSeek's own reading for now. The judging pass after the loop
+        // overwrites both from Jev where it answered; dropping confidence
+        // entirely would move every unjudged job in the ranking.
+        j.ai_confidence = r.conf;
+        j.ai_flags = JSON.stringify(addSpans(r.flags, j.description));
         // Only ever fills a gap. A date from a feed outranks the model's
         // reading of the same posting, and re-scoring must not overwrite it.
-        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to); });
+        if(r.posted && !saneDate(j.posted)) setPosted(j, r.posted.from, 'est', r.posted.to);
+        scoredRows.push({j, r}); });
     }catch(e){
       if(e.message==='NEEDKEY'){
         busy=false;
@@ -3233,6 +3240,33 @@ async function runScoring(all, auto){
     const bar=$('#progBar'); if(bar) bar.style.width=Math.round(done/total*100)+'%';
     setInfo(`${done} of ${total} done${failed?` · ${failed} failed`:''}`);
     await save();
+  }
+  /* One judging pass for the whole run. Failing here costs the flags and never
+     the scoring already paid for: the rows keep their scores and DeepSeek's own
+     flags, which is exactly what they had a moment ago. Same shape as
+     scoreAndCut, deliberately -- two paths that judge should not judge
+     differently. */
+  if(scoredRows.length && cloudNow()){
+    setInfo(`Scored ${total-failed}. Judging…`);
+    try{
+      const cand=candidateOf(p.profile, p.track);
+      const judged=await judgeMany(scoredRows.map(({j})=>({
+        title:String(j.title||''), company:String(j.company||''),
+        location:String(j.location||''),
+        description:String(j.description||'').slice(0,4000),
+      })), cand);
+      scoredRows.forEach(({j, r}, k)=>{
+        const jv=judged[k];
+        if(!jv) return;
+        j.ai_confidence = jv.confidence || r.conf;
+        j.ai_flags = JSON.stringify(addSpans(mergeJudgment(r.flags, jv), j.description));
+        /* The whole judgement, kept. Every number the app derives from it --
+           the fit pair, reachability, the confidence weight in rankOf -- is
+           computed from this in the browser, so changing any of those weights
+           re-ranks what is already judged without paying to judge it again. */
+        j.ai_judgment = JSON.stringify(jv);
+      });
+    }catch(e){ console.warn('judgement skipped for this run:', e && e.message); }
   }
   busy=false;
   setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
