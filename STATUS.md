@@ -10,6 +10,9 @@ discovery that matters most in this edition is in **Work happening in
 parallel** below: there are SIX worktrees on this repo, and two of them already
 do the things the previous edition listed as blocking.
 
+All three layers are verified against `main` as it stands, by sha256 and not by
+assumption — which is the one thing this document exists to do.
+
 Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.dev/>
 
 ---
@@ -18,8 +21,8 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 | Layer | Version | How it was checked |
 | --- | --- | --- |
-| Frontend | `cf3b267` **+ 7** | `cf3b267` was verified live (`bf3ba60e10f8`, Worker took ~30s). `9384809` is pushed and will have replaced it; **not re-verified**. |
-| Edge function `api` | **v37 — BEHIND** | v37 matched local exactly when checked. `af74459` and `3a0cf2c` have changed `index.ts` since: local is `7abbfda9…` against the deployed `b7ddded6…`. The service-role narrowing is **not live**, and that is a behavioural change rather than a comment. |
+| Frontend | **`9384809`** | live page fetched and sha256-compared: `a1d00154fd53` both sides. (`cf3b267` verified the same way earlier at `bf3ba60e10f8`; the Worker takes ~30s from a push.) |
+| Edge function `api` | **v38** | deployed 2026-10-04 and all three files compared back — `index.ts` `7abbfda9…`, `judge.ts` `679d9b4d…`, `api-clients.ts` `e7d47522…`. All match. This closed a real drift: v37 was behind by `af74459`, which is behaviour and not a comment. |
 | Database | `ai_model` added to `public.jobs`; `search_index` carries the tier preference | columns and function body read back from the live catalogue |
 | `main` | **`9384809`** | pushed, clean, `origin/main..main` empty |
 | Supabase plan | **Pro** (`tier_pro`) | bought 2026-10-03. 8 GB against the 500 MB the free tier gave. |
@@ -349,7 +352,6 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 
 | Item | State |
 | --- | --- |
-| **The edge function is undeployed** | Local `index.ts` is ahead of v37 by `af74459` (service-role narrowing) and `3a0cf2c`. That first one changes behaviour, so it wants a deliberate deploy and a check, not a drift. |
 | **The reaper is inert** | `reap-apify` is committed with its migration and deployed nowhere. It needs `pg_cron` and `pg_net` installed (neither is), the function deployed, and two vault entries that do not exist. Re-verified 2026-10-04. Worth finishing: `billing.sql` records **23 Apify runs started against 16 returning**, so seven billed with nothing naming them. |
 | **Nothing schedules `refresh.sh`** | Units written and validated at `~/.config/systemd/user/jobtriage-refresh.{service,timer}`, still **disabled**. `cron` is not installed and there are no systemd user timers. The closure logic is sound and the push now survives a bad chunk, so the remaining question was never the code. |
 | **`kept_50` reads 0 on deferred scoring** | The browser reports yield before scoring finishes, so `source_yield.inr_per_exclusive_50` is wrong for any such search. Unfixed. |
@@ -411,7 +413,7 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
    matcher should move first.
 1. **Schedule `refresh.sh`.** One timer, already written and validated. The
    corpus decays daily without it and `index_search` now reads what it produces.
-1a. **Deploy the edge function**, which is behind by a behavioural change.
+1a. ~~Deploy the edge function~~ — done 2026-10-04, v38.
 2. **Verify RLS on `public.jobs` and `public.profiles` with two real accounts**
    — prove through PostgREST that user A cannot read user B's pipeline. This is
    the one thing that gates letting people in, and PGlite cannot test it.
