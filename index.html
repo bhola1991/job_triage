@@ -245,6 +245,45 @@
   .main{padding:20px 22px 60px;min-width:0}
   .sheet-head{display:none}
 
+  /* ═══ the decision pane ═══
+     One job, read and acted on beside the queue instead of inside it. The list
+     keeps its shape when the selection moves, which is the whole point: an
+     in-place expand pushed every row below it down the page, so every single
+     decision cost you your place and a session ended at the fourth job rather
+     than the twentieth.
+     Docked as a third column while there is room for all three. Below that it
+     overlays as a sheet, on the same pattern and the same z-index family as
+     the sidebar already uses when it stops being a column.
+     The ladder, bottom to top: #scrim 43, #toolbar 44, .side 45,
+     #panescrim 46, .pane 47, .palscrim 48, .palbox 49, .modal 50. */
+  .wrap.paned{grid-template-columns:288px minmax(0,1fr) 400px}
+  .pane{border-left:1px solid var(--line);background:var(--panel);min-width:0;
+    position:sticky;top:60px;align-self:start;max-height:calc(100vh - 60px);
+    overflow-y:auto;padding:16px 18px 26px}
+  .pane-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  /* jobDetail was drawn for the full width of a row: two columns with a 300px
+     rail. In a 400px pane it stacks, and loses the padding and rule that only
+     made sense where it sat under the row it belonged to. */
+  .pane .qd{grid-template-columns:minmax(0,1fr);row-gap:20px;padding:0;border-top:0}
+  .pane .qd-rail{background:var(--ink)}
+  #panescrim{display:none}
+  @media(max-width:1199px){
+    .pane{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:47;
+      max-height:86vh;align-self:auto;border-left:0;border-top:1px solid var(--line);
+      border-radius:12px 12px 0 0;box-shadow:var(--shadow-lg);
+      padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+    .pane-head{position:sticky;top:-2px;padding:4px 0 10px;margin:-4px 0 6px;
+      background:var(--panel);z-index:1}
+    #panescrim{display:block;position:fixed;inset:0;z-index:46;background:var(--veil-lite)}
+    /* Everything in the sheet is a touch target, as in the sidebar. */
+    .pane button,.pane summary{min-height:44px}
+  }
+  /* Two columns again once the pane is out of the flow, but not one: the
+     sidebar is still a column at these widths. */
+  @media(max-width:1199px) and (min-width:901px){
+    .wrap.paned{grid-template-columns:288px minmax(0,1fr)}
+  }
+
   /* Sidebar disclosures. Everything in this column is either something you do
      every session (pick a direction, run a search) or something you do twice a
      year (export, trim, rotate a key), and all of it was drawn at one weight.
@@ -293,7 +332,9 @@
   /* Turned on below, after the base rules above -- a media query carries no
      extra specificity, so these have to come second to win. */
   @media(max-width:900px){
-    .wrap{grid-template-columns:1fr}
+    /* .wrap.paned carries two classes and so outranks a bare .wrap; it has to
+       be named here or the phone layout keeps the sidebar's column. */
+    .wrap,.wrap.paned{grid-template-columns:1fr}
     .side{position:fixed;left:0;right:0;bottom:0;z-index:45;
       max-height:82vh;overflow:auto;min-height:0;
       border-right:none;border-top:1px solid var(--line);
@@ -373,6 +414,12 @@
   .qitem.closing .qbar{background:var(--closing)} .qitem.closing .qrow{background:var(--closing-row)}
   .qitem.awaiting .qbar{background:var(--awaiting)} .qitem.awaiting .qrow{background:var(--awaiting-row)}
   .qitem.closed .qbar{background:var(--closed)}
+  /* The selected row. Lifted like a hover rather than tinted, because a tint
+     would be a fifth accent and the law allows four. The ring sits on the
+     accent bar, so whatever the row already means stays readable. */
+  .qitem.sel .qrow{background:var(--panel);box-shadow:var(--shadow-md);
+    position:relative;z-index:2}
+  .qitem.sel .qbar{box-shadow:0 0 0 1px var(--signal)}
   /* The row under the pointer lifts off the list, so it is plain which one a
      click will open. Pointer devices only: on touch, hover sticks after a tap. */
   @media(hover:hover){
@@ -572,8 +619,8 @@
   /* The command surface. Sits above the sidebar sheet and the mobile toolbar
      but below .modal, because a command that opens a dialog closes the palette
      first and the two are never on screen together. */
-  .palscrim{position:fixed;inset:0;z-index:47;background:var(--veil-lite)}
-  .palbox{position:fixed;z-index:48;left:50%;transform:translateX(-50%);
+  .palscrim{position:fixed;inset:0;z-index:48;background:var(--veil-lite)}
+  .palbox{position:fixed;z-index:49;left:50%;transform:translateX(-50%);
     top:calc(8vh + env(safe-area-inset-top, 0px));width:min(520px,calc(100vw - 32px));
     max-height:min(560px,74vh);background:var(--panel);border:1px solid var(--line);
     border-radius:10px;box-shadow:var(--shadow-lg);overflow:hidden;
@@ -817,11 +864,14 @@ let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
-/* Which job is expanded in the list, held by keyOf rather than by index: a
-   retention pass or an import can renumber the array underneath it, and the
-   panel must not reopen on somebody else's job. One at a time, because the
-   point of it is to read one carefully. */
-let OPEN_JOB = null;
+/* Which job is selected, held by keyOf rather than by index: a retention pass
+   or an import can renumber the array underneath it, and the pane must not
+   reopen on somebody else's job. One at a time, because the point of it is to
+   read one carefully.
+   It used to mean "expanded in the list", which is why it was called SEL_JOB.
+   The detail now renders beside the queue instead of inside it, so this is a
+   selection: the list does not change shape when it moves. */
+let SEL_JOB = null;
 /* Which disclosures are open, sidebar and lists alike. Held here rather than
    left as DOM state because render() rebuilds #root from scratch: a panel that
    shut itself every time you used something inside it would be worse than no
@@ -4288,9 +4338,13 @@ function jobCard(j,i){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j), acc=accentOf(j);
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   const age=ageOf(j), scored=isScored(j);
-  const open = OPEN_JOB===keyOf(j);
+  const sel = SEL_JOB===keyOf(j);
   const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
-  const details=btn('open', open?'Hide':'Details');
+  /* Opens the pane, not the row. The label no longer toggles to "Hide",
+     because the row does not hold the detail any more -- closing is the pane's
+     own job, and a button saying "Hide" about content sitting in another
+     column would be lying about where that content is. */
+  const details=btn('open','Read');
   // btn() interpolates its label raw, so anything from a job record is escaped
   // before it gets there. follow_up_date arrives from CSV import and backups.
   const chaseOn = esc(mmdd(followUpOn(j)));
@@ -4347,7 +4401,7 @@ function jobCard(j,i){
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
   const rankCls = st!=='new' ? 'quiet' : '';
 
-  return `<div class="qitem ${acc} ${gone?'closed':''} ${open?'open':''}" data-jobidx="${i}">
+  return `<div class="qitem ${acc} ${gone?'closed':''} ${sel?'sel':''}" data-jobidx="${i}">
     <div class="qrow">
       <i class="qbar"></i>
       <span class="qrank ${rankCls}">${gone?'—':(scored?Math.round(rankOf(j)):'—')}</span>
@@ -4355,7 +4409,7 @@ function jobCard(j,i){
       <div class="qfacts">${facts}</div>
       <div class="qacts">${acts}</div>
     </div>
-    ${open?jobDetail(j,i,acc):''}</div>`;
+  </div>`;
 }
 
 /* ═══ the daily view ═══
@@ -4421,9 +4475,9 @@ const foldSect=(key,title,sub,rows)=>{
      or far-down row used to switch tab and then do nothing at all: the row was
      display:none inside a shut <details>, or past the cap and never rendered,
      and scrollIntoView had nothing to find. */
-  const holdsOpen = !!OPEN_JOB && rows.some(x=>keyOf(x.j)===OPEN_JOB);
+  const holdsOpen = !!SEL_JOB && rows.some(x=>keyOf(x.j)===SEL_JOB);
   const shown = rows.slice(0,LIST_CAP);
-  if(holdsOpen && !shown.some(x=>keyOf(x.j)===OPEN_JOB)) shown.push(rows.find(x=>keyOf(x.j)===OPEN_JOB));
+  if(holdsOpen && !shown.some(x=>keyOf(x.j)===SEL_JOB)) shown.push(rows.find(x=>keyOf(x.j)===SEL_JOB));
   const hidden = rows.length - shown.length;
   return `<details class="fold" data-fold="${key}" ${(FOLDS[key]||holdsOpen)?'open':''} style="margin-bottom:26px">
     <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
@@ -4615,6 +4669,12 @@ function renderApp(){
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  /* Resolved once, here, because the pane and the row both need it and looking
+     it up twice would let them disagree. A key that no longer matches anything
+     -- the row was trimmed, or an import replaced it -- reads as no selection
+     rather than as an error. */
+  const selIdx = SEL_JOB ? p.jobs.findIndex(x=>keyOf(x)===SEL_JOB) : -1;
+  const selJob = selIdx>=0 ? p.jobs[selIdx] : null;
 
   $('#root').innerHTML=`
   <div class="topbar">
@@ -4645,7 +4705,7 @@ function renderApp(){
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
-  <div class="wrap">
+  <div class="wrap${selJob?' paned':''}">
     <div class="side ${TOOLS?'open':''}">
       <div class="sheet-head">
         <span class="eyebrow">Tools</span>
@@ -4781,8 +4841,18 @@ function renderApp(){
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
+    ${selJob?`<aside class="pane" id="pane" aria-label="The job you are deciding on">
+      <div class="pane-head">
+        <span class="eyebrow">Deciding</span>
+        <span class="hint" style="margin:0">j / k to walk · esc to close</span>
+        <div class="spacer"></div>
+        <button class="btn-sm" data-act="unsel" data-i="${selIdx}">Close</button>
+      </div>
+      ${jobDetail(selJob,selIdx,accentOf(selJob))}
+    </aside>`:''}
   </div>
   <div id="scrim" class="${TOOLS?'on':''}"></div>
+  ${selJob?'<div id="panescrim"></div>':''}
   <div id="toolbar">
     <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
   </div>`;
@@ -4888,6 +4958,9 @@ function renderApp(){
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
   // Tapping the dimmed page behind the sheet is the gesture everyone tries first.
   if($('#scrim')) $('#scrim').onclick=()=>{ TOOLS=false; render(); };
+  // Only ever visible at the widths where the pane overlays the queue; docked,
+  // CSS hides it, because there is nothing behind the pane to dismiss it onto.
+  if($('#panescrim')) $('#panescrim').onclick=()=>{ SEL_JOB=null; render(); };
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
   bindPlot();
@@ -5201,7 +5274,7 @@ function pasteJobDialog(){
 const tabFor = j => (isOpen(j) && stOf(j)==='new') ? 'unapplied' : 'applied';
 function showJob(i){
   const p=P(), j=p&&p.jobs[i]; if(!j) return;
-  OPEN_JOB = keyOf(j);
+  SEL_JOB = keyOf(j);
   TAB = tabFor(j);
   // Pointing at a row the current filter hides would land on an empty list.
   if(CHFILT!=='all' && chOf(j)!==CHFILT) CHFILT='all';
@@ -5369,8 +5442,35 @@ document.addEventListener('keydown',e=>{
   if(e.metaKey||e.ctrlKey||e.altKey) return;
   const typing = !!(e.target && e.target.closest
                     && e.target.closest('input,textarea,select,[contenteditable]'));
-  if(!typing && e.key==='/'){ e.preventDefault(); openPalette(); }
+  if(typing) return;
+  if(e.key==='/'){ e.preventDefault(); return openPalette(); }
+  if(e.key==='Escape' && SEL_JOB){ e.preventDefault(); SEL_JOB=null; return render(); }
+  if(e.key==='j' || (e.key==='ArrowDown' && SEL_JOB)){ e.preventDefault(); return moveSel(1); }
+  if(e.key==='k' || (e.key==='ArrowUp'   && SEL_JOB)){ e.preventDefault(); return moveSel(-1); }
 });
+
+/* The next row down, read off the DOM rather than recomputed. The queue's
+   order is the view's: four sections in a fixed priority, each sorted, some of
+   them folded away and one of them capped. Working out "the next one" from the
+   data would mean reproducing all of that here and keeping the copy in step
+   forever. What is on screen is the order the person sees, so ask it. */
+function moveSel(dir){
+  const rows=[...document.querySelectorAll('.qitem[data-jobidx]')];
+  if(!rows.length) return;
+  const idx=rows.map(r=>parseInt(r.dataset.jobidx,10));
+  const p=P(); if(!p) return;
+  const at=SEL_JOB ? idx.findIndex(i=>p.jobs[i] && keyOf(p.jobs[i])===SEL_JOB) : -1;
+  // Nothing selected yet: j starts at the top of the queue, k at the bottom.
+  const next = at<0 ? (dir>0 ? 0 : idx.length-1)
+                    : Math.max(0, Math.min(idx.length-1, at+dir));
+  const j=p.jobs[idx[next]]; if(!j) return;
+  SEL_JOB=keyOf(j);
+  render();
+  /* 'nearest' rather than 'center': walking a list should scroll only when the
+     row would otherwise be off screen, not jump the page on every keystroke. */
+  const el=document.querySelector('.qitem.sel');
+  if(el) el.scrollIntoView({block:'nearest'});
+}
 
 function hrRow(c,i){
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
@@ -5614,7 +5714,11 @@ document.addEventListener('click',async e=>{
   // Two different intents that used to share one verb. 'open' toggles a card
   // that is already on screen; 'goto' is pressed from somewhere the card is
   // NOT -- the dashboard's feed -- and has to travel to it first.
-  if(a==='open'){ OPEN_JOB = OPEN_JOB===keyOf(j) ? null : keyOf(j); return render(); }
+  /* Selects, where it used to toggle. A toggle made sense when the row held
+     the detail; with a pane, clicking the row you are already reading should
+     leave it alone rather than slam the pane shut. */
+  if(a==='open'){ SEL_JOB = keyOf(j); return render(); }
+  if(a==='unsel'){ SEL_JOB = null; return render(); }
   if(a==='goto') return showJob(i);
   if(a==='pitch')  return draftPitch(i,false);
   if(a==='chase')  return draftPitch(i,true);

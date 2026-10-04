@@ -542,6 +542,7 @@ module.exports = {
       'colour': 'CSS tokens — see CLAUDE.md, not this map',
       'the queue': 'CSS',
       'one job, opened': 'CSS',
+      'the decision pane': 'CSS — where jobDetail is docked, not what reaches it',
       'theme': 'presentation, no data flow',
       'state': 'globals, drawn where they are used',
       'when was this posted': 'the posted_lo/posted_hi date quartet — a data model, worth its own map one day',
