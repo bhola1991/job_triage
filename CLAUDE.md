@@ -433,6 +433,7 @@ config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
 src/index.js            Cloudflare Worker: POST /api/contact, else env.ASSETS.fetch().
 src/reply-match.mjs     Inbound-mail decision logic. One copy, two consumers.
+src/mime-lite.mjs       Just enough MIME to classify a mail. Hand-written: no root package.json.
 pricing/terms/refund/privacy/contact.html
 sw.js  manifest.json  icon.svg      PWA shell.
 schema.sql  billing.sql             Supabase tables, RLS, credit functions, usage ledger.

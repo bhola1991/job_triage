@@ -12,6 +12,18 @@
   // committed config. The build's own deploy command later changed to
   // `wrangler versions upload`, which has no such auto-detect fallback and
   // fails immediately without a real file to read. This is that file.
+  // Email Routing: the catch-all rule on jobtriage.app points at this Worker,
+  // which is configured in the Cloudflare dashboard rather than here -- there
+  // is no wrangler key for a routing rule. The email() export in src/index.js
+  // is the handler. It needs two secrets that are NOT in this file and must
+  // never be: run `wrangler secret put SUPABASE_URL` and
+  // `wrangler secret put SUPABASE_SERVICE_ROLE_KEY`.
+  //
+  // Before enabling Email Routing, check jobtriage.app for existing MX
+  // records. Enabling it repoints the whole domain's mail at Cloudflare, and
+  // the catch-all means this Worker then sees every address on it -- which is
+  // why handleEmail forwards anything that is not a reply token instead of
+  // storing it.
   "name": "jobtriage",
   "main": "src/index.js",
   "compatibility_date": "2026-09-18",

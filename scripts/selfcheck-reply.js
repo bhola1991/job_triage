@@ -199,6 +199,109 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
   }), threaded);
   ok('in-reply-to wins', m.job && m.job.job_key === 'u:nimbus', m.how);
 
+  /* ── MIME, as it actually arrives ─────────────────────────────────────── */
+  console.log('mime');
+  const P = await import('../src/mime-lite.mjs');
+
+  // Folded headers. A Content-Type with its boundary on the next line is the
+  // ordinary case, and not unfolding it loses the body entirely.
+  let pm = P.parseMail([
+    'From: Priya Rao <priya@zephyr.co.in>',
+    'Subject: Re: Data Engineer',
+    'Content-Type: multipart/alternative;',
+    '\tboundary="==_b1_=="',
+    'Message-ID: <m1@zephyr>',
+    '',
+    '--==_b1_==',
+    'Content-Type: text/plain; charset=utf-8',
+    '',
+    'Are you available for a call this week?',
+    '--==_b1_==',
+    'Content-Type: text/html; charset=utf-8',
+    '',
+    '<p>Are you available for a call this week?</p>',
+    '--==_b1_==--',
+  ].join('\r\n'));
+  ok('folded boundary read', pm.text.includes('available for a call'), pm.text);
+  ok('subject read', pm.subject === 'Re: Data Engineer', pm.subject);
+  ok('plain part preferred over html', !pm.text.includes('<p>'), pm.text);
+
+  // quoted-printable, with a multi-byte character split across two =XX.
+  pm = P.parseMail([
+    'From: hr@zephyr.co.in', 'Subject: Re: role',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable', '',
+    'Caf=C3=A9 chat =E2=80=94 are you available=',
+    ' next week?',
+  ].join('\r\n'));
+  ok('qp decodes utf-8', pm.text.includes('Café') && pm.text.includes('—'), pm.text);
+  ok('qp soft break joined', pm.text.includes('available next week'), pm.text);
+
+  // base64, which is how most ATS mail arrives.
+  pm = P.parseMail([
+    'From: no-reply@us.greenhouse-mail.io', 'Subject: Thank you for applying to Zephyr Systems',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: base64', '',
+    Buffer.from('We have received your application.', 'utf8').toString('base64'),
+  ].join('\r\n'));
+  ok('base64 decodes', pm.text.includes('received your application'), pm.text);
+
+  // html only, tags stripped.
+  pm = P.parseMail([
+    'From: hr@zephyr.co.in', 'Subject: hello',
+    'Content-Type: text/html; charset=utf-8', '',
+    '<div><style>p{}</style><p>Are you&nbsp;available?</p></div>',
+  ].join('\r\n'));
+  ok('html stripped', pm.text === 'Are you available?', pm.text);
+
+  // Headers the classifier vetoes on must survive parsing.
+  pm = P.parseMail(['From: a@b.com', 'List-Unsubscribe: <https://x>', 'Subject: s', '', 'body'].join('\r\n'));
+  ok('bulk header survives', pm.headers['list-unsubscribe'] !== undefined, Object.keys(pm.headers));
+
+  // An attachment part must not become the body.
+  pm = P.parseMail([
+    'From: hr@zephyr.co.in', 'Subject: s',
+    'Content-Type: multipart/mixed; boundary="b2"', '',
+    '--b2', 'Content-Type: application/pdf; name="jd.pdf"',
+    'Content-Disposition: attachment; filename="jd.pdf"', '', 'JVBERi0x',
+    '--b2', 'Content-Type: text/plain', '', 'Could you share your notice period?',
+    '--b2--',
+  ].join('\r\n'));
+  ok('attachment skipped', pm.text.includes('notice period'), pm.text);
+
+  /* ── Gmail's forwarding handshake ─────────────────────────────────────── */
+  console.log('gmail handshake');
+  const conf = P.parseMail([
+    'From: Gmail Team <forwarding-noreply@google.com>',
+    'Subject: Gmail Forwarding Confirmation - Receive Mail from you@gmail.com', '',
+    'Confirmation code: 123456789',
+  ].join('\r\n'));
+  ok('confirmation code found', P.gmailConfirmCode(conf) === '123456789', P.gmailConfirmCode(conf));
+  ok('not a reply', classify(conf).kind !== 'human', classify(conf));
+  const spoof = P.parseMail(['From: attacker@evil.com', 'Subject: Gmail Forwarding Confirmation', '', 'Confirmation code: 999999999'].join('\r\n'));
+  ok('spoofed confirmation refused', P.gmailConfirmCode(spoof) === null, P.gmailConfirmCode(spoof));
+  const notconf = P.parseMail(['From: noreply@google.com', 'Subject: Security alert', '', 'New sign-in 123456789'].join('\r\n'));
+  ok('unrelated google mail is not a code', P.gmailConfirmCode(notconf) === null, P.gmailConfirmCode(notconf));
+
+  /* ── raw email straight through to a decision ─────────────────────────── */
+  console.log('end to end');
+  const raw = [
+    'From: Priya Rao <priya@zephyr.co.in>',
+    'To: r.' + 'a'.repeat(32) + '@jobtriage.app',
+    'Subject: Re: Data Engineer role',
+    'Content-Type: text/plain; charset=utf-8',
+    'Content-Transfer-Encoding: quoted-printable', '',
+    'Thanks =E2=80=94 are you available for a call on Thursday?',
+  ].join('\r\n');
+  const parsed = P.parseMail(raw);
+  ok('token routed off the envelope', tokenFrom(parsed.to) === 'a'.repeat(32), parsed.to);
+  d = decide(parsed, JOBS);
+  ok('raw mail reaches live', d.action === 'set-stage' && d.stage === 'live', d);
+
+  // The same mail, with a bulk header bolted on, must write nothing.
+  const bulked = P.parseMail(raw.replace('Subject:', 'List-Id: <news>\r\nSubject:'));
+  ok('bulk header survives to the veto', decide(bulked, JOBS).action === 'note-only', decide(bulked, JOBS));
+
   console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
   process.exitCode = fail ? 1 : 0;
 })().catch((e) => { console.error('failed:', e); process.exit(1); });

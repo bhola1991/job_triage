@@ -3908,6 +3908,130 @@ function coldDialog(){
   };
 }
 
+/* ═══ reply tracking: a forwarding address, not a mailbox ═══════════════════
+
+   stage='live' is the only record that anybody ever answered an application,
+   and until now it was written by the person remembering to press a button --
+   which is why matcher_outcomes reads 0 replied against 402 jobs.
+
+   The automation does NOT read anyone's mail. The alternative was Gmail's API
+   with gmail.readonly, which is a restricted scope (capped at 100 users until
+   a third-party security assessment) and means holding a credential that can
+   read someone's whole inbox -- in an app whose CV parser runs in this browser
+   specifically so that nothing is uploaded.
+
+   So: one Gmail filter, set once, forwards recruiter mail to a per-profile
+   address. We can read nothing that was not routed to us, and the token is the
+   address AND the capability, so rotating it revokes access with no server
+   state to clean up. src/reply-match.mjs decides; an ATS auto-acknowledgement
+   is deliberately NOT a reply. */
+const INBOX_DOMAIN = 'jobtriage.app';
+/* Off until the receiving end exists, and the panel says so rather than
+   handing out an address that silently swallows mail. Pushes to main
+   auto-deploy, so shipping this on would have published a dead address.
+   Three things flip it, all outside this repo:
+     1. jobtriage.app registered and on Cloudflare (today: NXDOMAIN).
+     2. Email Routing enabled, catch-all -> this Worker. Check for existing MX
+        records FIRST: enabling it repoints the domain's mail.
+     3. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets, so
+        src/index.js can resolve a token to a profile.
+   Then this becomes true, which is a one-line commit. */
+const INBOX_LIVE = false;
+const inboxAddr = t => `r.${t}@${INBOX_DOMAIN}`;
+const newInboxToken = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
+
+async function replyInboxDialog(){
+  const d=modal(`<div class="eyebrow">Reply tracking</div>
+    <h2 style="margin:6px 0 6px">Let replies mark themselves</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">One Gmail filter, set once. After that a reply moves the job to <b>In conversation</b> on its own, so the pipeline is true without you maintaining it.</p>
+    <div id="riBody" style="color:var(--muted);font-size:12px">Loading…</div>`);
+  const body=d.querySelector('#riBody');
+  if(!CLOUD||!USER){ body.innerHTML='<span class="err">This needs you signed in — the address is tied to your account.</span>'; return; }
+  const pid=PROFILE_IDS[DB.current];
+  if(!pid){ body.innerHTML='<span class="err">Save this profile to your account first, then reopen this.</span>'; return; }
+  /* Honest about not being on yet. Issuing a token here would hand out an
+     address that accepts nothing, and the person would reasonably conclude
+     their Gmail filter was wrong. */
+  if(!INBOX_LIVE){
+    body.innerHTML=`<p style="margin:0 0 10px">Not switched on yet — <b>${esc(INBOX_DOMAIN)}</b> is not receiving mail, so an address created now would quietly drop everything sent to it.</p>
+      <p style="margin:0;font-size:11px">Nothing to do on your side. When it is on, this panel hands you an address and the Gmail filter to point at it, and replies start marking themselves.</p>`;
+    return;
+  }
+
+  let token=null, mail=[];
+  try{
+    const { data, error }=await SB.from('profiles').select('inbox_token').eq('id',pid).single();
+    if(error) throw new Error(error.message);
+    token=data&&data.inbox_token||null;
+    const r=await SB.from('inbound_mail').select('subject,from_addr,decision,applied_to,applied_stage,created_at')
+      .eq('profile_id',pid).order('created_at',{ascending:false}).limit(12);
+    if(!r.error) mail=r.data||[];
+  }catch(e){ body.innerHTML='<span class="err">Could not read your settings: '+esc(e.message)+'</span>'; return; }
+
+  const draw=()=>{
+    /* Gmail will not forward anything until a code it mails to the forwarding
+       address is entered back -- and it mails that code HERE, where it would
+       otherwise be unreadable. Surfaced first, because without it the setup
+       instructions dead-end. */
+    const code=mail.map(m=>m.decision&&m.decision.code).find(Boolean);
+    const rows=mail.filter(m=>m.decision&&m.decision.action!=='show-code');
+    body.innerHTML = !token
+      ? `<p style="margin:0 0 12px">Nothing is forwarded until you turn this on, and you can turn it off again by rotating the address.</p>
+         <div class="btn-row"><button class="btn-go btn-sm" id="riOn">Create my address</button></div>`
+      : `<label class="lab">Your forwarding address</label>
+         <div style="display:flex;gap:6px;align-items:center;margin:4px 0 2px">
+           <input type="text" id="riAddr" readonly value="${esc(inboxAddr(token))}" style="font-family:var(--mono);font-size:12px">
+           <button class="btn-sm" id="riCopy">Copy</button></div>
+         <p style="margin:2px 0 12px;font-size:11px">Secret. Anyone holding it can post into your pipeline — treat it like a password.</p>
+         ${code?`<div class="callout" style="margin-bottom:12px"><b>Gmail wants this code:</b>
+           <span style="font-family:var(--mono)">${esc(code)}</span><br>
+           <span style="font-size:11px">Paste it back into Gmail's forwarding settings to finish.</span></div>`:''}
+         <label class="lab">Set it up in Gmail</label>
+         <ol style="margin:4px 0 12px;padding-left:18px;line-height:1.7">
+           <li>Settings → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → paste the address above. Gmail mails a code here; reopen this panel to read it.</li>
+           <li>Settings → <b>Filters</b> → <b>Create a new filter</b>. In <i>Has the words</i> put the ATS senders you hear from, e.g.<br>
+             <span style="font-family:var(--mono);font-size:11px">from:(greenhouse.io OR lever.co OR ashbyhq.com OR workable.com OR smartrecruiters.com OR recruitee.com)</span></li>
+           <li>Tick <b>Forward it to</b> and pick the address. Add a second filter for any company you applied to directly.</li>
+         </ol>
+         <p style="margin:0 0 12px;font-size:11px">Only mail your filter sends is ever seen. A receipt (&ldquo;thank you for applying&rdquo;) confirms the applied date and changes nothing else — only a message from a person moves a job to <b>In conversation</b>.</p>
+         ${rows.length?`<label class="lab">What it has concluded</label>
+           <div style="margin-top:4px">${rows.map(m=>{
+             const k=m.decision.kind||'?';
+             const tone=m.applied_stage==='live'?'go':m.applied_stage==='closed'?'due':k==='ack'?'awaiting':'';
+             return `<div class="contact-row" style="font-size:11px">
+               <span class="pill2 ${tone}">${esc(k)}</span>
+               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject||'(no subject)')}</span>
+               <span style="font-family:var(--mono);color:var(--dim)">${esc(m.applied_to||m.decision.how||'—')}</span></div>`;
+           }).join('')}</div>
+           <p style="margin:8px 0 12px;font-size:11px">Got one wrong? Change the stage on the job — nothing here overrides you, and a row only ever moves out of <b>Applied</b>.</p>`
+          :'<p style="margin:0 0 12px;font-size:11px">Nothing has arrived yet.</p>'}
+         <div class="btn-row"><button class="btn-sm" id="riRot">Rotate address</button></div>`;
+
+    const on=d.querySelector('#riOn');
+    if(on) on.onclick=async()=>{ on.disabled=true; await setToken(newInboxToken()); };
+    const cp=d.querySelector('#riCopy');
+    if(cp) cp.onclick=()=>{ const i=d.querySelector('#riAddr'); i.select();
+      (navigator.clipboard?navigator.clipboard.writeText(i.value):Promise.reject()).then(
+        ()=>{ cp.textContent='Copied'; setTimeout(()=>cp.textContent='Copy',1200); },
+        ()=>{ try{document.execCommand('copy');}catch(_){} }); };
+    const rot=d.querySelector('#riRot');
+    if(rot) rot.onclick=async()=>{
+      if(!confirm('Rotate the address? The old one stops working immediately, and you will have to update the Gmail filter.')) return;
+      rot.disabled=true; await setToken(newInboxToken());
+    };
+  };
+
+  async function setToken(t){
+    try{
+      const { error }=await SB.from('profiles').update({inbox_token:t}).eq('id',pid);
+      if(error) throw new Error(error.message);
+      token=t; draw(); setInfo('Address ready — set the Gmail filter next.');
+    }catch(e){ body.innerHTML='<span class="err">Could not save: '+esc(e.message)+'</span>'; }
+  }
+  draw();
+}
+
 /* ═══════════════ ONBOARDING ═══════════════ */
 function renderOnb(){
   const steps=['Your profile','What we found','Pick a direction'];
@@ -4946,6 +5070,18 @@ function renderApp(){
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
+  /* Shown only once inbound mail can actually arrive; see INBOX_LIVE. The
+     panel is reachable before then for anyone who calls it directly, and says
+     plainly that it is off. */
+  if(INBOX_LIVE){
+    const bar=$('#btnFeedback');
+    if(bar && !$('#btnReplies')){
+      const b=document.createElement('button');
+      b.className='btn-sm'; b.id='btnReplies'; b.title='Let replies mark themselves';
+      b.textContent='Replies'; b.onclick=replyInboxDialog;
+      bar.parentNode.insertBefore(b, bar);
+    }
+  }
   { const b=$('#btnFeedback'); if(b) b.onclick=feedbackDialog; }
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;

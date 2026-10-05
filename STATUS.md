@@ -172,11 +172,73 @@ cannot forge a reply into their own ground truth) and the `jobs.sent_message_id`
 threading hook. The whole file still applies cleanly to real Postgres — checked
 on PGlite, PG 18.3.
 
-**Not applied to production, and nothing is deployed.** What remains is a
-verified sending domain on Cloudflare Email Routing, the `email()` export on
-the Worker, the token-issuing UI and the forwarding-setup instructions. Those
-are the parts that need a domain decision, so they are deliberately not guessed
-at here. An unused table in production is a liability, not a head start.
+### Built end to end, and shipped dark
+
+Domain chosen: **`jobtriage.app`**, addresses `r.<token>@jobtriage.app`.
+
+- `src/index.js` gained the `email()` export. Mail to an address that is *not*
+  a live token is **forwarded, never stored** — Email Routing has no wildcard
+  rule, so the catch-all means this Worker sees every address on the domain and
+  has to hand back what is not ours. A token nobody holds is dropped. A write
+  that fails is logged and swallowed rather than bounced, because `setReject()`
+  tells the *sender* their mail was refused, which is a lie when the fault is
+  ours. Stage patches are guarded on the stage they were decided against, so a
+  redelivery cannot walk a row forward twice.
+- `src/mime-lite.mjs` — enough MIME to classify a mail, hand-written. The
+  normal answer is `postal-mime` from npm, but this repo has no root
+  `package.json` on purpose, and adding one so a Worker can read a Subject line
+  is the wrong trade. Handles folded headers, one level of multipart, base64
+  and quoted-printable; does not handle RFC 2047 subjects or nested
+  multiparts. Degrading is cheap: the classifier reads the subject, which
+  arrives from `message.headers` without any of it, and a body that fails to
+  decode comes back `unclear` and writes nothing.
+- Gmail's forwarding handshake is handled. Gmail will not forward until a code
+  it mails to the *forwarding address* is entered back — and it mails that code
+  here, where the person cannot read it, so without this the setup instructions
+  dead-end. Recognised narrowly, by sender **and** shape; a spoofed one from
+  any other domain is refused.
+- The app gained a Replies panel: issue an address, copy it, the Gmail filter
+  to paste, the confirmation code when it arrives, a log of what the automation
+  concluded, and rotation. The log exists because `inbound_mail` is owner-read
+  — you can see and contest every call it made.
+- The migration **is applied to production**, and RLS was verified live in a
+  rolled-back transaction: the owner sees their own rows, another user sees
+  **0**, and there is **no insert policy at all**, so a user cannot forge a
+  reply into their own ground truth. `profiles` is own-rows on all four verbs,
+  so a token cannot leak sideways.
+- `selfcheck-reply.js` is now 51 assertions and covers MIME and a raw email
+  straight through to a decision. Mutation-tested again: removing header
+  unfolding, decoding quoted-printable per character instead of per byte, and
+  dropping the sender check on the Gmail code are each caught.
+- `selfcheck-rows.js` pins one invariant that would have broken this quietly:
+  `saveRows()` upserts a whole profile row, PostgREST only SETs the columns a
+  body names, so `inbox_token` survives exactly as long as `profileRow()` keeps
+  not naming it. If it ever does, every profile save nulls the address and
+  inbound mail starts landing on an unknown token — which looks like
+  "forwarding stopped working" and has nothing to do with forwarding.
+
+### The one thing blocking it: the domain does not exist
+
+`jobtriage.app` is **NXDOMAIN** — checked against both Cloudflare's and
+Google's resolvers, with the `.app` TLD authority answering. It is not
+registered. The app is served from `jobtriage.reachbhola.workers.dev`.
+
+So the feature is committed **off**. `INBOX_LIVE = false` in `index.html`, and
+the panel says plainly that the domain is not receiving mail rather than
+issuing an address that would silently swallow everything sent to it. The
+Replies button is not even created while it is off. This matters because
+**pushes to `main` auto-deploy** — shipping it on would have published a dead
+address to real beta users.
+
+Three steps flip it, all outside this repo, in order:
+
+1. Register `jobtriage.app` and put it on Cloudflare.
+2. Enable Email Routing, catch-all → the `jobtriage` Worker. **Check for
+   existing MX records first** — enabling it repoints the whole domain's mail.
+3. `wrangler secret put SUPABASE_URL` and `wrangler secret put
+   SUPABASE_SERVICE_ROLE_KEY`, so the Worker can resolve a token to a profile.
+
+Then `INBOX_LIVE = true`, which is a one-line commit.
 
 ---
 
