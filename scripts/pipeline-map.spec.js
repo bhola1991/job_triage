@@ -551,6 +551,8 @@ module.exports = {
       'public.login_email': 'sign-in, not ingestion',
       'public.claim_username': 'sign-up, not ingestion',
       'public.my_username': 'sign-in, not ingestion',
+      'public.feedback': 'beta feedback from the person using the app, not a job arriving',
+      'public.inbound_mail': 'after the application, like the Applied review banner below. It will need a real node the day it writes jobs.stage for anyone: src/reply-match.mjs decides, nothing deployed applies the decision yet, and until something does there is no edge to draw.',
     },
     'index.html section banners': {
       'colour': 'CSS tokens — see CLAUDE.md, not this map',

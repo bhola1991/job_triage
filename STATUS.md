@@ -50,6 +50,7 @@ and that distinction now has a settled answer behind it (below).
 node scripts/selfcheck-rows.js      # row round-trip, the zero-score trap, extras
 node scripts/selfcheck-sync.js      # migrate/save/load, two-tab cases, tombstones
 node scripts/selfcheck-boards.js    # board pipeline, and that a search is judged in one pass
+node scripts/selfcheck-reply.js     # inbound-mail decisions; offline, no model, no network
 node scripts/eval-matcher.js        # the gate, now with Jev measured beside DeepSeek
 node scripts/pipeline-map.js --check
 node scripts/selfcheck-tokens.js
@@ -88,6 +89,94 @@ New tools, none of them gates:
 | `scripts/compare-tiers.js` | top-K overlap between two models' rankings, from `ai_model` |
 | `scripts/index/probe-ats.js` | guesses a company's ATS board from its name, per region |
 | `scripts/check-jsearch-overlap.js` | whether a source returns postings we already hold |
+
+---
+
+## Reply detection: the channel is chosen, nothing is deployed
+
+`matcher_outcomes` reports **8 applied, 0 replied of 402**. That zero is not a
+product failure, it is a measurement failure: `stage = 'live'` is the only
+record in this project that a human ever answered an application, and it is
+written by the person remembering to press a button. Until it has data, every
+quality claim about the matcher is agreement between models rather than
+evidence that anybody got a job.
+
+**There is no `replied` column.** `replied` is a count in the
+`matcher_outcomes` view, derived from `stage = 'live'`. Anyone going looking
+for a column to automate will not find one — the automation writes
+`jobs.stage`.
+
+### Why forwarding and not a mailbox
+
+The obvious build is Gmail's API with `gmail.readonly`, a cron job, and a
+stored refresh token. It was rejected on two counts, the second of which is the
+real one:
+
+- Google classes `gmail.readonly` as a **restricted** scope. Unverified apps
+  are capped at 100 test users, and getting past that needs a third-party
+  security assessment. A 20–30 person beta survives the cap; a launch does not,
+  and the assessment is months and real money.
+- It means holding a credential that can read a person's entire mail — in a
+  repo whose CV parser runs in the browser specifically so that nothing is
+  uploaded. The posture is the product.
+
+So the user forwards instead. One Gmail filter, set once, sends recruiter mail
+to a per-profile address `r.<inbox_token>@<domain>`. We hold no credential and
+can read nothing that was not routed to us; the token is both the routing key
+and the capability, so it is secret, random, and revocable by rotation.
+Cloudflare Email Routing already fronts this app, so the receiving end is a
+second export on the Worker that is already deployed, not new infrastructure.
+
+After that one setup step nothing is manual, which was the point: new
+information arrives through an automation channel.
+
+### An ATS acknowledgement is not a reply
+
+This is the correctness decision the whole design turns on. "Thank you for
+applying to Acme" from `no-reply@greenhouse.io` is a receipt a machine sent
+itself. Counting it as `live` would fill the ground truth with noise in exactly
+the way that makes it worthless. Three outcomes, three different writes:
+
+| classified | stage |
+| --- | --- |
+| `ack` — a receipt | **unchanged**; confirms `date_applied` |
+| `reject` — a no | `closed` |
+| `human` — a person wants something | `live` — the only thing that counts as a reply |
+
+`human` is deliberately narrow. Any bulk-mail header (`List-Unsubscribe`,
+`List-Id`, `Auto-Submitted`, `Precedence: bulk`) or a do-not-reply sender box
+**vetoes** it outright, however much the text reads like a person. A missed
+reply costs the user one click; a false one silently corrupts the only evidence
+this project has.
+
+### What is built, and what is not
+
+`src/reply-match.mjs` — the whole decision, pure, no network and no model. One
+copy, imported by both the Worker and the check. It matches a mail to a job by
+thread (`In-Reply-To`, strongest, hooked but not yet fed), then sender domain
+against the posting host or company, then by looking for a company name **we
+already hold** inside the subject and body — containment rather than
+extraction, because a parser that pulls a company *out* of "Thank you for
+applying to X" can invent an X that matches the wrong row. Two rows that
+normalise alike, or no confident match, return `store-unmatched` and write
+nothing.
+
+`scripts/selfcheck-reply.js` — 35 assertions, offline, in the §8 harness. The
+fixtures are mostly near-misses on purpose. It was mutation-tested rather than
+trusted: removing the bulk-header veto, and resolving an ambiguous company to
+the first match, each produce a **false `live`**, and each is caught.
+
+`schema.sql` carries `profiles.inbox_token`, `public.inbound_mail` (owner-read,
+service-role-write, so a person can contest what the automation concluded but
+cannot forge a reply into their own ground truth) and the `jobs.sent_message_id`
+threading hook. The whole file still applies cleanly to real Postgres — checked
+on PGlite, PG 18.3.
+
+**Not applied to production, and nothing is deployed.** What remains is a
+verified sending domain on Cloudflare Email Routing, the `email()` export on
+the Worker, the token-issuing UI and the forwarding-setup instructions. Those
+are the parts that need a domain decision, so they are deliberately not guessed
+at here. An unused table in production is a liability, not a head start.
 
 ---
 
