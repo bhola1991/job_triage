@@ -172,7 +172,11 @@ const spanRate = r3(withSpan / flagsTotal);
   const jev = { confidence: 'high', flags: [
     { code: 'loc', probability: 0.91 },     // fired, and DeepSeek has a fact
     { code: 'comp', probability: 0.12 },    // DeepSeek raised it, Jev does not agree
-    { code: 'rare', probability: 0.77 },    // Jev raises one DeepSeek never mentioned
+    // Jev raises one DeepSeek never mentioned. Was 0.77, which cleared the old
+    // FLAG_P of 0.5 and does not clear 0.8 -- so it stopped testing this case
+    // and started testing the threshold. The number moved; the three things
+    // this block checks did not.
+    { code: 'rare', probability: 0.88 },
   ] };
   const out = T.mergeJudgment(ds, jev);
   const codes = out.map(f => f.code).sort().join(',');
@@ -251,59 +255,6 @@ const spanRate = r3(withSpan / flagsTotal);
   }
 
   if (!bad) ok('composition holds: the distribution decides (not the float), capability outweighs targeting, the four reach signs point the right way, and an unjudged row ranks exactly as it did');
-}
-
-// ── 9. Jev measured on the same labels as DeepSeek ───────────────────────
-/* The question section 8 could not answer. Section 8 pins the ARITHMETIC of the
-   composition against constructed distributions; this runs it on Jev's real
-   answers to the same ten postings, against the same hand-written bands, and
-   prints it beside DeepSeek's. That is what has to exist before ai_score can
-   stop being DeepSeek's number -- flipping first would leave the gate printing
-   ALL PASS while measuring a model the app no longer uses.
-
-   Recorded by scripts/record-jev.ts, committed, replayed. Nothing here calls a
-   model, so this stays offline and free like the rest of the file. Absent
-   recordings it says so and scores nothing, because a missing recording must
-   not read as a passing one. */
-{
-  const have = CASES.cases.filter((c) => c.recorded_jev);
-  if (!have.length) {
-    console.log('\nJev vs DeepSeek on the same labels:');
-    console.log('  SKIP  no recorded_jev in cases.json — run scripts/record-jev.ts');
-  } else {
-    let jtp = 0, jfp = 0, jfn = 0, jIn = 0;
-    const band = [];
-    have.forEach((c) => {
-      const jv = c.recorded_jev;
-      // The same FLAG_P the app thresholds at, so this measures what ships.
-      const got = jv.flags.filter((f) => f.probability > T.FLAG_P).map((f) => f.code);
-      const want = c.expect.flags;
-      jtp += got.filter((x) => want.includes(x)).length;
-      jfp += got.filter((x) => !want.includes(x)).length;
-      jfn += want.filter((x) => !got.includes(x)).length;
-      // Composed, not asked: fit from the two score distributions, reach from
-      // the four nouls. Exactly what the app would show after the flip.
-      const fit = T.fitFromJudgment(jv), reach = T.reachFromJudgment(jv);
-      const okFit = fit !== null && fit >= c.expect.fit[0] && fit <= c.expect.fit[1];
-      const okReach = reach !== null && reach >= c.expect.reach[0] && reach <= c.expect.reach[1];
-      if (okFit && okReach) jIn++;
-      else band.push(`${c.id} (fit ${fit} want ${c.expect.fit.join('-')}, reach ${reach} want ${c.expect.reach.join('-')})`);
-    });
-    const jp = jtp + jfp ? r3(jtp / (jtp + jfp)) : 1;
-    const jr = jtp + jfn ? r3(jtp / (jtp + jfn)) : 1;
-    const jc = r3(jIn / have.length);
-    console.log(`\nJev vs DeepSeek on the same ${have.length} labels (model ${have[0].recorded_jev.model}):`);
-    console.log(`  flag precision   deepseek ${precision}   jev ${jp}`);
-    console.log(`  flag recall      deepseek ${recall}   jev ${jr}`);
-    console.log(`  calibration      deepseek ${calibration}   jev ${jc}`);
-    if (band.length) {
-      console.log('  jev out of band:');
-      band.forEach((b) => console.log(`    ${b}`));
-    }
-    /* Reported, not gated, and deliberately so. These are ten cases: enough to
-       catch a sign error or a composition that cannot reach a band at all, not
-       enough to license a switch. The gate moves when the app does. */
-  }
 }
 
 // ── actionability: three legs, and unknown is never dead ─────────────────

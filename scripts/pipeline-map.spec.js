@@ -112,9 +112,12 @@ module.exports = {
 
   nodes: {
     /* ── intake ─────────────────────────────────────────────────────────── */
-    'in.boards':  { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runBoards — search the job boards',
+    'in.boards':  { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runBoards — the free pass',
       anchor: { file: 'index.html', fn: 'runBoards' }, section: "board search: every source's results, scored, 50+ kept",
-      note: 'The only door that scores on the way in. Everything it keeps is already judged.' },
+      note: 'The only door that scores on the way in. Everything it keeps is already judged. Since c4ba75d it STOPS after the corpus: index_search is free, so this adds what it found, says so, and offers the paid boards as their own action. Before that both ran in one click and nobody ever saw the free answer before 25 credits had been committed to fetching more -- a preview you cannot act on is not a preview.' },
+    'in.paid':    { diagram: 'arrival', group: 'the seven doors', kind: 'credit', label: 'runPaidBoards — {COST.boardSearch} credits, on its own button',
+      anchor: { file: 'index.html', fn: 'runPaidBoards' }, section: "board search: every source's results, scored, 50+ kept",
+      note: 'Everything that used to be the second half of runBoards, unchanged, reached only from the offer the free pass leaves behind. PAID_OFFER carries the titles, window and place the free pass used, rather than recomputing them: a second click must search what the first one searched, or the free pass was a preview of nothing.' },
     'in.ats':     { diagram: 'arrival', group: 'the seven doors', kind: 'entry', label: 'runAts — pull a company feed',
       anchor: { file: 'index.html', fn: 'runAts' }, section: "board search: every source's results, scored, 50+ kept",
       note: 'No URL check, no age cut, no fit cut — an ATS feed is trusted.' },
@@ -386,9 +389,15 @@ module.exports = {
        part of the system with no user attached, which is exactly why it can be
        shared -- and why it is the part most likely to be forgotten, since no
        screen goes blank when it stops. */
-    'cx.refresh': { diagram: 'corpus', group: 'the nightly pass', kind: 'entry', label: 'refresh.sh \u2014 crawl, deposit, verify',
-      anchor: { file: 'scripts/index/refresh.sh', re: '^say "1/5' },
-      note: 'Five steps, and deliberately a shell script: each one is already a program with its own flags and its own failure mode, so an orchestrator would only add a layer that can fail in ways none of them can. set -e means a failed step stops the pass rather than pushing a half-built corpus over a good one. The value is in the SERIES, not any single run -- liveness is a set difference, so run one closes nothing and every run after it closes what left the boards since.' },
+    'cx.refresh': { diagram: 'corpus', group: 'the nightly pass', kind: 'entry', label: 'refresh.sh \u2014 crawl, deposit, harvest, verify',
+      anchor: { file: 'scripts/index/refresh.sh', re: '^say "1/6' },
+      note: 'Six steps, and deliberately a shell script: each one is already a program with its own flags and its own failure mode, so an orchestrator would only add a layer that can fail in ways none of them can. set -e means a failed step stops the pass rather than pushing a half-built corpus over a good one. The value is in the SERIES, not any single run -- liveness is a set difference, so run one closes nothing and every run after it closes what left the boards since.' },
+    'cx.urls':    { diagram: 'corpus', group: 'the nightly pass', kind: 'db', label: 'corpus-urls.js - what the corpus took in',
+      anchor: { file: 'scripts/index/corpus-urls.js', re: '^const SB = ' },
+      note: 'job_index has no url column on purpose (dropping it returned 81 MB), so the key IS the url and rebuilding it is a substring rather than a guess. Reads the last week rather than all of it: a naukri sitemap row is never an ATS link, and 340k of them re-read every morning is a slow way to learn nothing.' },
+    'cx.harvest': { diagram: 'corpus', group: 'the nightly pass', kind: 'sync', label: 'harvest-slugs.js - a paid row buys a free board',
+      anchor: { file: 'scripts/index/harvest-slugs.js', fn: 'slugOf' },
+      note: 'The only version of acquisition that gets CHEAPER as it runs. A paid row is not just a job: for anyone on Greenhouse/Lever/Ashby it carries a slug, and a slug is the whole board of that company, free, for as long as they keep hiring - about 103 jobs each, measured on the seed list. --verify asks each board for its jobs before the list grows, because a slug that 404s is not a discovery but a failed crawl tomorrow. New slugs land in sources.json and are pulled by the NEXT pass. The host patterns are sliced out of the ATS table in index.html rather than copied, so they cannot drift.' },
     'cx.sitemap': { diagram: 'corpus', group: 'what the boards publish', kind: 'net', label: 'sitemap-jobs.js \u2014 a board\u2019s own index',
       anchor: { file: 'scripts/index/sitemap-jobs.js', fn: 'rowsFrom' },
       note: 'Every board needs Google for Jobs traffic, and Google requires a sitemap listing every job page -- so boards publish their COMPLETE index, publicly and deliberately, for crawlers. That is the one door they hold open while defending the search endpoint this app had been paying Apify to squeeze through. Naukri\u2019s Pune file alone is 18,806 urls, 3.85 MB, no key and no actor, against 30 rows for \u20b913.20 from a paid LinkedIn pull.' },
@@ -429,6 +438,8 @@ module.exports = {
 
   edges: [
     { from: 'in.boards', to: 'in.addJobs' }, { from: 'in.ats', to: 'in.addJobs' },
+    { from: 'in.boards', to: 'in.paid', label: 'offers, never calls' },
+    { from: 'in.paid', to: 'in.addJobs' },
     { from: 'in.suggest', to: 'in.addJobs' }, { from: 'in.csv', to: 'in.addJobs' },
     { from: 'in.paste', to: 'in.addJobs' }, { from: 'in.cold', to: 'in.addJobs' },
     { from: 'in.addJobs', to: 'in.keyOf', label: 'already seen?' },
@@ -473,6 +484,9 @@ module.exports = {
     { from: 'sv.board', to: 'sv.deposit', label: 'the API sources' },
     { from: 'sv.apItems', to: 'sv.deposit', label: 'the scraper rows, later' },
     { from: 'sv.deposit', to: 'st.index' },
+    { from: 'cx.refresh', to: 'cx.urls' },
+    { from: 'cx.urls', to: 'cx.harvest', label: 'urls it already paid for' },
+    { from: 'cx.harvest', to: 'cx.ingest', label: 'new slugs, next pass' },
     { from: 'cx.refresh', to: 'cx.verify' },
     { from: 'cx.verify', to: 'cx.guard' },
     { from: 'cx.sidecar', to: 'cx.guard', label: 'what could not be read' },
@@ -537,6 +551,8 @@ module.exports = {
       'public.login_email': 'sign-in, not ingestion',
       'public.claim_username': 'sign-up, not ingestion',
       'public.my_username': 'sign-in, not ingestion',
+      'public.feedback': 'beta feedback from the person using the app, not a job arriving',
+      'public.inbound_mail': 'after the application, like the Applied review banner below. It will need a real node the day it writes jobs.stage for anyone: src/reply-match.mjs decides, nothing deployed applies the decision yet, and until something does there is no edge to draw.',
     },
     'index.html section banners': {
       'colour': 'CSS tokens — see CLAUDE.md, not this map',
@@ -560,6 +576,7 @@ module.exports = {
       'MAIN APP': 'a layout banner, not a stage',
       'the daily view': 'a view over jobs that already arrived',
       'Applied — review': 'after the application, past the pipeline this map covers',
+      'reply tracking: a forwarding address, not a mailbox': 'also after the application. The decision lives in src/reply-match.mjs and the write in the Email Worker, neither of which this map covers; this banner is only the panel that issues the address. Gated off by INBOX_LIVE until jobtriage.app exists.',
       'Dashboard': 'a view over jobs that already arrived',
       'plot drag': 'a UI gesture',
       'the command surface': 'a second way to reach controls that are already on the map under the sidebar — it dispatches by clicking them, so nothing flows through it',

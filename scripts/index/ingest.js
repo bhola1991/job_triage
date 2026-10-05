@@ -44,18 +44,57 @@ const ATS = {
      them and --write silently dropped every one: it only appends to a
      sources.json key that already exists, and only greenhouse/lever/ashby did.
      35 boards of 126 went in the bin on the first real pass. */
+  /* SmartRecruiters in two hops, because its listing carries no description and
+     the text is one request per posting away.
+
+     The listing gives id, name, location and releasedDate; `ref` is an API url,
+     not the text. So each posting is fetched for jobAd.sections, which arrives
+     as {jobDescription, qualifications, additionalInformation,
+     companyDescription}, each a title and a blob of HTML.
+
+     companyDescription is deliberately LEFT OUT. It is identical across every
+     posting a company has -- boilerplate about the employer, not the role --
+     and push-index.js caps a description at 4,000 characters, so including it
+     would spend the budget that the qualifications need. The role-specific text
+     is what a score should read.
+
+     Before 2026-10-04 these arrived thin and were stored anyway. Then thin rows
+     stopped entering the corpus, which was right for Naukri (its description is
+     unobtainable at any price) and silently dropped all 21 of these boards. This
+     is the fix: about 400 extra requests at the measured board sizes, which buys
+     back rows that can actually be judged.
+
+     `rows` is async here and the others are not, which works because the task
+     chain is `get(url).then(d => rows(d, slug))` and then() flattens a promise.
+     Three at a time within a board, on top of the 8 boards already in flight,
+     with a per-host gap below and get()'s own 429 backoff behind that -- a
+     vendor we are about to ask 400 questions of deserves all three. */
   smartrecruiters: {
     url: s => `https://api.smartrecruiters.com/v1/companies/${s}/postings?limit=100`,
-    // The ONLY one of the five with no description in its listing -- `ref` is an
-    // API url, not the text. Fetching each posting would be one request per job,
-    // so these arrive without one and push-index.js tiers them thin on its own,
-    // which is the honest outcome rather than a fabricated snippet.
-    rows: (d, s) => (d.content || []).map(x => ({
-      title: x.name || '', company: s,
-      url: x.id ? `https://jobs.smartrecruiters.com/${s}/${x.id}` : '',
-      location: (x.location && (x.location.fullLocation ||
-        [x.location.city, x.location.region].filter(Boolean).join(', '))) || '',
-      description: '', posted: (x.releasedDate || '').slice(0, 10) })),
+    rows: async (d, s) => {
+      const list = (d.content || []).filter(x => x && x.id && x.name);
+      const out = [];
+      const q = list.slice();
+      const take = async () => {
+        for (let x; (x = q.shift());) {
+          const loc = (x.location && (x.location.fullLocation ||
+            [x.location.city, x.location.region].filter(Boolean).join(', '))) || '';
+          let desc = '', url = `https://jobs.smartrecruiters.com/${s}/${x.id}`;
+          try {
+            const full = await get(`https://api.smartrecruiters.com/v1/companies/${s}/postings/${x.id}`);
+            const sec = (full && full.jobAd && full.jobAd.sections) || {};
+            desc = ['jobDescription', 'qualifications', 'additionalInformation']
+              .map(k => (sec[k] && sec[k].text) || '').filter(Boolean).join('\n\n');
+            if (full && full.postingUrl) url = full.postingUrl;
+          } catch (e) { /* no detail: the row still carries title, company and place */ }
+          out.push({ title: x.name || '', company: s, url,
+            location: loc, description: strip(desc),
+            posted: (x.releasedDate || '').slice(0, 10) });
+        }
+      };
+      await Promise.all([take(), take(), take()]);
+      return out;
+    },
   },
   recruitee: {
     url: s => `https://${s}.recruitee.com/api/offers/`,
@@ -154,7 +193,7 @@ const PAGED = {
    thrown like any other status and the boards just vanished into `failed`.
    Honoured here rather than worked around -- 429 means slow down, so this slows
    down, and respects Retry-After when they send one. */
-const HOST_GAP_MS = { 'apply.workable.com': 1100 };
+const HOST_GAP_MS = { 'apply.workable.com': 1100, 'api.smartrecruiters.com': 120 };
 const lastHit = new Map();
 async function paced(host) {
   const gap = HOST_GAP_MS[host]; if (!gap) return;

@@ -431,6 +431,9 @@ No CSS framework grid. Layout is flex and `grid-template-columns`.
 index.html              The entire app — markup, CSS, JS. ~4,670 lines, no build.
 config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
+src/index.js            Cloudflare Worker: POST /api/contact, else env.ASSETS.fetch().
+src/reply-match.mjs     Inbound-mail decision logic. One copy, two consumers.
+src/mime-lite.mjs       Just enough MIME to classify a mail. Hand-written: no root package.json.
 pricing/terms/refund/privacy/contact.html
 sw.js  manifest.json  icon.svg      PWA shell.
 schema.sql  billing.sql             Supabase tables, RLS, credit functions, usage ledger.
@@ -438,8 +441,13 @@ supabase/functions/api/index.ts     Deno edge function: search, scoring, payment
 scripts/selfcheck-rows.js           Job/profile <-> typed row round trip.
 scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST stand-in.
 scripts/selfcheck-boards.js         Board-source check.
+scripts/selfcheck-reply.js          Inbound-mail decision check. Offline, no model.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
+scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.
+scripts/tune-flag-thresholds.js     FLAG_P sweep per code, offline against judgments.json. A measurement, not a gate.
 scripts/eval/                       Recorded model answers + the committed baseline.
+scripts/eval/cases.json             31 labelled postings. `expect.flags` = what to RAISE (DeepSeek's contract); `expect.codes` = what is TRUE per code, omitting what a posting does not determine. Read its _note before labelling.
+scripts/eval/judgments.json         One raw Jev judgement per case, committed so the threshold sweep runs offline.
 scripts/selfcheck-tokens.js         Token-drift check: all consumers vs design/jobtriage.tokens.json.
 scripts/selfcheck-icon.js           Icon check: renders icon.svg and asserts colour + maskable geometry.
 scripts/pipeline-map.js             Data-pipeline map: resolves code anchors, writes Mermaid notes to an Obsidian vault.
@@ -508,6 +516,7 @@ that skill with it rather than every machine being set up by hand.
    node scripts/selfcheck-rows.js       # job/profile <-> typed row round trip
    node scripts/selfcheck-sync.js       # save/load/migrate cycle, two-tab cases
    node scripts/selfcheck-boards.js     # board search pipeline
+   node scripts/selfcheck-reply.js      # inbound-mail decisions; offline, no model
    node scripts/selfcheck-tokens.js     # token drift across the four consumers
    node scripts/eval-matcher.js         # matcher metrics vs the committed baseline
    node scripts/pipeline-map.js --check
@@ -529,6 +538,16 @@ that skill with it rather than every machine being set up by hand.
 
    This list was four checks until 2026-09-24; `selfcheck-rows`, `selfcheck-sync`
    and `eval-matcher` were added on 2026-09-22 and went unlisted here.
+   `selfcheck-reply` was added on 2026-10-05.
+
+   One note on `selfcheck-reply`: its fixtures are mostly near-misses on
+   purpose, because what it guards is ground truth. `jobs.stage = 'live'` is
+   the only record in this project that anybody ever heard back, so a *false*
+   reply is unrecoverable in a way a missed one is not. If you change
+   `src/reply-match.mjs`, mutation-test the check as well as running it — two
+   of the obvious loosenings (dropping the bulk-header veto on a human cue,
+   resolving an ambiguous company to the first match) each produce a false
+   `live`, and each is caught today.
 
 ---
 

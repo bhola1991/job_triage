@@ -124,4 +124,26 @@ const broken = { raw: 'x', jobs: [], created: '2026-01-01' };
 const b2 = T.coerceProfile(wire(T.profileRow('p_b', broken)));
 eq(b2, broken, 'a record with no .profile is stored verbatim and comes back broken, not fake-repaired');
 
+/* inbox_token is set once by the Replies panel and read by the Email Worker to
+   route a forwarded reply. saveRows() upserts a whole profile row, and
+   PostgREST only SETs the columns a request body names -- so the token
+   survives exactly as long as profileRow() keeps not naming it. If it ever
+   does, every routine profile save silently nulls the address and inbound mail
+   starts landing on an unknown token, which looks like "forwarding stopped
+   working" and has nothing to do with forwarding. Both branches are checked
+   because the broken-profile branch builds its own key set. */
+{
+  const keys = (r) => Object.keys(r);
+  ok(!keys(T.profileRow('p_abc', prof)).includes('inbox_token'),
+    'profileRow does not name inbox_token, so an upsert cannot wipe it');
+  ok(!keys(T.profileRow('p_broken', { nope: true })).includes('inbox_token'),
+    'the broken-profile branch does not name inbox_token either');
+  /* PostgREST's batch upsert unions the keys across the array and nulls the
+     ones an object is missing, so a non-uniform batch would null real columns.
+     Uniformity across the two branches is what makes that safe. */
+  const a = keys(T.profileRow('p_abc', prof)).sort().join(',');
+  const b = keys(T.profileRow('p_broken', { nope: true })).sort().join(',');
+  ok(a === b, 'both profileRow branches emit the same columns, so a mixed batch nulls nothing');
+}
+
 console.log(process.exitCode ? 'SOME FAILED' : 'ALL PASS');

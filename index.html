@@ -1404,15 +1404,45 @@ async function migrateRows(){
     return;
   }
   MIGRATED = true;
+  MIGRATED_AT = Date.now();
   await put('triage:current', DB.current||'');
-  await put('triage:migrated','1');
+  /* An ISO stamp rather than '1', because the blob's retirement is measured
+     from this moment and '1' is not a date. '1' is still read as migrated
+     below -- every account that migrated before today holds one -- it just has
+     to be given a date the first time it is seen. */
+  await put('triage:migrated', new Date(MIGRATED_AT).toISOString());
 }
 
-/* The blob is written on every save whether or not this account has migrated.
+/* How long the blob keeps being written after an account moves onto rows.
+   It is a rollback copy, and a rollback copy has a shelf life: two weeks of
+   successful row saves is long enough to have noticed a migration that went
+   wrong, and past that the blob is no longer insurance -- it is a full second
+   copy of every job and every CV, rewritten on every keystroke-driven save,
+   for a rollback nobody is going to perform. */
+const BLOB_SUNSET_DAYS = 14;
+
+/* When this account migrated, as epoch ms; null when it has not, or when the
+   stamp could not be read. Null means keep writing -- never stop on a date we
+   are unsure of. */
+let MIGRATED_AT = null;
+
+/* Whether the blob is still worth writing.
+
+   Three ways to be true, and the last two matter as much as the first:
+     - not migrated: the blob IS the storage.
+     - the cloud is not reachable: rows cannot be written, so the blob is the
+       only thing keeping this device's work, sunset or not.
+     - migrated recently: still inside the rollback window. */
+function blobLive(){
+  if(!MIGRATED || !cloudNow() || !MIGRATED_AT) return true;
+  return (Date.now() - MIGRATED_AT) < BLOB_SUNSET_DAYS * 864e5;
+}
+
+/* The blob was written on every save whether or not this account had migrated.
    Once it has, nothing reads it -- it is the offline copy and the rollback,
-   and a rollback copy is only worth keeping if it is current. */
+   and a rollback copy is only worth keeping while it could still be used. */
 async function save(){
-  await put('triage:db', JSON.stringify(DB));
+  if(blobLive()) await put('triage:db', JSON.stringify(DB));
   if(!cloudNow() || !MIGRATED) return;
   /* Which profile is open is the one thing in DB that is not a row. It rode
      inside the blob, and once the blob stops being read it needs its own key
@@ -1422,12 +1452,36 @@ async function save(){
   catch(e){
     cloudDown(e);
     console.warn('row save failed:', e && e.message);
-    syncNote("Saved on this device \u2014 " + ((e&&e.message)||'could not reach the server')
+    /* Locally, and whatever the sunset says. The note below promises the work
+       is not lost, and once the blob is retired the row save is the only thing
+       that was keeping that promise -- so the moment it fails is the moment
+       the copy earns its keep again. Local only: the cloud is what just
+       refused us. */
+    try{ await putLocal('triage:db', JSON.stringify(DB)); }catch(_){}
+    syncNote("Saved on this device — " + ((e&&e.message)||'could not reach the server')
              + ". Your work is not lost.");
   }
 }
 async function load(){
-  MIGRATED = (await get('triage:migrated')) === '1';
+  /* Anything non-empty means migrated. Accounts that migrated before the stamp
+     existed hold '1', which says it happened but not when -- so they are given
+     today's date and their fortnight starts now. Backdating them instead would
+     retire the blob on the same load that introduced the idea, which is not a
+     window, it is a switch. */
+  const mig = (await get('triage:migrated')) || '';
+  MIGRATED = !!mig;
+  /* Shape-checked before parsing, and that is not belt-and-braces. The legacy
+     value is the string '1', and Date.parse('1') does not fail -- it returns
+     the 1st of January 2001, which is twenty-five years past any window and
+     would retire the blob on the spot for every account that predates the
+     stamp. Only something ISO-shaped counts as a date here. */
+  const at = /^\d{4}-\d{2}-\d{2}T/.test(mig) ? Date.parse(mig) : NaN;
+  MIGRATED_AT = isNaN(at) ? null : at;
+  if(MIGRATED && MIGRATED_AT === null){
+    MIGRATED_AT = Date.now();
+    try{ await put('triage:migrated', new Date(MIGRATED_AT).toISOString()); }
+    catch(e){ console.warn('could not stamp the migration date:', e && e.message); }
+  }
   let fromRows = false;
   if(cloudNow() && MIGRATED){
     try{
@@ -1761,6 +1815,7 @@ async function buyDialog(){
     <div class="btn-row" style="margin-top:14px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div></div>`);
   try{
     const {packs,costs}=await hosted('packs',{});
+    if(costs && costs.boardSearch) BOARD_COST=costs.boardSearch;
     if(costs) d.querySelector('#packs').insertAdjacentHTML('beforebegin',
       /* Two prices for scoring because there are two models and they differ 4x.
          A board search scores its own intake on the fast one; asking for a
@@ -3161,8 +3216,47 @@ function bestSentence(desc, fact){
 
 /* Above which probability a Jev noul counts as "this flag is true". Jev
    returns a number per flag precisely so the caller can keep its own
-   threshold rather than trusting one chosen elsewhere; this is ours. */
-const FLAG_P = 0.5;
+   threshold rather than trusting one chosen elsewhere; this is ours.
+
+   0.8, measured rather than picked. It was 0.5, which is the worst available
+   cut: a noul carries no separate confidence, so 0.5 is exactly where the
+   model is torn, and every flag it was unsure about became a chip on a row.
+   Over the ten labelled postings that fired seven flags nothing supported --
+   `open` on five of them.
+
+   scripts/tune-flag-threshold.js sweeps the recorded probabilities in
+   scripts/eval/judgments.json against the labels. Seven of the ten flags
+   separate cleanly, and every one of their gaps straddles 0.8:
+
+       flag      true fires at    false reaches    gap
+       loc            0.96             0.25        0.71
+       thin           0.95             0.22        0.73
+       shape          0.97             0.48        0.49
+       sen_lo         0.97             0.53        0.44
+       comp           0.90             0.45        0.45
+       sen_hi         0.82             0.58        0.24
+       open           0.91             0.70        0.21
+
+   One number for all ten rather than ten tuned numbers, because with one or
+   two positive cases per flag a per-flag decimal would be fitted to noise.
+   The gaps are wide enough that the choice inside them barely matters; what
+   mattered was being at 0.5.
+
+   The consequence argument points the same way. The flags that bury a job --
+   loc, cred, shape, sen_hi, sen_lo, thin, comp -- are the ones with the widest
+   gaps, so a high cut costs them nothing and a false one is expensive. The
+   flags that merely encourage an application are where the residual noise
+   sits, which is the cheaper error to keep.
+
+   Two flags are not fixable from here at any cut, and scripts/tune-flag-thresholds.js shows
+   why, per code: `fit` answers the question it was asked while the labels name
+   the flag worth showing, and `rare` is weakly true of nearly every posting
+   this profile sees. Calibrated on jev-1.13.0; a model bump invalidates it. */
+const FLAG_P = 0.8;
+/* Salvaged from the jev-pin-and-threshold branch, 2026-10-05, before deleting it:
+   the 0.5 it replaces was measured at 0.483 flag precision, with `open` and
+   `rare` firing on six cases of ten. The branch's own measurement tooling was
+   a third copy of what scripts/eval/ already does and went with the branch. */
 
 /* ── composing a judgement into numbers ──────────────────────────────────
    Jev answers questions; it does not hand back a fit score. These turn its
@@ -3742,6 +3836,64 @@ async function fromAts(jobs, onStatus){
   return {jobs:out, closed};
 }
 
+/* What the corpus search left on the table, so the paid search can be a second
+   click rather than the same click. Holds the track it belongs to: switching
+   track must not leave an offer behind that would spend credits on the titles
+   of a track nobody is looking at. Null whenever there is nothing to offer --
+   no cloud session, an own Apify token, or the paid search already made. */
+let PAID_OFFER = null;
+/* Whether the first click reads the free corpus rather than the paid boards.
+   renderApp words the button from this and the command palette words its entry
+   from it, so the two cannot drift apart. */
+const freeFirstNow = () => !ownApify() && cloudNow();
+/* What the live-board search costs, for the button that offers it. The server
+   is the authority (COST.boardSearch) and hands the real figure over with the
+   packs; this is the same number written down so the button can be drawn before
+   anyone has opened the credits dialog. Refreshed from the server whenever that
+   dialog does fetch them. */
+let BOARD_COST = 25;
+
+/* The shared tail of both phases: what was kept goes into the list, the search
+   is reported if it was a metered one, and the person is told what happened.
+   `paid` is what makes the two summaries differ -- a free corpus pass that
+   found little is an invitation to spend, and needs to say so. */
+async function finishSearch(trk, live, failed, paid){
+  const p=P(); const st=live.st, d=st.dropped;
+  const n=addJobs(st.kept.concat(st.unscored));
+  if(SEARCH_ID){
+    hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
+    // Only a search on our keys moves the "new since" point; it's what that window is for.
+    p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
+  }
+  SEARCH_ID=null;
+  /* save, then redraw, then say what happened -- in that order, because
+     render() rebuilds #root and would wipe a summary written before it. */
+  await save(); busy=false; render();
+  const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`,
+    d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
+    st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
+  if(failed.length) console.warn('sources failed:', failed);
+  const found=(n
+      ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
+        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
+      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`);
+  setSearchInfo(found + (why?` Skipped: ${why}.`:'')
+    + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:'')
+    + (paid?'':' The live boards are a separate search, and a paid one.'));
+}
+
+/* Phase one, and free.
+
+   The corpus is hundreds of thousands of postings already acquired and already
+   paid for, served to everyone, so reading it costs nothing and answers at
+   once. It used to run here and then fall straight through into a board search
+   in the same click, which meant nobody ever got the chance to look at the free
+   answer and decide the paid one was unnecessary. Now it stops, shows what it
+   has, and offers the paid search as its own action.
+
+   The own-Apify-token path below is untouched: that person spends on their own
+   account through their own key, there is no credit of ours to save them, and
+   a second click in front of it would buy nothing. */
 async function runBoards(trk, where){
   const p=P(); if(!p||busy) return;
   // Portals first, then any specialist registry the track named that is not
@@ -3753,7 +3905,7 @@ async function runBoards(trk, where){
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   const qs=buildBoardQueries(titles,boards,where);
-  busy=true; render();
+  busy=true; PAID_OFFER=null; render();
   try{
     // Pinned to the person's country so Google ranks for where they can
     // actually work. The location term in the query does the real narrowing;
@@ -3763,78 +3915,75 @@ async function runBoards(trk, where){
     const cc=p.profile.country_code||"";
     const live=liveBoard(trk, p.profile, p.track), failed=[];
     if(!ownApify() && cloudNow()){
-      // Our keys: the API sources answer at once; the Google run and the site
-      // scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later.
-      // Each batch is CV-checked the moment it arrives. One source failing
-      // loses only its own results. One charge for the lot.
-      const registries=boards.filter(b=>!PORTALS.includes(b));
-      const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
       // New jobs only: every site is asked for what was posted since this track
       // was last searched (rounded up, plus a day of overlap), 30 days the first time.
       const last=Date.parse((p.searchedAt||{})[trk.id]||'');
       const since_days=isNaN(last) ? 30 : Math.min(30, Math.ceil((Date.now()-last)/864e5)+1);
-      setSearchInfo(since_days<30 ? `searching jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'searching job boards…');
-      /* The shared corpus first, because it is free and instant. These rows
-         were acquired once and are served to everyone, so nothing is metered
-         and nothing is waited on -- they are on screen before the paid sources
-         have started. The boards then fill what the index does not have, which
-         is mostly the last few days: outside Naukri's latest-jd feed the
-         corpus lags about a week, so this does not replace a search, it makes
-         one cheaper to justify.
-         Wrapped because the index is an optimisation and must never be able to
-         stop a search the user has already paid for. */
+      setSearchInfo(since_days<30 ? `reading the index for jobs posted in the last ${since_days} day${since_days===1?'':'s'}…` : 'reading the index…');
       try{
         const ix=await hosted('index_search',{titles:titles.slice(0,4), since_days, limit:60});
         const rows=(ix&&ix.jobs)||[];
-        if(rows.length){
-          await live.add(rows.map(jsearchRow));
-          live.draw(`${rows.length} from the index · searching the boards for the rest…`);
-        }
+        if(rows.length) await live.add(rows.map(jsearchRow));
       }catch(e){ console.warn('index search skipped:', e.message); }
-
-      // fallback: portal queries the server runs on Google if every API source comes back empty.
-      const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
-        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
-      SEARCH_ID=r.searchId||null;
-      failed.push(...(r.sourceErrors||[]));
-      let left=(r.scrapers||[]).length+(r.runId?1:0);
-      const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
-      const land=(label, promise)=>promise
-        .then(jobs=>live.add(jobs||[]))
-        .catch(e=>{ failed.push(`${label}: ${e.message}`); })
-        .finally(()=>{ left--; live.draw(note()); });
-      const work=[live.add((r.jobs||[]).map(jsearchRow))];
-      (r.scrapers||[]).forEach(s=>work.push(land(s.label,
-        apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
-          .then(items=>(items||[]).map(jsearchRow)))));
-      if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
-      live.draw(note());
-      await Promise.all(work);
+      /* The same titles, the same window and the same place, carried rather than
+         recomputed: a second click must search what the first one searched, or
+         the free pass was not a preview of anything. Set BEFORE finishSearch,
+         because that is what redraws the panel the offer appears in. */
+      PAID_OFFER={trackId:trk.id, where, since_days};
+      await finishSearch(trk, live, failed, false);
     } else {
       await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
+      await finishSearch(trk, live, failed, true);
     }
-    const st=live.st, d=st.dropped;
-    const n=addJobs(st.kept.concat(st.unscored));
-    if(SEARCH_ID){
-      hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
-      // Only a search on our keys moves the "new since" point; it's what that window is for.
-      p.searchedAt=Object.assign(p.searchedAt||{}, {[trk.id]:new Date().toISOString()});
-    }
-    SEARCH_ID=null;
-    await save(); busy=false; render();
-    const why=[st.below&&`${st.below} scored below ${MIN_FIT}`, d.listing&&`${d.listing} listing pages`,
-      d.old&&`${d.old} older than ${MAX_AGE_DAYS} days`, d.dupe&&`${d.dupe} already seen`,
-      st.closed&&`${st.closed} closed`].filter(Boolean).join(', ');
-    if(failed.length) console.warn('sources failed:', failed);
-    setSearchInfo((n
-      ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
-        + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
-      : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`) + (why?` Skipped: ${why}.`:'')
-      + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:''));
   }catch(e){
     busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
+    setSearchInfo(e.message);
+  }
+}
+
+/* Phase two, and the one that costs credits: the live boards. Only ever reached
+   from the button runBoards offers, never automatically.
+
+   Our keys: the API sources answer at once; the Google run and the site
+   scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later. Each
+   batch is CV-checked the moment it arrives. One source failing loses only its
+   own results. One charge for the lot. */
+async function runPaidBoards(trk, where, since_days){
+  const p=P(); if(!p||busy) return;
+  const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
+  const titles=(trk.titles||[]);
+  if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
+  busy=true; PAID_OFFER=null; render();
+  try{
+    const cc=p.profile.country_code||"";
+    const live=liveBoard(trk, p.profile, p.track), failed=[];
+    const registries=boards.filter(b=>!PORTALS.includes(b));
+    const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
+    setSearchInfo('searching the live boards…');
+    // fallback: portal queries the server runs on Google if every API source comes back empty.
+    const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+      where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
+      fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+    SEARCH_ID=r.searchId||null;
+    failed.push(...(r.sourceErrors||[]));
+    let left=(r.scrapers||[]).length+(r.runId?1:0);
+    const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
+    const land=(label, promise)=>promise
+      .then(jobs=>live.add(jobs||[]))
+      .catch(e=>{ failed.push(`${label}: ${e.message}`); })
+      .finally(()=>{ left--; live.draw(note()); });
+    const work=[live.add((r.jobs||[]).map(jsearchRow))];
+    (r.scrapers||[]).forEach(s=>work.push(land(s.label,
+      apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
+        .then(items=>(items||[]).map(jsearchRow)))));
+    if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
+    live.draw(note());
+    await Promise.all(work);
+    await finishSearch(trk, live, failed, true);
+  }catch(e){
+    busy=false; SEARCH_ID=null; render();
+    if(e.message==='NEEDAPIFY'){ keyDialog(()=>runPaidBoards(trk,where,since_days)); return; }
     setSearchInfo(e.message);
   }
 }
@@ -3887,6 +4036,59 @@ async function runAts(lines){
 /* ═══ cold target ═══
    A company with no posting. Same two axes, but the action is a DM rather than
    an application — which is where most of these roles actually get filled. */
+/* Beta feedback, with the state the app was in attached.
+
+   A form that only carries prose gets "search was slow" and nobody can tell
+   which search, on what model, with how many rows. So `context` records what is
+   already in memory at the moment they click: the open track, the counts, which
+   model last scored, and whether the last scoring run failed. None of it is
+   typed by the user and none of it is a secret -- no keys, no CV text, no
+   posting bodies, just the shape of the session.
+
+   One credit is not charged and nothing is metered: this is the only write in
+   the app that exists for us rather than for them. */
+function feedbackDialog(){
+  const p=P();
+  const kinds=[['bug','Something broke'],['confusing','I could not tell what to do'],
+               ['idea','It should do this instead'],['other','Something else']];
+  const d=modal(`<div class="eyebrow">Beta feedback</div>
+    <h2 style="margin:6px 0 6px">What happened?</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">Blunt is useful. This sends what the app was doing at the time, so you do not have to describe it.</p>
+    <label class="lab">Kind</label>
+    <select id="fbKind">${kinds.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
+    <label class="lab" style="margin-top:10px">In your words</label>
+    <textarea id="fbMsg" rows="6" placeholder="What you expected, what happened instead."></textarea>
+    <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="fbSend">Send</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
+    <div id="fbErr" class="err" style="display:none;margin-top:10px"></div>`);
+  d.querySelector('#fbSend').onclick=async()=>{
+    const msg=d.querySelector('#fbMsg').value.trim();
+    const err=d.querySelector('#fbErr');
+    if(!msg){ err.textContent='Say something first.'; err.style.display='block'; return; }
+    if(!CLOUD||!USER){ err.textContent='Feedback needs you signed in — it is tied to your account so we can reply.'; err.style.display='block'; return; }
+    const ctx={
+      track: p&&p.track ? String(p.track).slice(0,80) : null,
+      jobs: p&&p.jobs ? p.jobs.length : 0,
+      scored: p&&p.jobs ? p.jobs.filter(isScored).length : 0,
+      model: globalThis.LAST_MODEL||null,
+      theme: THEME, busy: !!busy,
+      agent: String(navigator.userAgent||'').slice(0,160),
+      at: new Date().toISOString(),
+    };
+    const btn=d.querySelector('#fbSend'); btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const { error }=await SB.from('feedback').insert({
+        user_id: USER.id, kind: d.querySelector('#fbKind').value, message: msg.slice(0,4000), context: ctx });
+      if(error) throw new Error(error.message);
+      d.remove(); setInfo('Thanks — that landed.');
+    }catch(e){
+      btn.disabled=false; btn.textContent='Send';
+      err.textContent='Could not send: '+e.message; err.style.display='block';
+    }
+  };
+  d.querySelector('#fbMsg').focus();
+}
+
 function coldDialog(){
   const d=modal(`<div class="eyebrow">Cold target</div>
     <h2 style="margin:6px 0 6px">Add a company with no posting</h2>
@@ -3909,6 +4111,130 @@ function coldDialog(){
     if(!j.company){ alert('Needs a company name.'); return; }
     addJobs([j]); await save(); render(); d.remove(); await autoScore();
   };
+}
+
+/* ═══ reply tracking: a forwarding address, not a mailbox ═══════════════════
+
+   stage='live' is the only record that anybody ever answered an application,
+   and until now it was written by the person remembering to press a button --
+   which is why matcher_outcomes reads 0 replied against 402 jobs.
+
+   The automation does NOT read anyone's mail. The alternative was Gmail's API
+   with gmail.readonly, which is a restricted scope (capped at 100 users until
+   a third-party security assessment) and means holding a credential that can
+   read someone's whole inbox -- in an app whose CV parser runs in this browser
+   specifically so that nothing is uploaded.
+
+   So: one Gmail filter, set once, forwards recruiter mail to a per-profile
+   address. We can read nothing that was not routed to us, and the token is the
+   address AND the capability, so rotating it revokes access with no server
+   state to clean up. src/reply-match.mjs decides; an ATS auto-acknowledgement
+   is deliberately NOT a reply. */
+const INBOX_DOMAIN = 'jobtriage.app';
+/* Off until the receiving end exists, and the panel says so rather than
+   handing out an address that silently swallows mail. Pushes to main
+   auto-deploy, so shipping this on would have published a dead address.
+   Three things flip it, all outside this repo:
+     1. jobtriage.app registered and on Cloudflare (today: NXDOMAIN).
+     2. Email Routing enabled, catch-all -> this Worker. Check for existing MX
+        records FIRST: enabling it repoints the domain's mail.
+     3. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets, so
+        src/index.js can resolve a token to a profile.
+   Then this becomes true, which is a one-line commit. */
+const INBOX_LIVE = false;
+const inboxAddr = t => `r.${t}@${INBOX_DOMAIN}`;
+const newInboxToken = () =>
+  Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
+
+async function replyInboxDialog(){
+  const d=modal(`<div class="eyebrow">Reply tracking</div>
+    <h2 style="margin:6px 0 6px">Let replies mark themselves</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">One Gmail filter, set once. After that a reply moves the job to <b>In conversation</b> on its own, so the pipeline is true without you maintaining it.</p>
+    <div id="riBody" style="color:var(--muted);font-size:12px">Loading…</div>`);
+  const body=d.querySelector('#riBody');
+  if(!CLOUD||!USER){ body.innerHTML='<span class="err">This needs you signed in — the address is tied to your account.</span>'; return; }
+  const pid=PROFILE_IDS[DB.current];
+  if(!pid){ body.innerHTML='<span class="err">Save this profile to your account first, then reopen this.</span>'; return; }
+  /* Honest about not being on yet. Issuing a token here would hand out an
+     address that accepts nothing, and the person would reasonably conclude
+     their Gmail filter was wrong. */
+  if(!INBOX_LIVE){
+    body.innerHTML=`<p style="margin:0 0 10px">Not switched on yet — <b>${esc(INBOX_DOMAIN)}</b> is not receiving mail, so an address created now would quietly drop everything sent to it.</p>
+      <p style="margin:0;font-size:11px">Nothing to do on your side. When it is on, this panel hands you an address and the Gmail filter to point at it, and replies start marking themselves.</p>`;
+    return;
+  }
+
+  let token=null, mail=[];
+  try{
+    const { data, error }=await SB.from('profiles').select('inbox_token').eq('id',pid).single();
+    if(error) throw new Error(error.message);
+    token=data&&data.inbox_token||null;
+    const r=await SB.from('inbound_mail').select('subject,from_addr,decision,applied_to,applied_stage,created_at')
+      .eq('profile_id',pid).order('created_at',{ascending:false}).limit(12);
+    if(!r.error) mail=r.data||[];
+  }catch(e){ body.innerHTML='<span class="err">Could not read your settings: '+esc(e.message)+'</span>'; return; }
+
+  const draw=()=>{
+    /* Gmail will not forward anything until a code it mails to the forwarding
+       address is entered back -- and it mails that code HERE, where it would
+       otherwise be unreadable. Surfaced first, because without it the setup
+       instructions dead-end. */
+    const code=mail.map(m=>m.decision&&m.decision.code).find(Boolean);
+    const rows=mail.filter(m=>m.decision&&m.decision.action!=='show-code');
+    body.innerHTML = !token
+      ? `<p style="margin:0 0 12px">Nothing is forwarded until you turn this on, and you can turn it off again by rotating the address.</p>
+         <div class="btn-row"><button class="btn-go btn-sm" id="riOn">Create my address</button></div>`
+      : `<label class="lab">Your forwarding address</label>
+         <div style="display:flex;gap:6px;align-items:center;margin:4px 0 2px">
+           <input type="text" id="riAddr" readonly value="${esc(inboxAddr(token))}" style="font-family:var(--mono);font-size:12px">
+           <button class="btn-sm" id="riCopy">Copy</button></div>
+         <p style="margin:2px 0 12px;font-size:11px">Secret. Anyone holding it can post into your pipeline — treat it like a password.</p>
+         ${code?`<div class="callout" style="margin-bottom:12px"><b>Gmail wants this code:</b>
+           <span style="font-family:var(--mono)">${esc(code)}</span><br>
+           <span style="font-size:11px">Paste it back into Gmail's forwarding settings to finish.</span></div>`:''}
+         <label class="lab">Set it up in Gmail</label>
+         <ol style="margin:4px 0 12px;padding-left:18px;line-height:1.7">
+           <li>Settings → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → paste the address above. Gmail mails a code here; reopen this panel to read it.</li>
+           <li>Settings → <b>Filters</b> → <b>Create a new filter</b>. In <i>Has the words</i> put the ATS senders you hear from, e.g.<br>
+             <span style="font-family:var(--mono);font-size:11px">from:(greenhouse.io OR lever.co OR ashbyhq.com OR workable.com OR smartrecruiters.com OR recruitee.com)</span></li>
+           <li>Tick <b>Forward it to</b> and pick the address. Add a second filter for any company you applied to directly.</li>
+         </ol>
+         <p style="margin:0 0 12px;font-size:11px">Only mail your filter sends is ever seen. A receipt (&ldquo;thank you for applying&rdquo;) confirms the applied date and changes nothing else — only a message from a person moves a job to <b>In conversation</b>.</p>
+         ${rows.length?`<label class="lab">What it has concluded</label>
+           <div style="margin-top:4px">${rows.map(m=>{
+             const k=m.decision.kind||'?';
+             const tone=m.applied_stage==='live'?'go':m.applied_stage==='closed'?'due':k==='ack'?'awaiting':'';
+             return `<div class="contact-row" style="font-size:11px">
+               <span class="pill2 ${tone}">${esc(k)}</span>
+               <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject||'(no subject)')}</span>
+               <span style="font-family:var(--mono);color:var(--dim)">${esc(m.applied_to||m.decision.how||'—')}</span></div>`;
+           }).join('')}</div>
+           <p style="margin:8px 0 12px;font-size:11px">Got one wrong? Change the stage on the job — nothing here overrides you, and a row only ever moves out of <b>Applied</b>.</p>`
+          :'<p style="margin:0 0 12px;font-size:11px">Nothing has arrived yet.</p>'}
+         <div class="btn-row"><button class="btn-sm" id="riRot">Rotate address</button></div>`;
+
+    const on=d.querySelector('#riOn');
+    if(on) on.onclick=async()=>{ on.disabled=true; await setToken(newInboxToken()); };
+    const cp=d.querySelector('#riCopy');
+    if(cp) cp.onclick=()=>{ const i=d.querySelector('#riAddr'); i.select();
+      (navigator.clipboard?navigator.clipboard.writeText(i.value):Promise.reject()).then(
+        ()=>{ cp.textContent='Copied'; setTimeout(()=>cp.textContent='Copy',1200); },
+        ()=>{ try{document.execCommand('copy');}catch(_){} }); };
+    const rot=d.querySelector('#riRot');
+    if(rot) rot.onclick=async()=>{
+      if(!confirm('Rotate the address? The old one stops working immediately, and you will have to update the Gmail filter.')) return;
+      rot.disabled=true; await setToken(newInboxToken());
+    };
+  };
+
+  async function setToken(t){
+    try{
+      const { error }=await SB.from('profiles').update({inbox_token:t}).eq('id',pid);
+      if(error) throw new Error(error.message);
+      token=t; draw(); setInfo('Address ready — set the Gmail filter next.');
+    }catch(e){ body.innerHTML='<span class="err">Could not save: '+esc(e.message)+'</span>'; }
+  }
+  draw();
 }
 
 /* ═══════════════ ONBOARDING ═══════════════ */
@@ -4709,6 +5035,13 @@ function renderApp(){
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
   const initials=String(prof.name||'?').split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+  /* On our keys the first click reads the free corpus and the paid boards are a
+     second, separate one. With an own Apify token there is no credit of ours to
+     save, so that path keeps its single button and its old wording. */
+  const freeFirst=freeFirstNow();
+  /* Scoped to THIS track. An offer left behind by another track would spend the
+     board-search charge on titles nobody is looking at. */
+  const offer=!!(PAID_OFFER && PAID_OFFER.trackId===trk.id);
   /* Resolved once, here, because the pane and the row both need it and looking
      it up twice would let them disagree. A key that no longer matches anything
      -- the row was trimmed, or an import replaced it -- reads as no selection
@@ -4746,6 +5079,7 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
+    <button class="btn-sm" id="btnFeedback" title="Tell us what broke">Feedback</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -4779,12 +5113,21 @@ function renderApp(){
           value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
         <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
         <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
-          ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
-        ${(trk.boards||[]).length
+          ${busy?'<span class="spin"></span> Searching…':(freeFirst?'Search the free index':'Search the job boards')}</button>
+        ${freeFirst
+          ? `<p class="hint">Hundreds of thousands of postings already collected and shared, read free and answered at once. The live boards are the paid search below.</p>`
+          : (trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
              <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
           : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
+        ${offer
+          ? `<button class="btn-sm" id="btnPaidBoards" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
+               Search live boards — ${BOARD_COST} credits</button>
+             ${(trk.boards||[]).length
+               ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>` : ''}
+             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
+          : ''}
         <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 
         <details class="fold" data-fold="add" ${FOLDS.add?'open':''}>
@@ -4995,9 +5338,26 @@ function renderApp(){
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
+  /* Shown only once inbound mail can actually arrive; see INBOX_LIVE. The
+     panel is reachable before then for anyone who calls it directly, and says
+     plainly that it is off. */
+  if(INBOX_LIVE){
+    const bar=$('#btnFeedback');
+    if(bar && !$('#btnReplies')){
+      const b=document.createElement('button');
+      b.className='btn-sm'; b.id='btnReplies'; b.title='Let replies mark themselves';
+      b.textContent='Replies'; b.onclick=replyInboxDialog;
+      bar.parentNode.insertBefore(b, bar);
+    }
+  }
+  { const b=$('#btnFeedback'); if(b) b.onclick=feedbackDialog; }
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
+  if($('#btnPaidBoards')) $('#btnPaidBoards').onclick=()=>{
+    const o=PAID_OFFER; if(!o) return;
+    runPaidBoards(trk, o.where, o.since_days);
+  };
   const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
   // Three ways in and out, because the drawer is now the only route to any of
   // this: the bar at every width, the thumb bar on a phone, and its own Close.

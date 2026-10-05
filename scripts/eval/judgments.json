@@ -1,0 +1,2487 @@
+{
+  "_note": "Raw Jev judgements, one per case in cases.json, captured live and committed so scripts/tune-flag-thresholds.js runs offline and deterministically. Written by scripts/record-eval.ts --jev. Nothing is thresholded here: the whole point is that the probabilities are kept raw so a threshold sweep costs nothing to re-run. Re-record when the questions in supabase/functions/_shared/judge.ts change, or when the model does -- a calibrated cut point does not survive a model bump, so `model` above is the version any threshold in the repo was tuned against.",
+  "model": "jev-1.13.0",
+  "recorded": "2026-09-28",
+  "judgments": {
+    "loc-onsite-berlin": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.37,
+      "confidence_probabilities": {
+        "medium": 0.58,
+        "low": 0.01,
+        "high": 0.41
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.87
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.1
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.22
+        },
+        {
+          "code": "cred",
+          "probability": 0.17
+        },
+        {
+          "code": "shape",
+          "probability": 0.05
+        },
+        {
+          "code": "loc",
+          "probability": 0.96
+        },
+        {
+          "code": "thin",
+          "probability": 0.05
+        },
+        {
+          "code": "comp",
+          "probability": 0.34
+        },
+        {
+          "code": "open",
+          "probability": 0.53
+        },
+        {
+          "code": "rare",
+          "probability": 0.82
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.66,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.34,
+            "4": 0.66
+          },
+          "confidence": 0.72
+        },
+        "fit_targeting": {
+          "score": 3.79,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.21,
+            "4": 0.79
+          },
+          "confidence": 0.82
+        }
+      },
+      "usage": {
+        "input_tokens": 1233,
+        "output_tokens": 233
+      }
+    },
+    "shape-frontend": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.66,
+      "confidence_probabilities": {
+        "low": 0.02,
+        "medium": 0.77,
+        "high": 0.21
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.02
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.11
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.16
+        },
+        {
+          "code": "cred",
+          "probability": 0.12
+        },
+        {
+          "code": "shape",
+          "probability": 0.97
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.04
+        },
+        {
+          "code": "comp",
+          "probability": 0.32
+        },
+        {
+          "code": "open",
+          "probability": 0.39
+        },
+        {
+          "code": "rare",
+          "probability": 0.04
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 0.04,
+          "probabilities": {
+            "0": 0.96,
+            "1": 0.04,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.97
+        },
+        "fit_targeting": {
+          "score": 0,
+          "probabilities": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 1220,
+        "output_tokens": 233
+      }
+    },
+    "shape-management": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.75,
+      "confidence_probabilities": {
+        "high": 0.15,
+        "low": 0.01,
+        "medium": 0.84
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.05
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.83
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.14
+        },
+        {
+          "code": "cred",
+          "probability": 0.33
+        },
+        {
+          "code": "shape",
+          "probability": 0.97
+        },
+        {
+          "code": "loc",
+          "probability": 0.08
+        },
+        {
+          "code": "thin",
+          "probability": 0.1
+        },
+        {
+          "code": "comp",
+          "probability": 0.36
+        },
+        {
+          "code": "open",
+          "probability": 0.3
+        },
+        {
+          "code": "rare",
+          "probability": 0.4
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 1.19,
+          "probabilities": {
+            "0": 0.05,
+            "1": 0.74,
+            "2": 0.18,
+            "3": 0.02,
+            "4": 0.01
+          },
+          "confidence": 0.75
+        },
+        "fit_targeting": {
+          "score": 0,
+          "probabilities": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 1217,
+        "output_tokens": 233
+      }
+    },
+    "cred-degree": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.77,
+      "confidence_probabilities": {
+        "high": 0.15,
+        "medium": 0.84,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.82
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.19
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.5
+        },
+        {
+          "code": "cred",
+          "probability": 0.97
+        },
+        {
+          "code": "shape",
+          "probability": 0.07
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.37
+        },
+        {
+          "code": "open",
+          "probability": 0.12
+        },
+        {
+          "code": "rare",
+          "probability": 0.67
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.12,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.09,
+            "3": 0.7,
+            "4": 0.21
+          },
+          "confidence": 0.75
+        },
+        "fit_targeting": {
+          "score": 3.21,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.01,
+            "3": 0.77,
+            "4": 0.22
+          },
+          "confidence": 0.8
+        }
+      },
+      "usage": {
+        "input_tokens": 1221,
+        "output_tokens": 233
+      }
+    },
+    "sen-lo-junior": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.76,
+      "confidence_probabilities": {
+        "low": 0.01,
+        "medium": 0.85,
+        "high": 0.14
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.27
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.06
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.98
+        },
+        {
+          "code": "cred",
+          "probability": 0.15
+        },
+        {
+          "code": "shape",
+          "probability": 0.08
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.13
+        },
+        {
+          "code": "comp",
+          "probability": 0.45
+        },
+        {
+          "code": "open",
+          "probability": 0.7
+        },
+        {
+          "code": "rare",
+          "probability": 0.17
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.41,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.58,
+            "4": 0.42
+          },
+          "confidence": 0.65
+        },
+        "fit_targeting": {
+          "score": 1.94,
+          "probabilities": {
+            "0": 0,
+            "1": 0.3,
+            "2": 0.46,
+            "3": 0.24,
+            "4": 0
+          },
+          "confidence": 0.55
+        }
+      },
+      "usage": {
+        "input_tokens": 1217,
+        "output_tokens": 233
+      }
+    },
+    "thin-title-only": {
+      "model": "jev-1.13.0",
+      "confidence": "low",
+      "confidence_score": 0.97,
+      "confidence_probabilities": {
+        "low": 0.98,
+        "medium": 0.02,
+        "high": 0
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.81
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.14
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.52
+        },
+        {
+          "code": "cred",
+          "probability": 0.18
+        },
+        {
+          "code": "shape",
+          "probability": 0.07
+        },
+        {
+          "code": "loc",
+          "probability": 0.24
+        },
+        {
+          "code": "thin",
+          "probability": 0.95
+        },
+        {
+          "code": "comp",
+          "probability": 0.38
+        },
+        {
+          "code": "open",
+          "probability": 0.64
+        },
+        {
+          "code": "rare",
+          "probability": 0.64
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.41,
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.01,
+            "2": 0.01,
+            "3": 0.51,
+            "4": 0.46
+          },
+          "confidence": 0.58
+        },
+        "fit_targeting": {
+          "score": 3.03,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.01,
+            "3": 0.96,
+            "4": 0.03
+          },
+          "confidence": 0.97
+        }
+      },
+      "usage": {
+        "input_tokens": 1177,
+        "output_tokens": 233
+      }
+    },
+    "comp-famous": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.92,
+      "confidence_probabilities": {
+        "medium": 0.95,
+        "low": 0.01,
+        "high": 0.04
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.92
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.17
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.52
+        },
+        {
+          "code": "cred",
+          "probability": 0.14
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.17
+        },
+        {
+          "code": "comp",
+          "probability": 0.9
+        },
+        {
+          "code": "open",
+          "probability": 0.63
+        },
+        {
+          "code": "rare",
+          "probability": 0.86
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.67,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.33,
+            "4": 0.67
+          },
+          "confidence": 0.72
+        },
+        "fit_targeting": {
+          "score": 3.42,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.58,
+            "4": 0.42
+          },
+          "confidence": 0.65
+        }
+      },
+      "usage": {
+        "input_tokens": 1221,
+        "output_tokens": 233
+      }
+    },
+    "open-nontraditional": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.88,
+      "confidence_probabilities": {
+        "medium": 0.91,
+        "low": 0.02,
+        "high": 0.07
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.87
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.14
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.47
+        },
+        {
+          "code": "cred",
+          "probability": 0.06
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.21
+        },
+        {
+          "code": "comp",
+          "probability": 0.3
+        },
+        {
+          "code": "open",
+          "probability": 0.92
+        },
+        {
+          "code": "rare",
+          "probability": 0.76
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 2.6,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.42,
+            "3": 0.56,
+            "4": 0.02
+          },
+          "confidence": 0.64
+        },
+        "fit_targeting": {
+          "score": 3.21,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.79,
+            "4": 0.21
+          },
+          "confidence": 0.82
+        }
+      },
+      "usage": {
+        "input_tokens": 1219,
+        "output_tokens": 233
+      }
+    },
+    "rare-combination": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.94,
+      "confidence_probabilities": {
+        "medium": 0.96,
+        "low": 0.02,
+        "high": 0.02
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.87
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.59
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.17
+        },
+        {
+          "code": "cred",
+          "probability": 0.15
+        },
+        {
+          "code": "shape",
+          "probability": 0.08
+        },
+        {
+          "code": "loc",
+          "probability": 0.1
+        },
+        {
+          "code": "thin",
+          "probability": 0.21
+        },
+        {
+          "code": "comp",
+          "probability": 0.39
+        },
+        {
+          "code": "open",
+          "probability": 0.69
+        },
+        {
+          "code": "rare",
+          "probability": 0.89
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.46,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.04,
+            "3": 0.47,
+            "4": 0.49
+          },
+          "confidence": 0.55
+        },
+        "fit_targeting": {
+          "score": 3.34,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.65,
+            "4": 0.35
+          },
+          "confidence": 0.71
+        }
+      },
+      "usage": {
+        "input_tokens": 1226,
+        "output_tokens": 233
+      }
+    },
+    "sen-hi-principal": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.86,
+      "confidence_probabilities": {
+        "high": 0.08,
+        "medium": 0.91,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.07
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.94
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.04
+        },
+        {
+          "code": "cred",
+          "probability": 0.29
+        },
+        {
+          "code": "shape",
+          "probability": 0.41
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.08
+        },
+        {
+          "code": "comp",
+          "probability": 0.36
+        },
+        {
+          "code": "open",
+          "probability": 0.25
+        },
+        {
+          "code": "rare",
+          "probability": 0.17
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 1.04,
+          "probabilities": {
+            "0": 0.03,
+            "1": 0.9,
+            "2": 0.07,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.91
+        },
+        "fit_targeting": {
+          "score": 1.26,
+          "probabilities": {
+            "0": 0.06,
+            "1": 0.7,
+            "2": 0.16,
+            "3": 0.08,
+            "4": 0
+          },
+          "confidence": 0.69
+        }
+      },
+      "usage": {
+        "input_tokens": 1219,
+        "output_tokens": 233
+      }
+    },
+    "loc-remote-us-only": {
+      "model": "jev-1.13.0",
+      "confidence": "high",
+      "confidence_score": 0.25,
+      "confidence_probabilities": {
+        "high": 0.5,
+        "low": 0.01,
+        "medium": 0.49
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.73
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.17
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.22
+        },
+        {
+          "code": "cred",
+          "probability": 0.67
+        },
+        {
+          "code": "shape",
+          "probability": 0.07
+        },
+        {
+          "code": "loc",
+          "probability": 0.94
+        },
+        {
+          "code": "thin",
+          "probability": 0.05
+        },
+        {
+          "code": "comp",
+          "probability": 0.34
+        },
+        {
+          "code": "open",
+          "probability": 0.52
+        },
+        {
+          "code": "rare",
+          "probability": 0.78
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 2.88,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.25,
+            "3": 0.62,
+            "4": 0.13
+          },
+          "confidence": 0.69
+        },
+        "fit_targeting": {
+          "score": 3.46,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.53,
+            "4": 0.47
+          },
+          "confidence": 0.61
+        }
+      },
+      "usage": {
+        "input_tokens": 1252,
+        "output_tokens": 233
+      }
+    },
+    "loc-hybrid-london": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.34,
+      "confidence_probabilities": {
+        "medium": 0.56,
+        "high": 0.43,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.88
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.13
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.47
+        },
+        {
+          "code": "cred",
+          "probability": 0.22
+        },
+        {
+          "code": "shape",
+          "probability": 0.05
+        },
+        {
+          "code": "loc",
+          "probability": 0.9
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.35
+        },
+        {
+          "code": "open",
+          "probability": 0.57
+        },
+        {
+          "code": "rare",
+          "probability": 0.79
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.46,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.01,
+            "3": 0.52,
+            "4": 0.47
+          },
+          "confidence": 0.61
+        },
+        "fit_targeting": {
+          "score": 3.16,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.83,
+            "4": 0.17
+          },
+          "confidence": 0.86
+        }
+      },
+      "usage": {
+        "input_tokens": 1247,
+        "output_tokens": 233
+      }
+    },
+    "cred-clearance": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.38,
+      "confidence_probabilities": {
+        "high": 0.41,
+        "low": 0.01,
+        "medium": 0.58
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.74
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.12
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.6
+        },
+        {
+          "code": "cred",
+          "probability": 0.96
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.08
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.3
+        },
+        {
+          "code": "open",
+          "probability": 0.36
+        },
+        {
+          "code": "rare",
+          "probability": 0.72
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.27,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.05,
+            "3": 0.63,
+            "4": 0.32
+          },
+          "confidence": 0.69
+        },
+        "fit_targeting": {
+          "score": 3.21,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.01,
+            "3": 0.77,
+            "4": 0.22
+          },
+          "confidence": 0.8
+        }
+      },
+      "usage": {
+        "input_tokens": 1232,
+        "output_tokens": 233
+      }
+    },
+    "cred-cissp": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.62,
+      "confidence_probabilities": {
+        "low": 0.01,
+        "high": 0.25,
+        "medium": 0.74
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.8
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.18
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.43
+        },
+        {
+          "code": "cred",
+          "probability": 0.93
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.35
+        },
+        {
+          "code": "open",
+          "probability": 0.54
+        },
+        {
+          "code": "rare",
+          "probability": 0.81
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 2.7,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.39,
+            "3": 0.52,
+            "4": 0.09
+          },
+          "confidence": 0.6
+        },
+        "fit_targeting": {
+          "score": 3.11,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.02,
+            "3": 0.84,
+            "4": 0.14
+          },
+          "confidence": 0.85
+        }
+      },
+      "usage": {
+        "input_tokens": 1235,
+        "output_tokens": 233
+      }
+    },
+    "sen-hi-director": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.61,
+      "confidence_probabilities": {
+        "medium": 0.74,
+        "low": 0.01,
+        "high": 0.25
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.03
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.96
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.05
+        },
+        {
+          "code": "cred",
+          "probability": 0.2
+        },
+        {
+          "code": "shape",
+          "probability": 0.97
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.38
+        },
+        {
+          "code": "open",
+          "probability": 0.3
+        },
+        {
+          "code": "rare",
+          "probability": 0.29
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 0.97,
+          "probabilities": {
+            "0": 0.1,
+            "1": 0.84,
+            "2": 0.06,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.87
+        },
+        "fit_targeting": {
+          "score": 0,
+          "probabilities": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 1231,
+        "output_tokens": 233
+      }
+    },
+    "sen-hi-staff-architect": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.6,
+      "confidence_probabilities": {
+        "medium": 0.73,
+        "low": 0.01,
+        "high": 0.26
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.11
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.93
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.04
+        },
+        {
+          "code": "cred",
+          "probability": 0.24
+        },
+        {
+          "code": "shape",
+          "probability": 0.33
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.07
+        },
+        {
+          "code": "comp",
+          "probability": 0.44
+        },
+        {
+          "code": "open",
+          "probability": 0.32
+        },
+        {
+          "code": "rare",
+          "probability": 0.39
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 1.32,
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.66,
+            "2": 0.33,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.71
+        },
+        "fit_targeting": {
+          "score": 1.03,
+          "probabilities": {
+            "0": 0.05,
+            "1": 0.88,
+            "2": 0.06,
+            "3": 0.01,
+            "4": 0
+          },
+          "confidence": 0.9
+        }
+      },
+      "usage": {
+        "input_tokens": 1239,
+        "output_tokens": 233
+      }
+    },
+    "sen-lo-grad": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.81,
+      "confidence_probabilities": {
+        "low": 0.01,
+        "high": 0.12,
+        "medium": 0.87
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.41
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.07
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.96
+        },
+        {
+          "code": "cred",
+          "probability": 0.26
+        },
+        {
+          "code": "shape",
+          "probability": 0.08
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.17
+        },
+        {
+          "code": "comp",
+          "probability": 0.45
+        },
+        {
+          "code": "open",
+          "probability": 0.79
+        },
+        {
+          "code": "rare",
+          "probability": 0.23
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.39,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.61,
+            "4": 0.39
+          },
+          "confidence": 0.67
+        },
+        "fit_targeting": {
+          "score": 2.18,
+          "probabilities": {
+            "0": 0,
+            "1": 0.16,
+            "2": 0.5,
+            "3": 0.34,
+            "4": 0
+          },
+          "confidence": 0.57
+        }
+      },
+      "usage": {
+        "input_tokens": 1224,
+        "output_tokens": 233
+      }
+    },
+    "sen-lo-mid": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.71,
+      "confidence_probabilities": {
+        "medium": 0.81,
+        "low": 0.01,
+        "high": 0.18
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.87
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.08
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.92
+        },
+        {
+          "code": "cred",
+          "probability": 0.11
+        },
+        {
+          "code": "shape",
+          "probability": 0.05
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.07
+        },
+        {
+          "code": "comp",
+          "probability": 0.3
+        },
+        {
+          "code": "open",
+          "probability": 0.71
+        },
+        {
+          "code": "rare",
+          "probability": 0.42
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.25,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.01,
+            "3": 0.72,
+            "4": 0.27
+          },
+          "confidence": 0.77
+        },
+        "fit_targeting": {
+          "score": 2.98,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.06,
+            "3": 0.9,
+            "4": 0.04
+          },
+          "confidence": 0.92
+        }
+      },
+      "usage": {
+        "input_tokens": 1228,
+        "output_tokens": 233
+      }
+    },
+    "shape-ml-research": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.69,
+      "confidence_probabilities": {
+        "high": 0.2,
+        "low": 0.01,
+        "medium": 0.79
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.03
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.19
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.35
+        },
+        {
+          "code": "cred",
+          "probability": 0.32
+        },
+        {
+          "code": "shape",
+          "probability": 0.97
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.05
+        },
+        {
+          "code": "comp",
+          "probability": 0.37
+        },
+        {
+          "code": "open",
+          "probability": 0.23
+        },
+        {
+          "code": "rare",
+          "probability": 0.08
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 0.17,
+          "probabilities": {
+            "0": 0.84,
+            "1": 0.16,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.86
+        },
+        "fit_targeting": {
+          "score": 0,
+          "probabilities": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 1228,
+        "output_tokens": 233
+      }
+    },
+    "shape-data-scientist": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.63,
+      "confidence_probabilities": {
+        "medium": 0.75,
+        "low": 0.01,
+        "high": 0.24
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.03
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.17
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.46
+        },
+        {
+          "code": "cred",
+          "probability": 0.9
+        },
+        {
+          "code": "shape",
+          "probability": 0.96
+        },
+        {
+          "code": "loc",
+          "probability": 0.08
+        },
+        {
+          "code": "thin",
+          "probability": 0.04
+        },
+        {
+          "code": "comp",
+          "probability": 0.34
+        },
+        {
+          "code": "open",
+          "probability": 0.15
+        },
+        {
+          "code": "rare",
+          "probability": 0.06
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 0.23,
+          "probabilities": {
+            "0": 0.77,
+            "1": 0.23,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.81
+        },
+        "fit_targeting": {
+          "score": 0,
+          "probabilities": {
+            "0": 1,
+            "1": 0,
+            "2": 0,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 1
+        }
+      },
+      "usage": {
+        "input_tokens": 1227,
+        "output_tokens": 233
+      }
+    },
+    "thin-culture-copy": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.91,
+      "confidence_probabilities": {
+        "medium": 0.95,
+        "low": 0.03,
+        "high": 0.02
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.58
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.13
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.17
+        },
+        {
+          "code": "cred",
+          "probability": 0.16
+        },
+        {
+          "code": "shape",
+          "probability": 0.09
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.85
+        },
+        {
+          "code": "comp",
+          "probability": 0.35
+        },
+        {
+          "code": "open",
+          "probability": 0.66
+        },
+        {
+          "code": "rare",
+          "probability": 0.56
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 2.57,
+          "probabilities": {
+            "0": 0.04,
+            "1": 0.07,
+            "2": 0.3,
+            "3": 0.45,
+            "4": 0.14
+          },
+          "confidence": 0.41
+        },
+        "fit_targeting": {
+          "score": 2.43,
+          "probabilities": {
+            "0": 0,
+            "1": 0.04,
+            "2": 0.51,
+            "3": 0.42,
+            "4": 0.03
+          },
+          "confidence": 0.58
+        }
+      },
+      "usage": {
+        "input_tokens": 1250,
+        "output_tokens": 233
+      }
+    },
+    "thin-one-line-stack": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.91,
+      "confidence_probabilities": {
+        "low": 0.02,
+        "medium": 0.94,
+        "high": 0.04
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.93
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.07
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.12
+        },
+        {
+          "code": "cred",
+          "probability": 0.14
+        },
+        {
+          "code": "shape",
+          "probability": 0.05
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.21
+        },
+        {
+          "code": "comp",
+          "probability": 0.33
+        },
+        {
+          "code": "open",
+          "probability": 0.7
+        },
+        {
+          "code": "rare",
+          "probability": 0.82
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.79,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.21,
+            "4": 0.79
+          },
+          "confidence": 0.83
+        },
+        "fit_targeting": {
+          "score": 3.68,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.31,
+            "4": 0.69
+          },
+          "confidence": 0.74
+        }
+      },
+      "usage": {
+        "input_tokens": 1202,
+        "output_tokens": 233
+      }
+    },
+    "comp-bigtech": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.64,
+      "confidence_probabilities": {
+        "low": 0,
+        "medium": 0.77,
+        "high": 0.23
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.89
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.17
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.12
+        },
+        {
+          "code": "cred",
+          "probability": 0.17
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.1
+        },
+        {
+          "code": "thin",
+          "probability": 0.08
+        },
+        {
+          "code": "comp",
+          "probability": 0.82
+        },
+        {
+          "code": "open",
+          "probability": 0.57
+        },
+        {
+          "code": "rare",
+          "probability": 0.84
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.18,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.06,
+            "3": 0.7,
+            "4": 0.24
+          },
+          "confidence": 0.74
+        },
+        "fit_targeting": {
+          "score": 3.61,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.39,
+            "4": 0.61
+          },
+          "confidence": 0.67
+        }
+      },
+      "usage": {
+        "input_tokens": 1239,
+        "output_tokens": 233
+      }
+    },
+    "comp-scaleup-brand": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.83,
+      "confidence_probabilities": {
+        "high": 0.11,
+        "medium": 0.89,
+        "low": 0
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.9
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.24
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.5
+        },
+        {
+          "code": "cred",
+          "probability": 0.13
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.15
+        },
+        {
+          "code": "comp",
+          "probability": 0.87
+        },
+        {
+          "code": "open",
+          "probability": 0.66
+        },
+        {
+          "code": "rare",
+          "probability": 0.8
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.48,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.51,
+            "4": 0.49
+          },
+          "confidence": 0.59
+        },
+        "fit_targeting": {
+          "score": 3.41,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.59,
+            "4": 0.41
+          },
+          "confidence": 0.65
+        }
+      },
+      "usage": {
+        "input_tokens": 1240,
+        "output_tokens": 233
+      }
+    },
+    "open-no-degree": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.6,
+      "confidence_probabilities": {
+        "medium": 0.73,
+        "high": 0.26,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.94
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.12
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.6
+        },
+        {
+          "code": "cred",
+          "probability": 0.07
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.08
+        },
+        {
+          "code": "comp",
+          "probability": 0.33
+        },
+        {
+          "code": "open",
+          "probability": 0.93
+        },
+        {
+          "code": "rare",
+          "probability": 0.81
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.56,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.43,
+            "4": 0.5700000000000001
+          },
+          "confidence": 0.63
+        },
+        "fit_targeting": {
+          "score": 3.2,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.8,
+            "4": 0.2
+          },
+          "confidence": 0.83
+        }
+      },
+      "usage": {
+        "input_tokens": 1244,
+        "output_tokens": 233
+      }
+    },
+    "open-blind-process": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.77,
+      "confidence_probabilities": {
+        "low": 0.01,
+        "medium": 0.85,
+        "high": 0.14
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.75
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.17
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.48
+        },
+        {
+          "code": "cred",
+          "probability": 0.11
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.14
+        },
+        {
+          "code": "comp",
+          "probability": 0.34
+        },
+        {
+          "code": "open",
+          "probability": 0.9
+        },
+        {
+          "code": "rare",
+          "probability": 0.57
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 1.89,
+          "probabilities": {
+            "0": 0,
+            "1": 0.16,
+            "2": 0.79,
+            "3": 0.05,
+            "4": 0
+          },
+          "confidence": 0.82
+        },
+        "fit_targeting": {
+          "score": 3.07,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.02,
+            "3": 0.9,
+            "4": 0.08
+          },
+          "confidence": 0.92
+        }
+      },
+      "usage": {
+        "input_tokens": 1243,
+        "output_tokens": 233
+      }
+    },
+    "open-pedigree-only": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.33,
+      "confidence_probabilities": {
+        "low": 0.01,
+        "high": 0.44,
+        "medium": 0.55
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.7
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.41
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.15
+        },
+        {
+          "code": "cred",
+          "probability": 0.96
+        },
+        {
+          "code": "shape",
+          "probability": 0.1
+        },
+        {
+          "code": "loc",
+          "probability": 0.05
+        },
+        {
+          "code": "thin",
+          "probability": 0.05
+        },
+        {
+          "code": "comp",
+          "probability": 0.56
+        },
+        {
+          "code": "open",
+          "probability": 0.08
+        },
+        {
+          "code": "rare",
+          "probability": 0.48
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.08,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.08,
+            "3": 0.76,
+            "4": 0.16
+          },
+          "confidence": 0.8
+        },
+        "fit_targeting": {
+          "score": 3.28,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.02,
+            "3": 0.67,
+            "4": 0.31
+          },
+          "confidence": 0.72
+        }
+      },
+      "usage": {
+        "input_tokens": 1232,
+        "output_tokens": 233
+      }
+    },
+    "rare-payments-platform": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.68,
+      "confidence_probabilities": {
+        "low": 0,
+        "medium": 0.79,
+        "high": 0.21
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.9
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.14
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.14
+        },
+        {
+          "code": "cred",
+          "probability": 0.13
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.05
+        },
+        {
+          "code": "comp",
+          "probability": 0.3
+        },
+        {
+          "code": "open",
+          "probability": 0.71
+        },
+        {
+          "code": "rare",
+          "probability": 0.92
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.37,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.1,
+            "3": 0.44,
+            "4": 0.46
+          },
+          "confidence": 0.47
+        },
+        "fit_targeting": {
+          "score": 3.56,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.43,
+            "4": 0.5700000000000001
+          },
+          "confidence": 0.64
+        }
+      },
+      "usage": {
+        "input_tokens": 1246,
+        "output_tokens": 233
+      }
+    },
+    "rare-plain-crud": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.63,
+      "confidence_probabilities": {
+        "high": 0.24,
+        "medium": 0.75,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.59
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.11
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.65
+        },
+        {
+          "code": "cred",
+          "probability": 0.11
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.06
+        },
+        {
+          "code": "comp",
+          "probability": 0.28
+        },
+        {
+          "code": "open",
+          "probability": 0.69
+        },
+        {
+          "code": "rare",
+          "probability": 0.17
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.05,
+            "3": 0.89,
+            "4": 0.06
+          },
+          "confidence": 0.91
+        },
+        "fit_targeting": {
+          "score": 2.28,
+          "probabilities": {
+            "0": 0,
+            "1": 0.09,
+            "2": 0.55,
+            "3": 0.36,
+            "4": 0
+          },
+          "confidence": 0.62
+        }
+      },
+      "usage": {
+        "input_tokens": 1228,
+        "output_tokens": 233
+      }
+    },
+    "fit-strong-remote-india": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.36,
+      "confidence_probabilities": {
+        "low": 0,
+        "high": 0.42,
+        "medium": 0.58
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.91
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.15
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.13
+        },
+        {
+          "code": "cred",
+          "probability": 0.12
+        },
+        {
+          "code": "shape",
+          "probability": 0.06
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.04
+        },
+        {
+          "code": "comp",
+          "probability": 0.34
+        },
+        {
+          "code": "open",
+          "probability": 0.71
+        },
+        {
+          "code": "rare",
+          "probability": 0.87
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 3.12,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0.11,
+            "3": 0.66,
+            "4": 0.23
+          },
+          "confidence": 0.71
+        },
+        "fit_targeting": {
+          "score": 3.62,
+          "probabilities": {
+            "0": 0,
+            "1": 0,
+            "2": 0,
+            "3": 0.38,
+            "4": 0.62
+          },
+          "confidence": 0.68
+        }
+      },
+      "usage": {
+        "input_tokens": 1237,
+        "output_tokens": 233
+      }
+    },
+    "fit-k8s-gap": {
+      "model": "jev-1.13.0",
+      "confidence": "medium",
+      "confidence_score": 0.64,
+      "confidence_probabilities": {
+        "medium": 0.76,
+        "high": 0.23,
+        "low": 0.01
+      },
+      "flags": [
+        {
+          "code": "fit",
+          "probability": 0.19
+        },
+        {
+          "code": "sen_hi",
+          "probability": 0.24
+        },
+        {
+          "code": "sen_lo",
+          "probability": 0.2
+        },
+        {
+          "code": "cred",
+          "probability": 0.34
+        },
+        {
+          "code": "shape",
+          "probability": 0.15
+        },
+        {
+          "code": "loc",
+          "probability": 0.04
+        },
+        {
+          "code": "thin",
+          "probability": 0.04
+        },
+        {
+          "code": "comp",
+          "probability": 0.33
+        },
+        {
+          "code": "open",
+          "probability": 0.3
+        },
+        {
+          "code": "rare",
+          "probability": 0.21
+        }
+      ],
+      "scores": {
+        "fit_capability": {
+          "score": 1.02,
+          "probabilities": {
+            "0": 0.01,
+            "1": 0.96,
+            "2": 0.03,
+            "3": 0,
+            "4": 0
+          },
+          "confidence": 0.96
+        },
+        "fit_targeting": {
+          "score": 2.08,
+          "probabilities": {
+            "0": 0,
+            "1": 0.29,
+            "2": 0.36,
+            "3": 0.34,
+            "4": 0.01
+          },
+          "confidence": 0.45
+        }
+      },
+      "usage": {
+        "input_tokens": 1232,
+        "output_tokens": 233
+      }
+    }
+  }
+}

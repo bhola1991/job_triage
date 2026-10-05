@@ -1,11 +1,17 @@
-# Where this stands — 2026-10-04
+# Where this stands — 2026-10-05
 
 Six days in which the corpus stopped being a thing that sat in a table and
 became the cheapest source in the product, and in which four bugs were found by
 looking at the ledger rather than at the code. Every number below was measured;
 where something is unmeasured it says so.
 
-All three layers verified against `cf3b267` rather than assumed.
+Then seven commits were merged off a branch nobody had looked at, and the
+discovery that matters most in this edition is in **Work happening in
+parallel** below: there are SIX worktrees on this repo, and two of them already
+do the things the previous edition listed as blocking.
+
+All three layers are verified against `main` as it stands, by sha256 and not by
+assumption — which is the one thing this document exists to do.
 
 Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.dev/>
 
@@ -15,18 +21,18 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 | Layer | Version | How it was checked |
 | --- | --- | --- |
-| Frontend | **`cf3b267`** | live page fetched and sha256-compared: `bf3ba60e10f8` both sides. The Worker took ~30s from the push. |
-| Edge function `api` | **v37** | all three files fetched back and compared — `index.ts` `b7ddded6…`, `judge.ts` `679d9b4d…`, `api-clients.ts` `e7d47522…`. All match. |
+| Frontend | **`9384809`** | live page fetched and sha256-compared: `a1d00154fd53` both sides. (`cf3b267` verified the same way earlier at `bf3ba60e10f8`; the Worker takes ~30s from a push.) |
+| Edge function `api` | **v38** | deployed 2026-10-04 and all three files compared back — `index.ts` `7abbfda9…`, `judge.ts` `679d9b4d…`, `api-clients.ts` `e7d47522…`. All match. This closed a real drift: v37 was behind by `af74459`, which is behaviour and not a comment. |
 | Database | `ai_model` added to `public.jobs`; `search_index` carries the tier preference | columns and function body read back from the live catalogue |
-| `main` | `cf3b267` | pushed, clean, `origin/main..main` empty |
+| `main` | **`9384809`** | pushed, clean, `origin/main..main` empty |
 | Supabase plan | **Pro** (`tier_pro`) | bought 2026-10-03. 8 GB against the 500 MB the free tier gave. |
 
 ### The corpus, as it actually sits
 
 | | 2026-09-28 | now |
 | --- | --- | --- |
-| `job_index` | 347,092 | **364,345** |
-| of which `full` (judgeable) | 8,082 | **22,962** |
+| `job_index` | 347,092 | **22,962** — every row judgeable |
+| of which `full` | 8,082 | **22,962** (thin: 341,383 -> **0**) |
 | distinct sources | ~40 | **309** |
 | ATS boards crawled | 44 | **324** |
 | `job_checks` | 429,018 | 429,018 (76,857 closed) |
@@ -44,6 +50,7 @@ and that distinction now has a settled answer behind it (below).
 node scripts/selfcheck-rows.js      # row round-trip, the zero-score trap, extras
 node scripts/selfcheck-sync.js      # migrate/save/load, two-tab cases, tombstones
 node scripts/selfcheck-boards.js    # board pipeline, and that a search is judged in one pass
+node scripts/selfcheck-reply.js     # inbound-mail decisions; offline, no model, no network
 node scripts/eval-matcher.js        # the gate, now with Jev measured beside DeepSeek
 node scripts/pipeline-map.js --check
 node scripts/selfcheck-tokens.js
@@ -57,15 +64,181 @@ is there because piping a check into `tail` hid a crash twice in one day: the
 pipeline-map spec was committed with a syntax error because `node … | tail -1`
 reports the pipe's success, not node's. Check `$?`, not the last line.
 
+Seven commits came off `pipeline-fixes` on 2026-10-04 and are on `main`:
+the `refund_free` revoke record (production was already fixed — verified by
+reading the ACL), the Apify reaper and its service-role auth, **two consecutive
+absences before a posting closes**, the harvest loop that reads `job_index`
+rather than files, the service-role narrowing, `BLOB_SUNSET_DAYS = 14`, and the
+free-pass split so corpus rows land before 25 credits are committed.
+
+Resolving those turned up two things worth keeping. `FLASH_INTAKE_CUT` arrived
+undefined because it belongs to a commit I had duplicated, and its whole reason
+— that the search path scores on flash and the Score button on pro, so one
+constant could not be a law over both — had been **removed** by moving both
+paths to flash; `MIN_FIT` is correct again. And the map described the old
+`runBoards` and passed anyway, for the third time in a day: `pipeline-map`
+verifies anchors and coverage and **never the arrows**.
+
 New tools, none of them gates:
 
 | script | what it answers |
 | --- | --- |
-| `scripts/record-jev.ts` | records Jev's answers for the eval cases (Deno; needs `TYPESAFE_API_KEY`) |
+| `scripts/record-eval.ts` | records what `scripts/eval/` commits — `--deepseek` fills `recorded`, `--jev` writes `judgments.json`. Live, needs keys. |
+| `scripts/tune-flag-thresholds.js` | `FLAG_P` sweep per code, offline against `judgments.json`. A measurement, not a gate. |
 | `scripts/record-deepseek.js` | scores the eval cases on a named tier and measures it (`DEEPSEEK_API_KEY`, from the **shell**, not `.env.local`) |
 | `scripts/compare-tiers.js` | top-K overlap between two models' rankings, from `ai_model` |
 | `scripts/index/probe-ats.js` | guesses a company's ATS board from its name, per region |
 | `scripts/check-jsearch-overlap.js` | whether a source returns postings we already hold |
+
+---
+
+## Reply detection: the channel is chosen, nothing is deployed
+
+`matcher_outcomes` reports **8 applied, 0 replied of 402**. That zero is not a
+product failure, it is a measurement failure: `stage = 'live'` is the only
+record in this project that a human ever answered an application, and it is
+written by the person remembering to press a button. Until it has data, every
+quality claim about the matcher is agreement between models rather than
+evidence that anybody got a job.
+
+**There is no `replied` column.** `replied` is a count in the
+`matcher_outcomes` view, derived from `stage = 'live'`. Anyone going looking
+for a column to automate will not find one — the automation writes
+`jobs.stage`.
+
+### Why forwarding and not a mailbox
+
+The obvious build is Gmail's API with `gmail.readonly`, a cron job, and a
+stored refresh token. It was rejected on two counts, the second of which is the
+real one:
+
+- Google classes `gmail.readonly` as a **restricted** scope. Unverified apps
+  are capped at 100 test users, and getting past that needs a third-party
+  security assessment. A 20–30 person beta survives the cap; a launch does not,
+  and the assessment is months and real money.
+- It means holding a credential that can read a person's entire mail — in a
+  repo whose CV parser runs in the browser specifically so that nothing is
+  uploaded. The posture is the product.
+
+So the user forwards instead. One Gmail filter, set once, sends recruiter mail
+to a per-profile address `r.<inbox_token>@<domain>`. We hold no credential and
+can read nothing that was not routed to us; the token is both the routing key
+and the capability, so it is secret, random, and revocable by rotation.
+Cloudflare Email Routing already fronts this app, so the receiving end is a
+second export on the Worker that is already deployed, not new infrastructure.
+
+After that one setup step nothing is manual, which was the point: new
+information arrives through an automation channel.
+
+### An ATS acknowledgement is not a reply
+
+This is the correctness decision the whole design turns on. "Thank you for
+applying to Acme" from `no-reply@greenhouse.io` is a receipt a machine sent
+itself. Counting it as `live` would fill the ground truth with noise in exactly
+the way that makes it worthless. Three outcomes, three different writes:
+
+| classified | stage |
+| --- | --- |
+| `ack` — a receipt | **unchanged**; confirms `date_applied` |
+| `reject` — a no | `closed` |
+| `human` — a person wants something | `live` — the only thing that counts as a reply |
+
+`human` is deliberately narrow. Any bulk-mail header (`List-Unsubscribe`,
+`List-Id`, `Auto-Submitted`, `Precedence: bulk`) or a do-not-reply sender box
+**vetoes** it outright, however much the text reads like a person. A missed
+reply costs the user one click; a false one silently corrupts the only evidence
+this project has.
+
+### What is built, and what is not
+
+`src/reply-match.mjs` — the whole decision, pure, no network and no model. One
+copy, imported by both the Worker and the check. It matches a mail to a job by
+thread (`In-Reply-To`, strongest, hooked but not yet fed), then sender domain
+against the posting host or company, then by looking for a company name **we
+already hold** inside the subject and body — containment rather than
+extraction, because a parser that pulls a company *out* of "Thank you for
+applying to X" can invent an X that matches the wrong row. Two rows that
+normalise alike, or no confident match, return `store-unmatched` and write
+nothing.
+
+`scripts/selfcheck-reply.js` — 35 assertions, offline, in the §8 harness. The
+fixtures are mostly near-misses on purpose. It was mutation-tested rather than
+trusted: removing the bulk-header veto, and resolving an ambiguous company to
+the first match, each produce a **false `live`**, and each is caught.
+
+`schema.sql` carries `profiles.inbox_token`, `public.inbound_mail` (owner-read,
+service-role-write, so a person can contest what the automation concluded but
+cannot forge a reply into their own ground truth) and the `jobs.sent_message_id`
+threading hook. The whole file still applies cleanly to real Postgres — checked
+on PGlite, PG 18.3.
+
+### Built end to end, and shipped dark
+
+Domain chosen: **`jobtriage.app`**, addresses `r.<token>@jobtriage.app`.
+
+- `src/index.js` gained the `email()` export. Mail to an address that is *not*
+  a live token is **forwarded, never stored** — Email Routing has no wildcard
+  rule, so the catch-all means this Worker sees every address on the domain and
+  has to hand back what is not ours. A token nobody holds is dropped. A write
+  that fails is logged and swallowed rather than bounced, because `setReject()`
+  tells the *sender* their mail was refused, which is a lie when the fault is
+  ours. Stage patches are guarded on the stage they were decided against, so a
+  redelivery cannot walk a row forward twice.
+- `src/mime-lite.mjs` — enough MIME to classify a mail, hand-written. The
+  normal answer is `postal-mime` from npm, but this repo has no root
+  `package.json` on purpose, and adding one so a Worker can read a Subject line
+  is the wrong trade. Handles folded headers, one level of multipart, base64
+  and quoted-printable; does not handle RFC 2047 subjects or nested
+  multiparts. Degrading is cheap: the classifier reads the subject, which
+  arrives from `message.headers` without any of it, and a body that fails to
+  decode comes back `unclear` and writes nothing.
+- Gmail's forwarding handshake is handled. Gmail will not forward until a code
+  it mails to the *forwarding address* is entered back — and it mails that code
+  here, where the person cannot read it, so without this the setup instructions
+  dead-end. Recognised narrowly, by sender **and** shape; a spoofed one from
+  any other domain is refused.
+- The app gained a Replies panel: issue an address, copy it, the Gmail filter
+  to paste, the confirmation code when it arrives, a log of what the automation
+  concluded, and rotation. The log exists because `inbound_mail` is owner-read
+  — you can see and contest every call it made.
+- The migration **is applied to production**, and RLS was verified live in a
+  rolled-back transaction: the owner sees their own rows, another user sees
+  **0**, and there is **no insert policy at all**, so a user cannot forge a
+  reply into their own ground truth. `profiles` is own-rows on all four verbs,
+  so a token cannot leak sideways.
+- `selfcheck-reply.js` is now 51 assertions and covers MIME and a raw email
+  straight through to a decision. Mutation-tested again: removing header
+  unfolding, decoding quoted-printable per character instead of per byte, and
+  dropping the sender check on the Gmail code are each caught.
+- `selfcheck-rows.js` pins one invariant that would have broken this quietly:
+  `saveRows()` upserts a whole profile row, PostgREST only SETs the columns a
+  body names, so `inbox_token` survives exactly as long as `profileRow()` keeps
+  not naming it. If it ever does, every profile save nulls the address and
+  inbound mail starts landing on an unknown token — which looks like
+  "forwarding stopped working" and has nothing to do with forwarding.
+
+### The one thing blocking it: the domain does not exist
+
+`jobtriage.app` is **NXDOMAIN** — checked against both Cloudflare's and
+Google's resolvers, with the `.app` TLD authority answering. It is not
+registered. The app is served from `jobtriage.reachbhola.workers.dev`.
+
+So the feature is committed **off**. `INBOX_LIVE = false` in `index.html`, and
+the panel says plainly that the domain is not receiving mail rather than
+issuing an address that would silently swallow everything sent to it. The
+Replies button is not even created while it is off. This matters because
+**pushes to `main` auto-deploy** — shipping it on would have published a dead
+address to real beta users.
+
+Three steps flip it, all outside this repo, in order:
+
+1. Register `jobtriage.app` and put it on Cloudflare.
+2. Enable Email Routing, catch-all → the `jobtriage` Worker. **Check for
+   existing MX records first** — enabling it repoints the whole domain's mail.
+3. `wrangler secret put SUPABASE_URL` and `wrangler secret put
+   SUPABASE_SERVICE_ROLE_KEY`, so the Worker can resolve a token to a profile.
+
+Then `INBOX_LIVE = true`, which is a one-line commit.
 
 ---
 
@@ -126,7 +299,10 @@ and not a matcher result — the jobs table has 164 rows at 50+, 94 at 65+, 41 a
 
 ## The thin rows: a settled answer
 
-340,907 of the corpus rows are `thin` — title, company, city and an experience
+**Removed 2026-10-04 — see the section after this one.** What follows is why
+they could never be improved, which is the reason they went.
+
+340,907 of the corpus rows were `thin` — title, company, city and an experience
 range parsed out of a Naukri sitemap slug, no description, so they can be
 shortlisted and never judged. Three independent routes to a description were
 tried and all three are shut:
@@ -145,8 +321,10 @@ assumes.
 
 So a thin row is a **lead** — title, company, city, date, and a url a human can
 click, which works because the reCAPTCHA stops our server and not a browser.
-Whether 340,907 of those earn their storage is a product call, not a technical
-one; there is no engineering left to try. Decided on 2026-10-03 to keep them.
+Whether 340,907 of those earned their storage was a product call, not a
+technical one; there was no engineering left to try. Kept on 2026-10-03,
+**deleted on 2026-10-04** once the question was put properly: someone uploading
+a CV is owed a score, and a thin row is scored from four words of slug.
 
 A fetch cannot settle liveness either: probing 12 closed and 12 open postings
 returned 200 at ~35 KB for both, indistinguishable.
@@ -201,9 +379,12 @@ returned 200 at ~35 KB for both, indistinguishable.
 `ai_score` is **still DeepSeek's number**, and now for a stated reason rather
 than a missing test.
 
-`scripts/record-jev.ts` captures Jev's answers to the ten eval cases beside the
-DeepSeek ones; section 9 of the eval replays both against the same hand-written
-bands. On the same ten labels:
+The eval set is **31 cases, 25 tune / 6 holdout** since 2026-10-05, with one raw
+Jev judgement per case committed to `scripts/eval/judgments.json` so the
+threshold sweep runs offline. The figures below were taken on the TEN-case set
+that preceded it and have not been re-measured against the thirty-one — which is
+the first thing to do before anyone argues about the flip again. On those ten
+labels:
 
 | | DeepSeek | Jev (ungated) | Jev (gated) |
 | --- | --- | --- | --- |
@@ -281,21 +462,160 @@ Jev cannot replace all of it, and the reasons are in the notes:
 
 ---
 
+## Only rows that can be scored, and RLS verified
+
+Two things settled on 2026-10-04, both of which had been open for a while as
+opinions rather than measurements.
+
+### The corpus holds 22,962 rows and every one of them is judgeable
+
+`job_index` went 364,345 -> **22,962**; the 341,383 thin rows are gone and
+`push-index.js` refuses more. The argument that decided it was not storage —
+564 MB of 8 GB on Pro — and not accumulation either. It was this: `live.add`
+sends every index row through `scoreAndCut`, so a thin row **is** scored, on
+four words of slug, with `thin` raised and confidence low. The eval set puts
+that at fit 55 from a title alone. Measured on a real video-editor search, that
+was **52 of 60 rows** carrying a guessed number beside 8 carrying an informed
+one — and the colour law cannot tell them apart, because a guessed 62 and a real
+62 render identically. Someone uploading a CV to be told what to apply for is
+owed the second kind.
+
+Accumulation was the one worth checking before deleting, and it is unaffected:
+
+| indexed | full added | thin added |
+| --- | --- | --- |
+| 2026-09-26 | 2,941 | 291,274 |
+| 2026-09-28 | 3,245 | 49,632 |
+| 2026-10-03 | **16,776** | **477** |
+
+Thin rows were a plateau, not a curve — a board's live inventory does not grow,
+so mirroring it once is all there is. Full rows are accelerating because every
+ATS board found adds ~100 permanently and `f219f3d` harvests new boards out of
+what searches deposit.
+
+**Kept on purpose:** all 429,018 `job_checks` rows (107 of the 402 tracked jobs
+join them — that is how a row says "gone from the board"), the Naukri sitemap
+crawl and its expired list (`verify.js` needs the snapshots for tracked-job
+liveness, and the expired list is the only source of a DECLARED closure), and
+the `thin` tier itself, which is still a true thing a source can produce.
+
+**One casualty, found and fixed the same day:** SmartRecruiters' listing carries
+no description either, so the same gate took all 21 of its boards to zero. That
+gate is right for Naukri, whose text is unobtainable, and wrong for
+SmartRecruiters, which publishes it one request per posting away. Now fetched in
+two hops: 640 rows, **639 of them full**, averaging 4,907 characters.
+`companyDescription` is dropped deliberately — identical across a company's
+postings, and it would spend the 4,000-character budget the qualifications need.
+
+### RLS is verified, not just valid
+
+Previously recorded here as "verified **valid**, not **correct**", because PGlite
+has no real `auth.uid()`. Exercised against production on 2026-10-04, every test
+inside a rolled-back transaction:
+
+| as | jobs | profiles | user_state | job_index |
+| --- | --- | --- | --- | --- |
+| the real owner | 402 | 1 | — | — |
+| **a different user** | **0** | **0** | **0** | **22,962** |
+| anon, through PostgREST with the key from `config.js` | `[]` | `[]` | `[]` | — |
+
+The anon row is the end-to-end one: the real key, the real path a browser takes,
+and empty results rather than errors — correctly filtered rather than
+accidentally blocked. `job_index` staying visible to the stranger is the design
+working and not a leak: postings are shared, pipelines are not.
+
+Writes, which inspection cannot settle:
+
+| attempt | result |
+| --- | --- |
+| see another user's `profile_id` | invisible |
+| insert a job onto someone else's profile | **blocked** — `new row violates row-level security policy` |
+| update a stranger's rows | **0 rows** |
+| delete a stranger's rows | **0 rows** |
+
+The third is the one worth having: `jobs`' insert policy requires owning the
+profile being attached to, and it held even when the attacker was handed the
+victim's profile id directly rather than having to guess it.
+
+**Two limits, stated rather than glossed.** The write tests used a simulated JWT
+(`set local request.jwt.claims`) rather than a signed token through PostgREST,
+because creating real users means side effects in production auth. And
+`relforcerowsecurity` is false, so the table owner still bypasses RLS — that is
+`postgres` and `service_role`, which is intended, and `af74459` is what narrowed
+this function's use of it.
+
+So the thing that gated letting 20–30 people in is cleared.
+
+---
+
+## Work happening in parallel, which nobody was tracking
+
+This is the largest gap in the project and it is not technical.
+
+A second Claude Code session has been alive on this machine for **5 days 12
+hours** (2h09 of CPU, last commit 25 hours ago, now idle at a prompt). It wrote
+the `pipeline-fixes` branch from a nine-task brief. Seven of its thirteen
+commits are now on `main`; **two of them I had already rebuilt from scratch**
+on 2026-10-04 without looking at the branch — `ai_model` against its
+`score_tier`, and the rescore batching — and I wrote both up as new findings.
+
+There are **six worktrees**, not one:
+
+| worktree / branch | head | what it holds |
+| --- | --- | --- |
+| `pipeline-fixes` | `c063abc` | 13 commits; 7 merged, 2 duplicated by me, 4 remaining |
+| ~~`worktree-grow-eval-set`~~ | merged | the 31-case eval set and its tooling. **Kept**; branch deleted. |
+| ~~`jev-pin-and-threshold`~~ | salvaged | `FLAG_P` 0.8 and the `jev-1.13.0` pin were taken; its third copy of the measurement tooling was not. Branch deleted. |
+| `worktree-apply-first-steps-1-2` | `d70916f` | locked. Puts the posting in the row's filled button. |
+| `add-google-signin` | `bfeb3e7` | nothing ahead of main |
+| ~~`worktree-pipeline-map-flywheel`~~ | dropped | a second `depositIndex`, superseded by `cfa6a92`. Branch deleted. |
+
+The two in bold are the exact items the first pass of this document listed as
+blocking: *"more cases and an uncontaminated holdout come before the flip"* and
+*"`FLAG_P = 0.5`, the worst available cut point"*. Both were solved on branches
+while being described here as open.
+
+**RESOLVED 2026-10-05.** Three independent implementations of the same
+measurement existed — `record-jev.ts` plus eval section 9 on main,
+`record-eval.ts` plus `tune-flag-thresholds.js` on `grow-eval-set`,
+`record-judgments.ts` plus `tune-flag-threshold.js` on `jev-pin-and-threshold`
+— each writing a different `scripts/eval/judgments.json`.
+
+`grow-eval-set` won on the only axis that mattered: **31 cases against 10**, and
+25 tune / 6 holdout where the old split was 8 and 2. Cases are the scarce thing;
+tooling is not. `cases.json` was taken wholesale rather than merged, because
+mine carried `recorded_jev` on ten cases and theirs carries `judgments.json` for
+thirty-one, and half of each would measure nothing. `record-jev.ts` and section
+9 are deleted, and all three branches are gone.
+
+So the next piece of work on the matcher was not more measurement but a choice,
+and it has been made. Three worktrees remain: `pipeline-fixes` with four
+commits (three of them docs), `add-google-signin` with nothing ahead of main,
+and `apply-first-steps-1-2` with one.
+
+**How this was missed:** `git branch -a` ran in the first command of the
+2026-09-28 session and the branch names were in its output. They were not read.
+After `pipeline-fixes` turned up, the check was not widened to the rest.
+
+---
+
 ## Drift and open items
 
 | Item | State |
 | --- | --- |
-| **Nothing schedules `refresh.sh`** | Units written and validated at `~/.config/systemd/user/jobtriage-refresh.{service,timer}`, still **disabled**. `cron` is not installed and there are no systemd user timers. The closure logic is sound and the push now survives a bad chunk, so the remaining question was never the code. |
+| **The reaper is inert** | `reap-apify` is committed with its migration and deployed nowhere. It needs `pg_cron` and `pg_net` installed (neither is), the function deployed, and two vault entries that do not exist. Re-verified 2026-10-04. Worth finishing: `billing.sql` records **23 Apify runs started against 16 returning**, so seven billed with nothing naming them. |
+| **The first scheduled run crashed** | Fixed the same morning: `fs.readFileSync(0, 'utf8')` in `harvest-slugs.js` SEGFAULTS on a large pipe — 23,057 urls, status 134, core dumped, 1.8 GB peak. The same input from a file was fine, which made it look like data. Two red herrings: the journal named `corpus-urls.js` first with `Exit 1`, but that was only EPIPE from its consumer dying, and the 1.8 GB reads like OOM when it is a one-shot read of a pipe Node cannot size. Chunked `readSync` now, verified through the real pipe. |
+| ~~Nothing schedules `refresh.sh`~~ | **Scheduled.** Timer enabled, `loginctl enable-linger` done, so it fires whether or not anyone is logged in. `Persistent=true` caught the first missed 04:00 and ran it at 08:39. |
 | **`kept_50` reads 0 on deferred scoring** | The browser reports yield before scoring finishes, so `source_yield.inr_per_exclusive_50` is wrong for any such search. Unfixed. |
 | **`ai_model` is recorded but empty** | 0 of 402 rows carry it: every scored row predates the column. It also answers "which tier built this list", **not** an A/B — a row holds one `ai_model` and one `ai_score`, the last to write them, so scoring twice reads as whichever went second. A real comparison wants both readings kept (a `score_trials` table), which is the same instrumentation `eval-matcher --live` needs. |
 | **`judge` action has no caller** | `judgeInto` and `judgeJob` are reachable from no button since `cf3b267`. Annotated rather than deleted: `judgeJob` holds the only `hosted('judge')` call site and `pipeline-map` asserts those map 1:1 onto the actions, so deleting them means retiring the action too — a deliberate change to a deployed endpoint. |
 | **`matcher_outcomes` has 10 rows** | The ground truth. Ten rows cannot separate two rankers, which is why every model comparison above is agreement rather than correctness. |
-| `FLAG_P = 0.5` | Now measured, not suspected: Jev's flag precision is **0.483** at this cut point, with `open` and `rare` firing on six cases of ten. Those flags are already live through `mergeJudgment`. |
-| `TYPESAFE_MODEL` | Unset, so `jev-latest`, currently resolving to `jev-1.13.0`. Thresholds calibrated on an unpinned model move silently on a bump. |
+| ~~`FLAG_P = 0.5`~~ | **Now 0.8**, salvaged 2026-10-05. The 0.5 measured 0.483 flag precision with `open` and `rare` firing on six cases of ten. Swept per code by `tune-flag-thresholds.js`. Two flags are not fixable at any cut: `fit` answers the question it was asked while the labels name the flag worth showing, and `rare` is weakly true of nearly every posting this profile sees. |
+| ~~`TYPESAFE_MODEL`~~ | **Pinned to `jev-1.13.0`**, salvaged the same day. Pinning is what makes `FLAG_P` mean anything: the cut is calibrated against probabilities recorded from one model, and on another the same 0.8 means something else with nothing erroring. The env var still overrides, so trying a newer Jev needs no deploy. |
 | Three SmartRecruiters boards | Return exactly 100 rows, which is a page cap — there is more behind them unread. |
 | `MONSTER_JOBS_API_KEY` | Set as a secret; no code reads it. Parse MCP registered but unauthorised. Measure it against JSearch, which reaches Foundit free. |
 | `mantiks_contact` | Deployed and **never once executed live**. |
-| RLS on the shared tables | `job_index` and `job_checks` are `select` to `authenticated` with no other policy — shared by design, which is the point of the corpus. **`public.jobs` and `public.profiles` have never been exercised against a real `auth.uid()` through PostgREST**, and that is the thing to verify before 20–30 users, not the corpus. |
+| RLS | **Verified 2026-10-04, read the section below.** Was "valid, not correct"; it is now correct. |
 | `handle_new_user()` | Still RPC-callable by `anon`. |
 | `a8667db` | Missing its `Co-Authored-By`. Pushed, so fixing it means a rewrite. |
 
@@ -332,17 +652,23 @@ Jev cannot replace all of it, and the reasons are in the notes:
   rendered once, so `--render-check` on a cold app reports a missing parser that
   is really a cold start.
 - **Check a harness by exit code.** `node check.js | tail -1` reports the pipe.
+- **`fs.readFileSync(0, 'utf8')` segfaults on a large pipe.** It is the obvious
+  spelling for "read all of stdin" and it killed the first scheduled crawl. Read
+  stdin in chunks. And when a shell pipeline fails, the process the log names
+  first may only be the one that got EPIPE when its consumer died.
 - Live Postgres is **17.6**; the PGlite harness verified on **18.3**.
 
 ---
 
 ## Next, in order
 
+0. ~~Decide which eval implementation survives~~ — done 2026-10-05,
+   `grow-eval-set` kept, the other two deleted, `FLAG_P` and the model pin
+   salvaged out of one of them first.
 1. **Schedule `refresh.sh`.** One timer, already written and validated. The
    corpus decays daily without it and `index_search` now reads what it produces.
-2. **Verify RLS on `public.jobs` and `public.profiles` with two real accounts**
-   — prove through PostgREST that user A cannot read user B's pipeline. This is
-   the one thing that gates letting people in, and PGlite cannot test it.
+1a. ~~Deploy the edge function~~ — done 2026-10-04, v38.
+2. ~~Verify RLS on `public.jobs` and `public.profiles`~~ — done 2026-10-04.
 3. **Fix `kept_50`.** Report yield after scoring, or the source economics the
    whole acquisition strategy rests on stay wrong.
 4. **Write more eval cases with a clean holdout**, from the 22,962 judgeable
@@ -354,9 +680,10 @@ Jev cannot replace all of it, and the reasons are in the notes:
 
 ### The decision that is not a task
 
-The corpus is no longer the open question — it has 22,962 judgeable rows, 309
-sources, a flywheel that grows it on every paid search, and a settled answer on
-the 340,907 rows that cannot be improved. What has not moved is **who it is
+The corpus is no longer the open question — 22,962 rows, every one of them
+judgeable, 309 sources, a flywheel that grows it on every paid search, and the
+341,383 rows that could never be scored are gone. RLS is verified. The nightly
+crawl is scheduled. What has not moved is **who it is
 for**: `public.jobs` holds 402 rows and `matcher_outcomes` holds 10, so every
 quality claim in this document is agreement between models rather than evidence
 about whether anyone got a job. Ten outcomes is the smallest number in here and

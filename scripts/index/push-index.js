@@ -101,7 +101,7 @@ function row(r) {
 }
 
 const seen = new Map();       // job_key -> row; last one wins within a run
-let read = 0, skipped = 0, stale = 0;
+let read = 0, skipped = 0, stale = 0, thinSkipped = 0;
 for (const f of files) {
   for (const line of fs.readFileSync(f, 'utf8').split('\n')) {
     const s = line.trim(); if (!s) continue;
@@ -113,6 +113,29 @@ for (const f of files) {
     // Unknown is not old: a row with no date is KEPT, the same rule the app's
     // own age cut follows. Only a date that is actually too old drops the row.
     if (MAX_AGE && v.posted && (Date.now() - Date.parse(v.posted)) / 864e5 > MAX_AGE) { stale++; continue; }
+    /* THIN ROWS DO NOT ENTER THE CORPUS, from 2026-10-04.
+       A thin row is a title, company, city and experience range parsed out of a
+       sitemap slug, with no description -- and three separate routes to getting
+       one are all shut: Naukri's job API answers 406 recaptcha required, its job
+       page is a client-rendered shell with no job text, and Google for Jobs does
+       not carry Naukri at all because those pages have no JSON-LD. So the
+       description is not late, it is never coming.
+       Which means the score is the problem, not the storage. live.add sends every
+       index row through scoreAndCut, so a thin row IS scored -- on four words of
+       slug, with `thin` raised and confidence low. Measured on the eval set that
+       produces fit 55 from a title alone. For a video-editor search that was 52
+       of 60 rows carrying a guessed number next to 8 carrying an informed one,
+       and the colour law cannot tell them apart: a guessed 62 and a real 62
+       render identically. Someone uploading a CV to be told what to apply for is
+       owed the second kind and nothing else.
+       Not a storage decision: the database is 564 MB of 8 GB on Pro. And not a
+       cost to accumulation either -- thin arrivals went 291,274 -> 49,632 -> 477
+       across three crawls, because a board's live inventory does not grow, while
+       full rows went 2,941 -> 3,245 -> 16,776 and are still accelerating.
+       The crawl that produces them still runs: verify.js needs those snapshots to
+       keep liveness on the Naukri postings people actually TRACK, which is how a
+       row says "gone from the board". It just stops depositing them here. */
+    if (v.tier === 'thin') { thinSkipped++; continue; }
     seen.set(v.job_key, v);
   }
   console.log(`  read ${path.relative(ROOT, f)}`);
@@ -123,6 +146,7 @@ const full = rows.filter((r) => r.tier === 'full').length;
 const bytes = rows.reduce((n, r) => n + (r.description ? r.description.length : 0), 0);
 console.log(`\n${read} row(s) read, ${skipped} unusable, ${rows.length} distinct job_key`);
 if (stale) console.log(`  ${stale} row(s) older than ${MAX_AGE}d not stored (the app cannot search them; liveness still tracks them)`);
+if (thinSkipped) console.log(`  ${thinSkipped} thin row(s) not stored (no description, so no score worth showing; liveness still tracks them)`);
 console.log(`  full ${full} · thin ${rows.length - full}`);
 console.log(`  description payload: ${(bytes / 1e6).toFixed(1)} MB after the ${CAP}-char cap`);
 

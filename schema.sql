@@ -481,8 +481,22 @@ create table if not exists public.job_checks (
   -- floor under it. A render that says "gone from the board" should be able to
   -- tell knowing from guessing.
   closed_src text        check (closed_src is null or closed_src in ('declared', 'inferred')),
+  -- Consecutive runs this posting was absent from a source we actually read
+  -- through. One absence is not a closure: 20.8% of the Naukri index vanished
+  -- across two days on 2026-09-26 and came back, so a single miss sits inside
+  -- the noise. Two in a row does not. Only runs entitled to count increment it
+  -- -- a run that did not read the row's file leaves it alone -- and any
+  -- sighting resets it to 0. Declared expiry ignores it entirely.
+  absent_runs integer     not null default 0 check (absent_runs >= 0),
   checked_at timestamptz not null default now()
 );
+
+-- For databases created before the column above existed (safe to re-run); the
+-- same change is supabase/migrations/20260929_02_absent_runs.sql.
+alter table public.job_checks add column if not exists absent_runs int not null default 0;
+alter table public.job_checks drop constraint if exists job_checks_absent_runs_check;
+alter table public.job_checks add constraint job_checks_absent_runs_check
+  check (absent_runs >= 0);
 
 create index if not exists job_checks_source_seen on public.job_checks (source, last_seen desc);
 -- No index on (closed_on) where closed_on is null. There was one; it took
@@ -760,3 +774,122 @@ end $$;
 
 revoke all on function public.search_index(text[], integer, integer) from public, anon;
 grant execute on function public.search_index(text[], integer, integer) to authenticated, service_role;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Beta feedback. Applied 2026-10-05 as migration feedback_table.
+--
+-- `context` is the reason this is a table here and not a Google Form. A form
+-- that carries only prose gets "search was slow", and nobody can tell which
+-- search, on which model, over how many rows. The app already knows all of
+-- that, so it attaches it: the open track, the counts, the last model to score,
+-- the theme, whether a run was in flight. Nothing typed, nothing secret -- no
+-- keys, no CV text, no posting bodies.
+--
+-- Own rows only, same shape as jobs and profiles. Insert is the point; select
+-- exists so the app can confirm rather than hope. Verified 2026-10-05 against
+-- the live policy: an insert naming another user_id is blocked, a kind outside
+-- the four is rejected by the check, and the owner sees only their own.
+create table if not exists public.feedback (
+  id         bigserial   primary key,
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  kind       text        not null check (kind in ('bug','idea','confusing','other')),
+  message    text        not null,
+  context    jsonb       not null default '{}',
+  created_at timestamptz not null default now()
+);
+alter table public.feedback enable row level security;
+drop policy if exists "own rows: insert" on public.feedback;
+create policy "own rows: insert" on public.feedback
+  for insert to authenticated with check (auth.uid() = user_id);
+drop policy if exists "own rows: select" on public.feedback;
+create policy "own rows: select" on public.feedback
+  for select to authenticated using (auth.uid() = user_id);
+create index if not exists feedback_time on public.feedback (created_at desc);
+
+
+-- ═══════════════════════════════════════════════════════════════════════════
+-- Inbound mail: the automation channel for "did anybody answer?"
+-- ═══════════════════════════════════════════════════════════════════════════
+--
+-- NOT APPLIED to production yet. Written here because the shape is settled and
+-- channel-independent; the ingestion end (see src/reply-match.mjs) is not
+-- deployed, and an unused table in production is a liability rather than a
+-- head start.
+--
+-- What this is for
+-- ----------------
+-- jobs.stage = 'live' is the only record in this project that a human ever
+-- answered an application, and the view public.matcher_outcomes reports it as
+-- "replied". It is also, today, entirely dependent on the user remembering to
+-- press a button -- which is why it reads 0 against 8 applied. Every quality
+-- claim about the matcher is therefore agreement between models, not evidence
+-- that anybody got a job.
+--
+-- There is no "replied" column to update, and that matters for anyone reading
+-- this expecting one: 'replied' is a count in a view, derived from stage. The
+-- automation writes jobs.stage.
+--
+-- Why a token and not a mailbox
+-- -----------------------------
+-- The alternative is Gmail's API with the gmail.readonly scope, which means
+-- holding a refresh token that can read a person's entire mail -- and which
+-- Google classes as a RESTRICTED scope, capped at 100 test users until the app
+-- passes a third-party security assessment. For a beta of 20-30 that cap is
+-- survivable; the privacy posture is not, in a repo whose CV parser runs in the
+-- browser specifically so nothing is uploaded.
+--
+-- So the user forwards instead. A per-profile address r.<inbox_token>@<domain>
+-- receives only what a Gmail filter sends it; we never hold a credential and
+-- can never read anything that was not routed. The token is the routing key
+-- AND the capability, so it is secret, random, and revocable by rotation.
+alter table public.profiles add column if not exists inbox_token text;
+create unique index if not exists profiles_inbox_token on public.profiles (inbox_token)
+  where inbox_token is not null;
+
+-- Every mail that reached a valid token, decided or not. The decision is
+-- stored BESIDE its effect on purpose: a false 'live' is the failure that would
+-- quietly poison the ground truth, so each one has to be findable and
+-- reversible after the fact. Unmatched mail is kept too -- it is the only
+-- measurement of how often the matcher fails to decide at all.
+create table if not exists public.inbound_mail (
+  id          uuid primary key default gen_random_uuid(),
+  user_id     uuid not null references auth.users(id) on delete cascade,
+  profile_id  uuid not null references public.profiles(id) on delete cascade,
+  -- The provider's id for this message, so a redelivery is not a second row.
+  -- The unique below is (profile_id, provider_id) and Postgres does not collide
+  -- NULLs, so a provider that supplies no id gets no deduplication rather than
+  -- one row forever -- which is the right way round: two mails that cannot be
+  -- told apart should both be kept and looked at, not silently merged.
+  provider_id text,
+  from_addr   text,
+  subject     text,
+  -- A bounded excerpt, not the mail. Enough to audit a decision and to re-run
+  -- the classifier against a stored case; not a copy of somebody's inbox.
+  excerpt     text,
+  received_at timestamptz,
+  -- decide()'s whole answer: matched job_key, how it matched, the classified
+  -- kind, the cue that fired, and the action taken.
+  decision    jsonb not null default '{}',
+  -- What this row actually changed, null when nothing. Set by the writer, not
+  -- by the classifier, so "decided" and "did" cannot drift.
+  applied_to  text,
+  applied_stage text,
+  created_at  timestamptz not null default now(),
+  unique (profile_id, provider_id)
+);
+
+alter table public.inbound_mail enable row level security;
+-- Read-only to the owner. The writer is the service role: a user must be able
+-- to see what the automation concluded about their own mail and to contest it,
+-- and must not be able to forge a reply into their own ground truth.
+drop policy if exists "own rows: select" on public.inbound_mail;
+create policy "own rows: select" on public.inbound_mail
+  for select to authenticated using (auth.uid() = user_id);
+create index if not exists inbound_mail_profile on public.inbound_mail (profile_id, created_at desc);
+
+-- Threading hook. src/reply-match.mjs prefers In-Reply-To over every other
+-- signal, because a mail quoting a Message-ID we sent is the one match that
+-- cannot be wrong. Nothing writes it yet -- the app does not send mail -- and
+-- it is declared here so the matcher's best path is not blocked on a migration
+-- the day outbound sending arrives.
+alter table public.jobs add column if not exists sent_message_id text;
