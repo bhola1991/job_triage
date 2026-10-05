@@ -92,6 +92,63 @@ New tools, none of them gates:
 
 ---
 
+## The beta is gated behind an account, and the README says it is not
+
+Found 2026-10-05 by checking the live site as a new visitor.
+
+```js
+// index.html:6051
+function render(){
+  if(CLOUD && RECOVER && USER) return renderRecover();
+  if(CLOUD && !USER)           return renderAuth();   // <- everything stops here
+  ...
+}
+```
+
+`CLOUD` is `!!(CFG.SUPABASE_URL && CFG.SUPABASE_ANON_KEY && window.supabase)`,
+and the deployed `config.js` carries both. So **a new visitor sees the
+sign-in / create-account screen and nothing else** — not the app, not the
+queue, not board search. The README's promise, *"no signup, nothing leaves
+your browser"*, describes the UNCONFIGURED fallback, which is not what is
+deployed.
+
+This corrects a wrong diagnosis made earlier the same day: that a signed-out
+visitor clicking board search would be asked for an Apify key. They never get
+that far. `runBoards`'s `NEEDAPIFY` path only fires when `CLOUD` is false — a
+copy of the file with an empty `config.js` — so it is unreachable in
+production.
+
+It is a product decision, not a bug, and it is the first thing a beta tester
+meets. The two ways out are not equivalent:
+
+- **Own it.** Say "sign in to search — it is free, 5 searches and 60 scoring
+  calls" on the auth screen, so the wall reads as a step rather than a refusal.
+  Cheap, honest, keeps credit accounting intact.
+- **Let the app run signed out** and gate only what costs money. Matches the
+  README, and means `free_search`/`free_llm` have no row to decrement against —
+  so it needs an anonymous identity or a per-IP allowance before it is safe.
+
+Verified at the same time, so nobody re-derives it:
+
+| | |
+| --- | --- |
+| `job_index` | **26,508 rows, every one judgeable**, 25,201 posted in the last 30 days, newest posted today — up from 22,962, so the nightly timer is running |
+| `config.js` | live and correct in production |
+| caching | `max-age=0, must-revalidate`; the service worker is network-first. No stale-shell bug |
+| new account | `free_search = 5`, `free_llm = 60`, `balance = 0` |
+| `index_search` | returns `401 {"error":"sign in first"}` to the anon key — confirmed directly |
+
+### The redesign does not exist anywhere
+
+The dashboard/homepage split and the left-hand hover emoji menu were never
+built. Searched for them across **all 30 local and remote branches**, in
+`design/` (untouched since 2026-09-18), and in the worktrees; `test/panel-fixes`
+has nothing ahead of `main`. The Figma account is reachable but its files
+cannot be enumerated without a file URL, so if a design was made there it needs
+to be handed over as a link. Nothing was invented in its place.
+
+---
+
 ## Reply detection: the channel is chosen, nothing is deployed
 
 `matcher_outcomes` reports **8 applied, 0 replied of 402**. That zero is not a
