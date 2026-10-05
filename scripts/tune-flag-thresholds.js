@@ -1,6 +1,6 @@
 // Flag-threshold sweep: node scripts/tune-flag-thresholds.js [--set tune|holdout|all] [--at 0.5]
 //
-// index.html keeps ONE cut point for every flag -- FLAG_P, currently 0.5 -- and
+// index.html keeps ONE cut point for every flag -- FLAG_P -- and
 // the comment there is honest about what it is: "Jev returns a number per flag
 // precisely so the caller can keep its own threshold rather than trusting one
 // chosen elsewhere; this is ours." Ours was chosen by eye. This measures it.
@@ -27,7 +27,17 @@ const JUDGED = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/eval/judgment
 
 const arg = (f, dflt) => { const i = process.argv.indexOf(f); return i > -1 ? process.argv[i + 1] : dflt; };
 const SET = arg('--set', 'tune');
-const AT = Number(arg('--at', '0.5'));
+/* The cut to report against is READ FROM index.html, not defaulted. It used to
+   default to 0.5 while printing "the shipped cut is FLAG_P = 0.5 ... (index.html)",
+   and the shipped value had since moved to 0.8 -- so the one tool meant to inform
+   whether the cut is right was describing a cut nobody ships. Sliced the way every
+   other script here reads a constant out of the app. */
+const SHIPPED_FLAG_P = (() => {
+  const m = /const FLAG_P = ([0-9.]+)/.exec(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'));
+  if (!m) throw new Error('could not find FLAG_P in index.html');
+  return m[1];
+})();
+const AT = Number(arg('--at', SHIPPED_FLAG_P));
 
 /* The floor for saying anything at all. Three of each is not a lot, but it is
    the point below which a "best" threshold is just the gap between two numbers
