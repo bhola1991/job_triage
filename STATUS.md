@@ -1,4 +1,4 @@
-# Where this stands — 2026-10-04 (second pass)
+# Where this stands — 2026-10-05
 
 Six days in which the corpus stopped being a thing that sat in a table and
 became the cheapest source in the product, and in which four bugs were found by
@@ -82,7 +82,8 @@ New tools, none of them gates:
 
 | script | what it answers |
 | --- | --- |
-| `scripts/record-jev.ts` | records Jev's answers for the eval cases (Deno; needs `TYPESAFE_API_KEY`) |
+| `scripts/record-eval.ts` | records what `scripts/eval/` commits — `--deepseek` fills `recorded`, `--jev` writes `judgments.json`. Live, needs keys. |
+| `scripts/tune-flag-thresholds.js` | `FLAG_P` sweep per code, offline against `judgments.json`. A measurement, not a gate. |
 | `scripts/record-deepseek.js` | scores the eval cases on a named tier and measures it (`DEEPSEEK_API_KEY`, from the **shell**, not `.env.local`) |
 | `scripts/compare-tiers.js` | top-K overlap between two models' rankings, from `ai_model` |
 | `scripts/index/probe-ats.js` | guesses a company's ATS board from its name, per region |
@@ -227,9 +228,12 @@ returned 200 at ~35 KB for both, indistinguishable.
 `ai_score` is **still DeepSeek's number**, and now for a stated reason rather
 than a missing test.
 
-`scripts/record-jev.ts` captures Jev's answers to the ten eval cases beside the
-DeepSeek ones; section 9 of the eval replays both against the same hand-written
-bands. On the same ten labels:
+The eval set is **31 cases, 25 tune / 6 holdout** since 2026-10-05, with one raw
+Jev judgement per case committed to `scripts/eval/judgments.json` so the
+threshold sweep runs offline. The figures below were taken on the TEN-case set
+that preceded it and have not been re-measured against the thirty-one — which is
+the first thing to do before anyone argues about the flip again. On those ten
+labels:
 
 | | DeepSeek | Jev (ungated) | Jev (gated) |
 | --- | --- | --- | --- |
@@ -409,29 +413,34 @@ There are **six worktrees**, not one:
 | worktree / branch | head | what it holds |
 | --- | --- | --- |
 | `pipeline-fixes` | `c063abc` | 13 commits; 7 merged, 2 duplicated by me, 4 remaining |
-| `worktree-grow-eval-set` | `66d40c6` | **the eval set at 31 cases**, +3,913 lines: `judgments.json`, `record-eval.ts`, `tune-flag-thresholds.js` |
-| `jev-pin-and-threshold` | `6cc19a6` | **`FLAG_P` raised to a measured 0.8** and Jev pinned to `jev-1.13.0`, plus re-deciding already-judged rows when the threshold moves |
+| ~~`worktree-grow-eval-set`~~ | merged | the 31-case eval set and its tooling. **Kept**; branch deleted. |
+| ~~`jev-pin-and-threshold`~~ | salvaged | `FLAG_P` 0.8 and the `jev-1.13.0` pin were taken; its third copy of the measurement tooling was not. Branch deleted. |
 | `worktree-apply-first-steps-1-2` | `d70916f` | locked. Puts the posting in the row's filled button. |
 | `add-google-signin` | `bfeb3e7` | nothing ahead of main |
-| `worktree-pipeline-map-flywheel` | `5fd475b` | a second `depositIndex`; superseded by `cfa6a92`, local only |
+| ~~`worktree-pipeline-map-flywheel`~~ | dropped | a second `depositIndex`, superseded by `cfa6a92`. Branch deleted. |
 
 The two in bold are the exact items the first pass of this document listed as
 blocking: *"more cases and an uncontaminated holdout come before the flip"* and
 *"`FLAG_P = 0.5`, the worst available cut point"*. Both were solved on branches
 while being described here as open.
 
-**Three independent implementations of the same measurement now exist.** This
-pass built `record-jev.ts` plus section 9 of the eval; `grow-eval-set` built
-`record-eval.ts` and `tune-flag-thresholds.js`; `jev-pin-and-threshold` built
-`record-judgments.ts` and `tune-flag-threshold.js`. They share a
-`scripts/eval/judgments.json` that differs between them. Merging any two will
-conflict in `cases.json`, `baseline.json` and `eval-matcher.js`.
+**RESOLVED 2026-10-05.** Three independent implementations of the same
+measurement existed — `record-jev.ts` plus eval section 9 on main,
+`record-eval.ts` plus `tune-flag-thresholds.js` on `grow-eval-set`,
+`record-judgments.ts` plus `tune-flag-threshold.js` on `jev-pin-and-threshold`
+— each writing a different `scripts/eval/judgments.json`.
 
-So the next piece of work on the matcher is **not** more measurement. It is
-choosing which of the three to keep and retiring the other two, and that is a
-decision rather than a task. Nothing here should be merged until it is made:
-`FLAG_P` 0.5 -> 0.8 re-decides every judged row in the database, and doing that
-twice from two branches is worse than doing it late.
+`grow-eval-set` won on the only axis that mattered: **31 cases against 10**, and
+25 tune / 6 holdout where the old split was 8 and 2. Cases are the scarce thing;
+tooling is not. `cases.json` was taken wholesale rather than merged, because
+mine carried `recorded_jev` on ten cases and theirs carries `judgments.json` for
+thirty-one, and half of each would measure nothing. `record-jev.ts` and section
+9 are deleted, and all three branches are gone.
+
+So the next piece of work on the matcher was not more measurement but a choice,
+and it has been made. Three worktrees remain: `pipeline-fixes` with four
+commits (three of them docs), `add-google-signin` with nothing ahead of main,
+and `apply-first-steps-1-2` with one.
 
 **How this was missed:** `git branch -a` ran in the first command of the
 2026-09-28 session and the branch names were in its output. They were not read.
@@ -444,13 +453,14 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 | Item | State |
 | --- | --- |
 | **The reaper is inert** | `reap-apify` is committed with its migration and deployed nowhere. It needs `pg_cron` and `pg_net` installed (neither is), the function deployed, and two vault entries that do not exist. Re-verified 2026-10-04. Worth finishing: `billing.sql` records **23 Apify runs started against 16 returning**, so seven billed with nothing naming them. |
-| **Nothing schedules `refresh.sh`** | Units written and validated at `~/.config/systemd/user/jobtriage-refresh.{service,timer}`, still **disabled**. `cron` is not installed and there are no systemd user timers. The closure logic is sound and the push now survives a bad chunk, so the remaining question was never the code. |
+| **The first scheduled run crashed** | Fixed the same morning: `fs.readFileSync(0, 'utf8')` in `harvest-slugs.js` SEGFAULTS on a large pipe — 23,057 urls, status 134, core dumped, 1.8 GB peak. The same input from a file was fine, which made it look like data. Two red herrings: the journal named `corpus-urls.js` first with `Exit 1`, but that was only EPIPE from its consumer dying, and the 1.8 GB reads like OOM when it is a one-shot read of a pipe Node cannot size. Chunked `readSync` now, verified through the real pipe. |
+| ~~Nothing schedules `refresh.sh`~~ | **Scheduled.** Timer enabled, `loginctl enable-linger` done, so it fires whether or not anyone is logged in. `Persistent=true` caught the first missed 04:00 and ran it at 08:39. |
 | **`kept_50` reads 0 on deferred scoring** | The browser reports yield before scoring finishes, so `source_yield.inr_per_exclusive_50` is wrong for any such search. Unfixed. |
 | **`ai_model` is recorded but empty** | 0 of 402 rows carry it: every scored row predates the column. It also answers "which tier built this list", **not** an A/B — a row holds one `ai_model` and one `ai_score`, the last to write them, so scoring twice reads as whichever went second. A real comparison wants both readings kept (a `score_trials` table), which is the same instrumentation `eval-matcher --live` needs. |
 | **`judge` action has no caller** | `judgeInto` and `judgeJob` are reachable from no button since `cf3b267`. Annotated rather than deleted: `judgeJob` holds the only `hosted('judge')` call site and `pipeline-map` asserts those map 1:1 onto the actions, so deleting them means retiring the action too — a deliberate change to a deployed endpoint. |
 | **`matcher_outcomes` has 10 rows** | The ground truth. Ten rows cannot separate two rankers, which is why every model comparison above is agreement rather than correctness. |
-| `FLAG_P = 0.5` | Now measured, not suspected: Jev's flag precision is **0.483** at this cut point, with `open` and `rare` firing on six cases of ten. Those flags are already live through `mergeJudgment`. |
-| `TYPESAFE_MODEL` | Unset, so `jev-latest`, currently resolving to `jev-1.13.0`. Thresholds calibrated on an unpinned model move silently on a bump. |
+| ~~`FLAG_P = 0.5`~~ | **Now 0.8**, salvaged 2026-10-05. The 0.5 measured 0.483 flag precision with `open` and `rare` firing on six cases of ten. Swept per code by `tune-flag-thresholds.js`. Two flags are not fixable at any cut: `fit` answers the question it was asked while the labels name the flag worth showing, and `rare` is weakly true of nearly every posting this profile sees. |
+| ~~`TYPESAFE_MODEL`~~ | **Pinned to `jev-1.13.0`**, salvaged the same day. Pinning is what makes `FLAG_P` mean anything: the cut is calibrated against probabilities recorded from one model, and on another the same 0.8 means something else with nothing erroring. The env var still overrides, so trying a newer Jev needs no deploy. |
 | Three SmartRecruiters boards | Return exactly 100 rows, which is a page cap — there is more behind them unread. |
 | `MONSTER_JOBS_API_KEY` | Set as a secret; no code reads it. Parse MCP registered but unauthorised. Measure it against JSearch, which reaches Foundit free. |
 | `mantiks_contact` | Deployed and **never once executed live**. |
@@ -491,17 +501,19 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
   rendered once, so `--render-check` on a cold app reports a missing parser that
   is really a cold start.
 - **Check a harness by exit code.** `node check.js | tail -1` reports the pipe.
+- **`fs.readFileSync(0, 'utf8')` segfaults on a large pipe.** It is the obvious
+  spelling for "read all of stdin" and it killed the first scheduled crawl. Read
+  stdin in chunks. And when a shell pipeline fails, the process the log names
+  first may only be the one that got EPIPE when its consumer died.
 - Live Postgres is **17.6**; the PGlite harness verified on **18.3**.
 
 ---
 
 ## Next, in order
 
-0. **Decide which eval implementation survives** — this pass's, `grow-eval-set`,
-   or `jev-pin-and-threshold`. Three exist, they conflict with each other, and
-   `FLAG_P` 0.5 -> 0.8 re-decides every judged row in the database. Doing that
-   twice from two branches is worse than doing it late. Nothing else on the
-   matcher should move first.
+0. ~~Decide which eval implementation survives~~ — done 2026-10-05,
+   `grow-eval-set` kept, the other two deleted, `FLAG_P` and the model pin
+   salvaged out of one of them first.
 1. **Schedule `refresh.sh`.** One timer, already written and validated. The
    corpus decays daily without it and `index_search` now reads what it produces.
 1a. ~~Deploy the edge function~~ — done 2026-10-04, v38.
