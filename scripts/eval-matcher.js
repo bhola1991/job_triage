@@ -172,7 +172,11 @@ const spanRate = r3(withSpan / flagsTotal);
   const jev = { confidence: 'high', flags: [
     { code: 'loc', probability: 0.91 },     // fired, and DeepSeek has a fact
     { code: 'comp', probability: 0.12 },    // DeepSeek raised it, Jev does not agree
-    { code: 'rare', probability: 0.77 },    // Jev raises one DeepSeek never mentioned
+    // Jev raises one DeepSeek never mentioned. Was 0.77, which cleared the old
+    // FLAG_P of 0.5 and does not clear 0.8 -- so it stopped testing this case
+    // and started testing the threshold. The number moved; the three things
+    // this block checks did not.
+    { code: 'rare', probability: 0.88 },
   ] };
   const out = T.mergeJudgment(ds, jev);
   const codes = out.map(f => f.code).sort().join(',');
