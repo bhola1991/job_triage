@@ -146,12 +146,29 @@
     font-family:var(--mono);font-size:12px;color:var(--signal);flex-shrink:0}
   .who .nm{font-size:13px;line-height:1.2}
   .who .lc{font-size:11px;color:var(--muted);line-height:1.2}
+  /* Direction, in the bar. The base select rule is sized for a sidebar's full
+     width; here it has to sit on a row of buttons without shouting. */
+  select.trkbar{width:auto;max-width:min(260px,38vw);font-size:12px;padding:5px 8px;
+    border-radius:5px;background:var(--panel2);color:var(--text)}
   .pill{font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:2px;
     border:1px solid var(--line);color:var(--muted);white-space:nowrap}
   .pill.on{color:var(--good);border-color:var(--good-line)}
   .pill.due{color:var(--due);background:var(--due-tint);border-color:var(--due-line)}
   .pill.closing{color:var(--closing);background:var(--closing-tint);border-color:var(--closing-line)}
   .pill.awaiting{color:var(--awaiting);background:var(--awaiting-tint);border-color:var(--awaiting-line)}
+
+  /* The day's floor. Reads doneToday, which the app has always computed and
+     never shown. Not an accent and not on a row, so the colour law's one-per-row
+     rule is not engaged -- it borrows --good the way .pill.on and .sdot.on do. */
+  .floor{display:flex;align-items:center;gap:7px;padding:3px 9px 3px 8px;
+    border-radius:999px;border:1px solid var(--line);background:var(--panel2)}
+  .floor .fdots{display:flex;gap:4px}
+  .fdot{width:9px;height:9px;border-radius:50%;box-sizing:border-box;
+    border:1.5px solid var(--line);transition:background-color .18s,border-color .18s}
+  .fdot.on{background:var(--good);border-color:var(--good)}
+  .floor .flab{font-family:var(--mono);font-size:10.5px;color:var(--muted);white-space:nowrap}
+  .floor.met{border-color:var(--good-line);background:var(--good-tint)}
+  .floor.met .flab{color:var(--good)}
 
   /* Tappable UI shouldn't behave like text on a touch screen — without this a
      tap that lingers a few ms selects the label or throws up a callout menu
@@ -226,11 +243,68 @@
   .tag.easy{color:var(--good)} .tag.hard{color:var(--warn)} .tag.mid{color:var(--cool)}
 
   /* ── main app ── */
-  .wrap{display:grid;grid-template-columns:288px 1fr}
-  .side{border-right:1px solid var(--line);padding:18px;background:var(--panel);
-    min-height:calc(100vh - 60px)}
+  /* ═══ one column of work ═══
+     The sidebar used to be a permanent 288px column holding Direction, the
+     colour key, Find work, Score, and Data & keys. All five are supply: ways
+     to get more jobs. The list beside them is demand: jobs to act on. Running
+     another search feels like progress and is the most comfortable way to not
+     apply to anything, and it was always one click away and always on screen.
+     So it is a drawer at every width now rather than only on a phone, and the
+     queue gets the canvas. Nothing was taken out of it -- every input, every
+     drop target and every button is still in there, and still in the DOM where
+     the command palette dispatches by clicking them. */
+  .wrap{display:grid;grid-template-columns:minmax(0,1fr)}
+  .side{position:fixed;top:0;bottom:0;left:0;width:min(336px,92vw);z-index:45;
+    overflow-y:auto;background:var(--panel);padding:18px;
+    border-right:1px solid var(--line);box-shadow:var(--shadow-lg);
+    transform:translateX(-101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
+  .side.open{transform:translateX(0)}
   .main{padding:20px 22px 60px;min-width:0}
-  .sheet-head{display:none}
+  /* The drawer's own header, with the way out of it. Was display:none because
+     a column needs no header; a drawer does, at every width. */
+  .sheet-head{display:flex;align-items:center;gap:10px;margin:-4px 0 16px;
+    position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
+  #scrim.on{display:block}
+
+  /* ═══ the decision pane ═══
+     One job, read and acted on beside the queue instead of inside it. The list
+     keeps its shape when the selection moves, which is the whole point: an
+     in-place expand pushed every row below it down the page, so every single
+     decision cost you your place and a session ended at the fourth job rather
+     than the twentieth.
+     Docked as a third column while there is room for all three. Below that it
+     overlays as a sheet, on the same pattern and the same z-index family as
+     the sidebar already uses when it stops being a column.
+     The ladder, bottom to top: #scrim 43, #toolbar 44, .side 45,
+     #panescrim 46, .pane 47, .palscrim 48, .palbox 49, .modal 50. */
+  .wrap.paned{grid-template-columns:minmax(0,1fr) 400px}
+  .pane{border-left:1px solid var(--line);background:var(--panel);min-width:0;
+    position:sticky;top:60px;align-self:start;max-height:calc(100vh - 60px);
+    overflow-y:auto;padding:16px 18px 26px}
+  .pane-head{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+  /* jobDetail was drawn for the full width of a row: two columns with a 300px
+     rail. In a 400px pane it stacks, and loses the padding and rule that only
+     made sense where it sat under the row it belonged to. */
+  .pane .qd{grid-template-columns:minmax(0,1fr);row-gap:20px;padding:0;border-top:0}
+  .pane .qd-rail{background:var(--ink)}
+  #panescrim{display:none}
+  @media(max-width:1199px){
+    .pane{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:47;
+      max-height:86vh;align-self:auto;border-left:0;border-top:1px solid var(--line);
+      border-radius:12px 12px 0 0;box-shadow:var(--shadow-lg);
+      padding-bottom:calc(22px + env(safe-area-inset-bottom))}
+    .pane-head{position:sticky;top:-2px;padding:4px 0 10px;margin:-4px 0 6px;
+      background:var(--panel);z-index:1}
+    #panescrim{display:block;position:fixed;inset:0;z-index:46;background:var(--veil-lite)}
+    /* Everything in the sheet is a touch target, as in the sidebar. */
+    .pane button,.pane summary{min-height:44px}
+  }
+  /* One column again once the pane is out of the flow. There is no longer a
+     sidebar column to account for, so this is the same answer at every width
+     below the dock and the bands no longer have to be mutually exclusive. */
+  @media(max-width:1199px){
+    .wrap.paned{grid-template-columns:minmax(0,1fr)}
+  }
 
   /* Sidebar disclosures. Everything in this column is either something you do
      every session (pick a direction, run a search) or something you do twice a
@@ -280,23 +354,32 @@
   /* Turned on below, after the base rules above -- a media query carries no
      extra specificity, so these have to come second to win. */
   @media(max-width:900px){
-    .wrap{grid-template-columns:1fr}
-    .side{position:fixed;left:0;right:0;bottom:0;z-index:45;
+    /* .wrap.paned carries two classes and so outranks a bare .wrap; it has to
+       be named here or the phone layout keeps the sidebar's column. */
+    .wrap,.wrap.paned{grid-template-columns:minmax(0,1fr)}
+    /* A drawer off the left edge is a desktop gesture. On a phone it comes up
+       from the bottom, where the thumb is -- so top, width and the axis it
+       slides on are all overridden rather than inherited. */
+    .side{left:0;right:0;bottom:0;top:auto;width:auto;
       max-height:82vh;overflow:auto;min-height:0;
       border-right:none;border-top:1px solid var(--line);
-      border-radius:12px 12px 0 0;box-shadow:var(--shadow-lg);
+      border-radius:12px 12px 0 0;
       padding-bottom:calc(18px + env(safe-area-inset-bottom));
-      transform:translateY(101%);transition:transform .22s cubic-bezier(.16,1,.3,1)}
+      transform:translateY(101%)}
     .side.open{transform:translateY(0)}
-    .sheet-head{display:flex;align-items:center;gap:10px;margin:-4px 0 16px;
-      position:sticky;top:-2px;padding:6px 0 10px;background:var(--panel);z-index:1}
     .main{padding-bottom:96px}
     /* Everything in the sheet is a touch target now, not a pointer target. */
     .side button,.side select,.side .drop,.side summary{min-height:44px}
     /* Everything in an open panel is a touch target too, not just the sidebar. */
     .qd button{min-height:44px}
+    .qacts .rowmenu>summary,.rowmenu-pop .btn-sm{min-height:44px}
     #toolbar{display:flex}
     #scrim.on{display:block}
+    /* #toolbar already offers this, full width and under the thumb. */
+    #tbOpen{display:none}
+    /* No keyboard at this width, so naming two keys is just noise in a header
+       that is already doing well to fit. */
+    .pane-head .hint{display:none}
   }
   .block{margin-bottom:22px}
   .block > .eyebrow{display:block;margin-bottom:9px}
@@ -359,6 +442,12 @@
   .qitem.closing .qbar{background:var(--closing)} .qitem.closing .qrow{background:var(--closing-row)}
   .qitem.awaiting .qbar{background:var(--awaiting)} .qitem.awaiting .qrow{background:var(--awaiting-row)}
   .qitem.closed .qbar{background:var(--closed)}
+  /* The selected row. Lifted like a hover rather than tinted, because a tint
+     would be a fifth accent and the law allows four. The ring sits on the
+     accent bar, so whatever the row already means stays readable. */
+  .qitem.sel .qrow{background:var(--panel);box-shadow:var(--shadow-md);
+    position:relative;z-index:2}
+  .qitem.sel .qbar{box-shadow:0 0 0 1px var(--signal)}
   /* The row under the pointer lifts off the list, so it is plain which one a
      click will open. Pointer devices only: on touch, hover sticks after a tap. */
   @media(hover:hover){
@@ -383,6 +472,26 @@
   .btn-due:hover:not(:disabled){background:var(--due);border-color:var(--due);color:var(--on-due);filter:brightness(1.08)}
   .btn-await{background:var(--awaiting-tint);border-color:var(--awaiting-line);color:var(--awaiting)}
   .btn-await:hover:not(:disabled){border-color:var(--awaiting);color:var(--awaiting)}
+  /* The row's overflow. Always visible rather than revealed on hover, because a
+     hover-reveal does not exist on a touch screen and a fair amount of triage
+     happens on one. A <details> rather than a scripted menu, so it closes
+     itself on the re-render that every action in it causes. */
+  .rowmenu{position:relative}
+  .rowmenu[open]{z-index:20}
+  .rowmenu>summary{list-style:none;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;padding:5px 9px;font-family:var(--mono);font-size:12px;
+    line-height:1.35;border:1px solid var(--line);border-radius:5px;
+    background:var(--panel2);color:var(--muted)}
+  .rowmenu>summary::-webkit-details-marker{display:none}
+  .rowmenu>summary::marker{content:''}
+  .rowmenu>summary:hover{border-color:var(--signal);color:var(--signal)}
+  .rowmenu-pop{position:absolute;right:0;top:calc(100% + 5px);z-index:21;
+    display:flex;flex-direction:column;gap:4px;min-width:212px;padding:6px;
+    background:var(--panel);border:1px solid var(--line);border-radius:7px;
+    box-shadow:var(--shadow-lg)}
+  .rowmenu-pop .btn-sm{text-align:left;background:transparent;border-color:transparent}
+  .rowmenu-pop .btn-sm:hover:not(:disabled){background:var(--panel2);
+    border-color:transparent;transform:none}
   /* Too narrow for five columns: the facts drop under the title, then the
      actions under both. Same row, same order, stacked rather than squeezed. */
   @media(max-width:1240px){
@@ -395,6 +504,9 @@
     .qrow{grid-template-columns:5px 32px minmax(0,1fr);gap:0 12px}
     .qbar{grid-row:1 / span 3}
     .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
+    /* The actions sit at the left edge now, so a menu hung off their right
+       edge would open past the left of the screen. Anchor it the other way. */
+    .rowmenu-pop{right:auto;left:0}
   }
 
   /* ═══ one job, opened ═══
@@ -503,6 +615,18 @@
   .tabct{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:8px;
     background:var(--panel2);color:var(--muted);vertical-align:1px}
   .tabct.due{background:var(--warn-chip);color:var(--warn)}
+  @media(max-width:640px){
+    /* Reclaims a wrapped row of the bar. Overdue stays, because it is the only
+       one of these that is a request rather than a readout -- the rest is said
+       again by the section headings and the Applied tab's own count. */
+    .topbar .pill:not(.due){display:none}
+    select.trkbar{max-width:min(240px,60vw)}
+    /* The palette is a keyboard affordance and there is no keyboard here. It
+       costs a wrapped row, and every command in it dispatches to a control in
+       the drawer, which the thumb bar opens -- so nothing becomes unreachable
+       by dropping the way in that needed two hands. */
+    #btnPal{display:none}
+  }
   @media(max-width:480px){
     .tabs{flex-wrap:wrap;row-gap:10px}
     .tabs .spacer{flex-basis:100%;height:0}
@@ -532,6 +656,35 @@
   /* Background-task toasts. Fixed to the corner and above the app but BELOW
      the modal layer, so opening the picker doesn't leave a toast floating
      over its own dialog. */
+  /* The command surface. Sits above the sidebar sheet and the mobile toolbar
+     but below .modal, because a command that opens a dialog closes the palette
+     first and the two are never on screen together. */
+  .palscrim{position:fixed;inset:0;z-index:48;background:var(--veil-lite)}
+  .palbox{position:fixed;z-index:49;left:50%;transform:translateX(-50%);
+    top:calc(8vh + env(safe-area-inset-top, 0px));width:min(520px,calc(100vw - 32px));
+    max-height:min(560px,74vh);background:var(--panel);border:1px solid var(--line);
+    border-radius:10px;box-shadow:var(--shadow-lg);overflow:hidden;
+    display:flex;flex-direction:column}
+  #palIn{width:100%;border:0;border-bottom:1px solid var(--line);border-radius:0;
+    background:transparent;font-family:var(--disp);font-size:15px;padding:14px 16px}
+  #palIn:focus{outline:none;border-color:var(--line)}
+  .pallist{overflow-y:auto;padding:6px;display:flex;flex-direction:column;gap:2px}
+  .palrow{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    background:transparent;border:1px solid transparent;border-radius:5px;
+    padding:9px 11px;font-size:13px}
+  .palrow .plab{flex:1;min-width:0}
+  .palrow .pgrp{font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;color:var(--muted);flex-shrink:0}
+  .palrow:hover:not(:disabled){background:var(--panel2);border-color:transparent;
+    color:var(--text);transform:none}
+  .palrow.on{background:var(--signal-tint);border-color:var(--go-line)}
+  .palrow.on:hover:not(:disabled){background:var(--signal-tint);border-color:var(--go-line)}
+  .palnone{padding:15px 12px;font-size:13px;color:var(--muted)}
+  .palfoot{border-top:1px solid var(--hair);padding:8px 13px;
+    font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.03em}
+  .palfoot .kb{border:1px solid var(--line);border-radius:3px;padding:0 4px;
+    margin-right:2px;color:var(--muted)}
+
   #tasks{position:fixed;right:16px;bottom:16px;z-index:40;display:flex;
     flex-direction:column;gap:9px;width:min(330px,calc(100vw - 32px))}
   .task{background:var(--panel);border:1px solid var(--line);
@@ -552,7 +705,7 @@
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
-<div id="app"><div id="root"></div><div id="tasks"></div></div>
+<div id="app"><div id="root"></div><div id="tasks"></div><div id="palette"></div></div>
 
 <script>
 (function(){
@@ -698,6 +851,12 @@ function ageLabel(j){
    Storing it would mean rewriting rows on a timer just to keep them honest. */
 const STAGES = ["new","sent","live","closed"];
 const FOLLOWUP_DAYS = 7;
+/* The day's floor, and deliberately low. A floor is not a streak: a job search
+   has bad weeks -- illness, a run of rejections, a week where resting is the
+   right move -- and a counter that punishes a missed day costs the most to the
+   people already having the worst one. This resets every morning and nothing
+   is lost by missing it. */
+const DAY_FLOOR = 3;
 
 /* Every LLM call in this file uses the same number, and deliberately so. A thinking model
    spends tokens reasoning before it answers and those come out of the same
@@ -745,11 +904,14 @@ let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
-/* Which job is expanded in the list, held by keyOf rather than by index: a
-   retention pass or an import can renumber the array underneath it, and the
-   panel must not reopen on somebody else's job. One at a time, because the
-   point of it is to read one carefully. */
-let OPEN_JOB = null;
+/* Which job is selected, held by keyOf rather than by index: a retention pass
+   or an import can renumber the array underneath it, and the pane must not
+   reopen on somebody else's job. One at a time, because the point of it is to
+   read one carefully.
+   It used to mean "expanded in the list", which is why it was called SEL_JOB.
+   The detail now renders beside the queue instead of inside it, so this is a
+   selection: the list does not change shape when it moves. */
+let SEL_JOB = null;
 /* Which disclosures are open, sidebar and lists alike. Held here rather than
    left as DOM state because render() rebuilds #root from scratch: a panel that
    shut itself every time you used something inside it would be worse than no
@@ -2895,6 +3057,45 @@ function setStage(j,st){
   j.last_touch=today();
 }
 
+/* Every field an action in the queue can change on one row. The list fields
+   are JSON strings on the record, so holding the strings IS the deep copy. */
+const UNDO_FIELDS = ['stage','status','date_applied','follow_up_date','last_touch',
+                     'events','contacts','notes','pitch_sent'];
+
+/* One row, held so any action on it can be put back whole rather than
+   approximately. Undo is not a nicety here: the queue's whole job is to make
+   acting cheap, and an action is only cheap if being wrong about it is. */
+function snapRow(j){
+  const s={ pid:DB.current };
+  UNDO_FIELDS.forEach(k=>{ s[k]=j[k]; });
+  return async ()=>{
+    /* The closure holds the row object itself. Undoing after a profile switch
+       would write a row from one profile through a save of another. */
+    if(DB.current!==s.pid){
+      alert('That happened under a different profile, so it cannot be undone from here.');
+      return;
+    }
+    UNDO_FIELDS.forEach(k=>{ j[k]=s[k]; });
+    await save(); render();
+  };
+}
+
+/* What the toast says a stage change did. stageNote is the log's voice
+   ("applied"); this is the confirmation's ("Marked applied"), and they are not
+   the same sentence -- a log is a record and a toast is an answer. */
+const stageToast = (j,st) => st==='sent' ? (chOf(j)==='cold'?'Marked contacted':'Marked applied')
+  : st==='live' ? 'Marked as replied' : st==='closed' ? 'Closed' : 'Reopened';
+
+/* Reuses the background-task toasts rather than adding a second toast layer:
+   #tasks already sits outside #root, so this survives the re-render that every
+   one of these actions causes. */
+function undoToast(j,undo,label){
+  const t={ id:'t'+(++TASKSEQ), state:'done', label:label||'Done',
+            status:[j.title,j.company].filter(Boolean).join(' · ')||'this role', undo };
+  TASKS.push(t); renderTasks();
+  setTimeout(()=>dropTask(t.id), 9000);
+}
+
 /* ═══ CSV ═══ */
 function parseCSV(text){
   text=text.replace(/^\uFEFF/,'').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
@@ -3641,6 +3842,10 @@ async function fromAts(jobs, onStatus){
    of a track nobody is looking at. Null whenever there is nothing to offer --
    no cloud session, an own Apify token, or the paid search already made. */
 let PAID_OFFER = null;
+/* Whether the first click reads the free corpus rather than the paid boards.
+   renderApp words the button from this and the command palette words its entry
+   from it, so the two cannot drift apart. */
+const freeFirstNow = () => !ownApify() && cloudNow();
 /* What the live-board search costs, for the button that offers it. The server
    is the authority (COST.boardSearch) and hands the real figure over with the
    packs; this is the same number written down so the button can be drawn before
@@ -4527,15 +4732,41 @@ function jobCard(j,i){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j), acc=accentOf(j);
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   const age=ageOf(j), scored=isScored(j);
-  const open = OPEN_JOB===keyOf(j);
+  const sel = SEL_JOB===keyOf(j);
   const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
-  const details=btn('open', open?'Hide':'Details');
+  /* Opens the pane, not the row. The label no longer toggles to "Hide",
+     because the row does not hold the detail any more -- closing is the pane's
+     own job, and a button saying "Hide" about content sitting in another
+     column would be lying about where that content is. */
+  const details=btn('open','Read');
   // btn() interpolates its label raw, so anything from a job record is escaped
   // before it gets there. follow_up_date arrives from CSV import and backups.
   const chaseOn = esc(mmdd(followUpOn(j)));
+  /* The posting, in the slot the eye reaches first. Every other thing the app
+     does -- two scores rather than one, the ranking, the sections -- exists to
+     produce this one click, and it used to be a text link folded inside the
+     detail panel while the filled button went to a writing task. Recording the
+     application is bookkeeping: it happens as a consequence of applying, and
+     the deliberate version of it sits in the menu with the rest.
+     No link saved means there is nothing to open, so the row falls back to
+     marking by hand rather than offering a button that cannot work. */
+  const url = httpUrl(String(j.url||'').trim());
+  const more = items => `<details class="rowmenu"><summary title="More actions">\u22ef</summary>
+      <div class="rowmenu-pop">${items.filter(Boolean).join('')}</div></details>`;
   const acts =
-      st==='new'  ? btn('sent', ch==='cold'?'Mark contacted':'Mark applied') + details
-                    + btn('pitch', ch==='cold'?'Write the DM':'Draft outreach', 'btn-go')
+      st==='new'  ? (ch==='cold'
+                      /* A cold row has no posting to open, so the one thing to
+                         do is write to a person. The accent stays on that. */
+                      ? btn('pitch','Write the DM','btn-go') + details
+                        + more([btn('sent','Mark contacted'),
+                                btn('hrfind','Find contacts'),
+                                btn('close','Not interested')])
+                      : (url ? btn('apply','Apply \u2197','btn-go')
+                             : btn('sent','Mark applied','btn-go')) + details
+                        + more([url?btn('sent','Mark applied without opening'):'',
+                                btn('pitch','Draft outreach'),
+                                btn('hrfind','Find contacts'),
+                                btn('close','Not interested')]))
     : st==='sent' ? btn('live','They replied') + details
                     + (due ? btn('chase','Write the chase','btn-due')
                            : btn('chase', chaseOn?`Chase on ${chaseOn}`:'Chase', 'btn-await'))
@@ -4564,7 +4795,7 @@ function jobCard(j,i){
   const sub=[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
   const rankCls = st!=='new' ? 'quiet' : '';
 
-  return `<div class="qitem ${acc} ${gone?'closed':''} ${open?'open':''}" data-jobidx="${i}">
+  return `<div class="qitem ${acc} ${gone?'closed':''} ${sel?'sel':''}" data-jobidx="${i}">
     <div class="qrow">
       <i class="qbar"></i>
       <span class="qrank ${rankCls}">${gone?'—':(scored?Math.round(rankOf(j)):'—')}</span>
@@ -4572,7 +4803,7 @@ function jobCard(j,i){
       <div class="qfacts">${facts}</div>
       <div class="qacts">${acts}</div>
     </div>
-    ${open?jobDetail(j,i,acc):''}</div>`;
+  </div>`;
 }
 
 /* ═══ the daily view ═══
@@ -4638,9 +4869,9 @@ const foldSect=(key,title,sub,rows)=>{
      or far-down row used to switch tab and then do nothing at all: the row was
      display:none inside a shut <details>, or past the cap and never rendered,
      and scrollIntoView had nothing to find. */
-  const holdsOpen = !!OPEN_JOB && rows.some(x=>keyOf(x.j)===OPEN_JOB);
+  const holdsOpen = !!SEL_JOB && rows.some(x=>keyOf(x.j)===SEL_JOB);
   const shown = rows.slice(0,LIST_CAP);
-  if(holdsOpen && !shown.some(x=>keyOf(x.j)===OPEN_JOB)) shown.push(rows.find(x=>keyOf(x.j)===OPEN_JOB));
+  if(holdsOpen && !shown.some(x=>keyOf(x.j)===SEL_JOB)) shown.push(rows.find(x=>keyOf(x.j)===SEL_JOB));
   const hidden = rows.length - shown.length;
   return `<details class="fold" data-fold="${key}" ${(FOLDS[key]||holdsOpen)?'open':''} style="margin-bottom:26px">
     <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
@@ -4820,7 +5051,11 @@ function renderApp(){
   const applied=p.jobs.filter(j=>j.status==='Applied').length;
   const posted=p.jobs.filter(j=>chOf(j)==='posted').length;
   const cold=p.jobs.filter(j=>chOf(j)==='cold').length;
-  const doneToday=p.jobs.filter(j=>j.status==='Applied'&&j.date_applied===today()).length;
+  /* The day's tally, which this function has always computed and never shown.
+     Counts cold outreach alongside applications: setStage stamps date_applied
+     whichever it was, and a day spent on cold approaches is the same work --
+     reading 0 of 3 after a morning of them would be a lie about the effort. */
+  const doneToday=p.jobs.filter(j=>j.date_applied===today()).length;
   const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
@@ -4831,16 +5066,34 @@ function renderApp(){
   /* On our keys the first click reads the free corpus and the paid boards are a
      second, separate one. With an own Apify token there is no credit of ours to
      save, so that path keeps its single button and its old wording. */
-  const freeFirst=!ownApify() && cloudNow();
+  const freeFirst=freeFirstNow();
   /* Scoped to THIS track. An offer left behind by another track would spend the
      board-search charge on titles nobody is looking at. */
   const offer=!!(PAID_OFFER && PAID_OFFER.trackId===trk.id);
+  /* Resolved once, here, because the pane and the row both need it and looking
+     it up twice would let them disagree. A key that no longer matches anything
+     -- the row was trimmed, or an import replaced it -- reads as no selection
+     rather than as an error. */
+  const selIdx = SEL_JOB ? p.jobs.findIndex(x=>keyOf(x)===SEL_JOB) : -1;
+  const selJob = selIdx>=0 ? p.jobs[selIdx] : null;
 
   $('#root').innerHTML=`
   <div class="topbar">
     <h1>Job Triage</h1>
+    <button class="btn-sm" id="tbOpen">Find work &amp; tools</button>
     <div class="who"><div class="av">${esc(initials)}</div>
-      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}${trk.label?' · '+esc(trk.label):''}</div></div></div>
+      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}</div></div></div>
+    <!-- Changing direction re-ranks every job in the app. That is a lens over
+         the whole tool, not a tool in a drawer, so it reads and changes from
+         the bar rather than from inside the thing it reorders. -->
+    <select id="trackSel" class="trkbar" title="Direction — changing it re-ranks everything">${(prof.tracks||[]).map(t=>
+      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
+    <div class="floor${doneToday>=DAY_FLOOR?' met':''}" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
+      <span class="fdots">${Array.from({length:DAY_FLOOR},(_,k)=>
+        `<i class="fdot${k<doneToday?' on':''}"></i>`).join('')}</span>
+      <span class="flab">${doneToday>=DAY_FLOOR
+        ? `${doneToday} today · floor cleared`
+        : `${doneToday} of ${DAY_FLOOR} today`}</span></div>
     <div class="spacer"></div>
     ${law.due?`<span class="pill due">${law.due} overdue</span>`:''}
     ${law.closing?`<span class="pill closing">${law.closing} closing</span>`:''}
@@ -4853,13 +5106,13 @@ function renderApp(){
         ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg> Light'
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
-    <button class="btn-sm" id="btnSwitch">Switch profile</button>
+    <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
     <button class="btn-sm" id="btnFeedback" title="Tell us what broke">Feedback</button>
-    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits" onclick="buyDialog()">${esc(creditsLabel())}</button>
+    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
   <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
-  <div class="wrap">
+  <div class="wrap${selJob?' paned':''}">
     <div class="side ${TOOLS?'open':''}">
       <div class="sheet-head">
         <span class="eyebrow">Tools</span>
@@ -4867,12 +5120,12 @@ function renderApp(){
         <button class="btn-sm" id="tbClose">Close</button>
       </div>
       <div class="block"><span class="eyebrow">Direction</span>
-        <select id="trackSel">${(prof.tracks||[]).map(t=>
-          `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
-        <div class="hint">${esc(trk.why||'')}</div>
+        <div class="hint" style="margin-top:0">${esc(trk.why||'')}</div>
         <div class="btn-row" style="margin-top:9px">
           <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
+        <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnSwitch" style="width:100%">Switch profile</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
       </div>
       <div class="block"><span class="eyebrow">What the colours mean</span>
@@ -5004,8 +5257,18 @@ function renderApp(){
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
+    ${selJob?`<aside class="pane" id="pane" aria-label="The job you are deciding on">
+      <div class="pane-head">
+        <span class="eyebrow">Deciding</span>
+        <span class="hint" style="margin:0">j / k to walk · esc to close</span>
+        <div class="spacer"></div>
+        <button class="btn-sm" data-act="unsel" data-i="${selIdx}">Close</button>
+      </div>
+      ${jobDetail(selJob,selIdx,accentOf(selJob))}
+    </aside>`:''}
   </div>
   <div id="scrim" class="${TOOLS?'on':''}"></div>
+  ${selJob?'<div id="panescrim"></div>':''}
   <div id="toolbar">
     <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
   </div>`;
@@ -5033,6 +5296,7 @@ function renderApp(){
     await putLocal('triage:theme', THEME);
     render();
   };
+  $('#btnPal').onclick=openPalette;
   $('#btnSwitch').onclick=()=>{ VIEW='onb'; ONB=blankOnb(); render(); };
   $('#btnPaste').onclick=pasteJobDialog;
   $('#btnScore').onclick=()=>runScoring(false);
@@ -5066,6 +5330,10 @@ function renderApp(){
     // Turning it on with a backlog already sitting there should clear it.
     if(AUTO) await autoScore(); else setInfo('');
   };
+  /* Bound here like every other control. It carried an inline onclick, which
+     could never have worked: this file is one IIFE, so the attribute resolved
+     buyDialog against global scope and threw on click. */
+  if($('#btnCredits')) $('#btnCredits').onclick=buyDialog;
   if($('#btnSignOut')) $('#btnSignOut').onclick=async()=>{
     // While CLOUD_DOWN is latched, put() has been writing to this device only,
     // so local IS the only copy of everything saved since. Say so, and leave it
@@ -5119,10 +5387,16 @@ function renderApp(){
     runPaidBoards(trk, o.where, o.since_days);
   };
   const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
+  // Three ways in and out, because the drawer is now the only route to any of
+  // this: the bar at every width, the thumb bar on a phone, and its own Close.
+  if($('#tbOpen'))  $('#tbOpen').onclick=toggleTools;
   if($('#tbTools')) $('#tbTools').onclick=toggleTools;
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
   // Tapping the dimmed page behind the sheet is the gesture everyone tries first.
   if($('#scrim')) $('#scrim').onclick=()=>{ TOOLS=false; render(); };
+  // Only ever visible at the widths where the pane overlays the queue; docked,
+  // CSS hides it, because there is nothing behind the pane to dismiss it onto.
+  if($('#panescrim')) $('#panescrim').onclick=()=>{ SEL_JOB=null; render(); };
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
   bindPlot();
@@ -5436,7 +5710,7 @@ function pasteJobDialog(){
 const tabFor = j => (isOpen(j) && stOf(j)==='new') ? 'unapplied' : 'applied';
 function showJob(i){
   const p=P(), j=p&&p.jobs[i]; if(!j) return;
-  OPEN_JOB = keyOf(j);
+  SEL_JOB = keyOf(j);
   TAB = tabFor(j);
   // Pointing at a row the current filter hides would land on an empty list.
   if(CHFILT!=='all' && chOf(j)!==CHFILT) CHFILT='all';
@@ -5479,15 +5753,171 @@ function renderTasks(){
     <div class="ts">${esc(t.status||'')}</div>
     ${t.state==='running'?'':`<div class="btn-row" style="margin-top:9px">
       ${t.state==='done'&&(t.result||[]).length?`<button class="btn-go btn-sm" data-task-open="${t.id}">Review</button>`:''}
+      ${t.undo?`<button class="btn-sm" data-task-undo="${t.id}">Undo</button>`:''}
       <button class="btn-sm" data-task-drop="${t.id}">Dismiss</button></div>`}
   </div>`).join('');
   el.querySelectorAll('[data-task-open]').forEach(b=>b.onclick=()=>{
     const t=TASKS.find(x=>x.id===b.dataset.taskOpen); if(!t) return;
     dropTask(t.id); hrPick(t);
   });
+  el.querySelectorAll('[data-task-undo]').forEach(b=>b.onclick=async()=>{
+    const t=TASKS.find(x=>x.id===b.dataset.taskUndo); if(!t||!t.undo) return;
+    dropTask(t.id); await t.undo();
+  });
   el.querySelectorAll('[data-task-drop]').forEach(b=>b.onclick=()=>dropTask(b.dataset.taskDrop));
 }
 function dropTask(id){ TASKS=TASKS.filter(t=>t.id!==id); renderTasks(); }
+
+/* ═══ the command surface ═══
+   Every verb in the app in one typed list, so the sidebar stops being the only
+   way to reach any of them. Each entry points at the control that already does
+   the work rather than repeating it: one source of truth per verb, including
+   the confirm dialogs several of them carry, and no way for a command to drift
+   from the button it mirrors. A control inside a closed fold still fires -- a
+   programmatic click does not care whether the element is visible. */
+let PAL = null;   // null closed, else { q, sel }
+
+function commands(){
+  const list=[
+    /* Worded from freeFirstNow() for the same reason renderApp is: after the
+       free-corpus split this button says one of two things, and a palette entry
+       that said the other would be describing a button that is not there. */
+    ['Find work', freeFirstNow()?'Search the free index':'Search the job boards','#btnBoards'],
+    /* Only exists while an offer is live, so most of the time this resolves to
+       nothing -- which runCommand already answers honestly rather than failing
+       silently, because a click on an absent control is the one case it checks. */
+    ['Find work','Search live boards \u2014 '+BOARD_COST+' credits','#btnPaidBoards'],
+    ['Find work','Suggest companies for me','#btnSuggest'],
+    ['Find work','Pull a company I already know','#btnAts'],
+    ['Find work','Add a job by hand','#btnPaste'],
+    ['Find work','Add a company to approach','#btnCold'],
+    ['Score','Score new jobs','#btnScore'],
+    ['Score','Rescore everything','#btnRescore'],
+    ['Profile','My profile','#btnProfile'],
+    ['Profile','Add a direction','#btnAddTrack'],
+    ['Profile','Switch profile','#btnSwitch'],
+    ['Data', KEY?'Keys':'Set up keys','#btnKey'],
+    ['Data','Backup & transfer','#btnData'],
+    ['Data','Export CSV','#btnExport'],
+    ['Data','Trim to top '+KEEP_TOP,'#btnTrim'],
+    ['Data','Clear jobs','#btnClear'],
+    ['View','Theme','#btnTheme'],
+    ['View','Send feedback','#btnFeedback']
+  ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
+  // The four views are state rather than controls, so these set it directly.
+  [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
+    .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  if(CLOUD&&USER){
+    list.push({ g:'Account', label:'Credits', el:'#btnCredits' });
+    list.push({ g:'Account', label:'Sign out', el:'#btnSignOut' });
+  }
+  return list;
+}
+
+/* Substring over the label and its group, which is enough for a list this
+   size and never surprises anyone by matching something they cannot see. */
+function palHits(){
+  const q=String(PAL&&PAL.q||'').trim().toLowerCase();
+  const all=commands();
+  return q ? all.filter(c=>(c.label+' '+c.g).toLowerCase().includes(q)) : all;
+}
+
+function openPalette(){ PAL={q:'',sel:0}; renderPalette(); }
+function closePalette(){ PAL=null; renderPalette(); }
+
+function runCommand(n){
+  const c=palHits()[n]; if(!c) return;
+  closePalette();
+  if(c.run) return c.run();
+  const b=$(c.el);
+  if(!b){ alert('That one is not available on this screen.'); return; }
+  /* A click on a disabled button does not fire its handler, so dispatching
+     into one would be a silent no-op -- the palette would look broken rather
+     than busy. The disabled state is already the honest answer; say it. */
+  if(b.disabled){ alert('Not right now \u2014 a run is already going. The toast in the corner says where it is up to.'); return; }
+  b.click();
+}
+
+function renderPalette(){
+  const el=$('#palette'); if(!el) return;
+  if(!PAL){ el.innerHTML=''; return; }
+  const hits=palHits();
+  if(PAL.sel>=hits.length) PAL.sel=Math.max(0,hits.length-1);
+  el.innerHTML=`<div class="palscrim"></div>
+    <div class="palbox" role="dialog" aria-modal="true" aria-label="Commands">
+      <input id="palIn" type="text" autocomplete="off" spellcheck="false"
+        placeholder="What do you want to do?" value="${esc(PAL.q)}">
+      <div class="pallist">${hits.length
+        ? hits.map((c,n)=>`<button class="palrow${n===PAL.sel?' on':''}" data-pal="${n}">
+            <span class="plab">${esc(c.label)}</span><span class="pgrp">${esc(c.g)}</span></button>`).join('')
+        : '<div class="palnone">Nothing matches that.</div>'}</div>
+      <div class="palfoot"><span class="kb">↑↓</span> move · <span class="kb">↵</span> run · <span class="kb">esc</span> close</div>
+    </div>`;
+  const inp=$('#palIn');
+  inp.focus();
+  // Caret to the end rather than the whole value selected, so the next
+  // keystroke continues the query instead of replacing it.
+  try{ inp.setSelectionRange(PAL.q.length, PAL.q.length); }catch(e){}
+  inp.oninput=()=>{ PAL.q=inp.value; PAL.sel=0; renderPalette(); };
+  inp.onkeydown=e=>{
+    const n=palHits().length;
+    if(e.key==='Escape'){ e.preventDefault(); closePalette(); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); PAL.sel=Math.min(PAL.sel+1,n-1); renderPalette(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); PAL.sel=Math.max(PAL.sel-1,0); renderPalette(); }
+    else if(e.key==='Enter'){ e.preventDefault(); runCommand(PAL.sel); }
+  };
+  el.querySelector('.palscrim').onclick=closePalette;
+  el.querySelectorAll('[data-pal]').forEach(b=>
+    b.onclick=()=>runCommand(parseInt(b.dataset.pal,10)));
+}
+
+/* Opened from the keyboard, or from the top bar -- a shortcut alone would make
+   the whole surface unreachable on a phone, where there is no ⌘ to press. */
+document.addEventListener('keydown',e=>{
+  if(VIEW!=='app') return;
+  // A modal is a question only the person can answer; nothing goes over it.
+  if(document.querySelector('.modal')) return;
+  if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){
+    e.preventDefault();
+    if(PAL) closePalette(); else openPalette();
+    return;
+  }
+  if(PAL) return;                 // the palette's own input owns the rest
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+  const typing = !!(e.target && e.target.closest
+                    && e.target.closest('input,textarea,select,[contenteditable]'));
+  if(typing) return;
+  if(e.key==='/'){ e.preventDefault(); return openPalette(); }
+  /* Topmost first: the pane sits over the drawer, so that is what escape
+     means while both are open. */
+  if(e.key==='Escape' && SEL_JOB){ e.preventDefault(); SEL_JOB=null; return render(); }
+  if(e.key==='Escape' && TOOLS){ e.preventDefault(); TOOLS=false; return render(); }
+  if(e.key==='j' || (e.key==='ArrowDown' && SEL_JOB)){ e.preventDefault(); return moveSel(1); }
+  if(e.key==='k' || (e.key==='ArrowUp'   && SEL_JOB)){ e.preventDefault(); return moveSel(-1); }
+});
+
+/* The next row down, read off the DOM rather than recomputed. The queue's
+   order is the view's: four sections in a fixed priority, each sorted, some of
+   them folded away and one of them capped. Working out "the next one" from the
+   data would mean reproducing all of that here and keeping the copy in step
+   forever. What is on screen is the order the person sees, so ask it. */
+function moveSel(dir){
+  const rows=[...document.querySelectorAll('.qitem[data-jobidx]')];
+  if(!rows.length) return;
+  const idx=rows.map(r=>parseInt(r.dataset.jobidx,10));
+  const p=P(); if(!p) return;
+  const at=SEL_JOB ? idx.findIndex(i=>p.jobs[i] && keyOf(p.jobs[i])===SEL_JOB) : -1;
+  // Nothing selected yet: j starts at the top of the queue, k at the bottom.
+  const next = at<0 ? (dir>0 ? 0 : idx.length-1)
+                    : Math.max(0, Math.min(idx.length-1, at+dir));
+  const j=p.jobs[idx[next]]; if(!j) return;
+  SEL_JOB=keyOf(j);
+  render();
+  /* 'nearest' rather than 'center': walking a list should scroll only when the
+     row would otherwise be off screen, not jump the page on every keystroke. */
+  const el=document.querySelector('.qitem.sel');
+  if(el) el.scrollIntoView({block:'nearest'});
+}
 
 function hrRow(c,i){
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
@@ -5709,17 +6139,33 @@ Return only the message text.`});
 document.addEventListener('click',async e=>{
   // Anywhere on a row that is not one of its own controls opens it, by pressing
   // the row's Details button -- one toggle, however it was reached.
-  if(!e.target.closest('button,a,input,select,textarea,label')){
+  /* A row menu left open while the page is clicked elsewhere would hang over
+     whatever is underneath it, so anything outside one closes them all. */
+  if(!e.target.closest('.rowmenu')){
+    document.querySelectorAll('.rowmenu[open]').forEach(d=>{ d.open=false; });
+  }
+  if(!e.target.closest('button,a,input,select,textarea,label,summary,.rowmenu')){
     const d=e.target.closest('.qrow')?.querySelector('button[data-act="open"]');
     if(d){ d.click(); return; }
   }
   const b=e.target.closest('button[data-act]'); if(!b) return;
   const i=parseInt(b.dataset.i,10), p=P(), j=p&&p.jobs[i]; if(!j) return;
   const a=b.dataset.act;
+  /* Synchronous, and before anything in this handler is awaited: a popup
+     blocker only lets window.open through inside the gesture that caused it,
+     so this cannot wait until after the save. */
+  if(a==='apply'){
+    const u=httpUrl(String(j.url||'').trim());
+    if(u) window.open(u,'_blank','noopener');
+  }
   // Two different intents that used to share one verb. 'open' toggles a card
   // that is already on screen; 'goto' is pressed from somewhere the card is
   // NOT -- the dashboard's feed -- and has to travel to it first.
-  if(a==='open'){ OPEN_JOB = OPEN_JOB===keyOf(j) ? null : keyOf(j); return render(); }
+  /* Selects, where it used to toggle. A toggle made sense when the row held
+     the detail; with a pane, clicking the row you are already reading should
+     leave it alone rather than slam the pane shut. */
+  if(a==='open'){ SEL_JOB = keyOf(j); return render(); }
+  if(a==='unsel'){ SEL_JOB = null; return render(); }
   if(a==='goto') return showJob(i);
   if(a==='pitch')  return draftPitch(i,false);
   if(a==='chase')  return draftPitch(i,true);
@@ -5729,18 +6175,28 @@ document.addEventListener('click',async e=>{
   if(a==='hrfind') return hrDialog(i);
   if(a==='inmail') return draftInmail(i, parseInt(b.dataset.ci,10));
   if(a==='ctdel'){
+    // Destructive, and it used to happen in silence. A found contact can cost
+    // an Apify run to find again, so this one especially wants a way back.
+    const undo=snapRow(j);
     const arr=listOf(j,'contacts'); arr.splice(parseInt(b.dataset.ci,10),1);
     setList(j,'contacts',arr);
     logEvent(j,'contact','removed a contact');
+    undoToast(j,undo,'Contact removed');
   }
   // One route for every stage change, from the card's shortcut or the panel's
   // full row, so they log the same thing and set the same fields.
   const to = a==='stage' ? b.dataset.to
-           : a==='sent' ? 'sent' : a==='live' ? 'live'
+           : (a==='sent'||a==='apply') ? 'sent' : a==='live' ? 'live'
            : a==='close' ? 'closed' : a==='reopen' ? 'new' : '';
   if(to && STAGES.includes(to)){
+    /* Snapshotted before the change, and every stage change gets one -- not
+       just the optimistic apply. Reopening a row rewrites its follow-up clock
+       and closing one takes it out of the queue, and neither is obvious to
+       put back by hand once the row has moved tab. */
+    const undo = snapRow(j);
     setStage(j,to);
     logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
+    undoToast(j, undo, stageToast(j,to));
   }
   await save(); render();
 });
