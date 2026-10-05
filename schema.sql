@@ -774,3 +774,34 @@ end $$;
 
 revoke all on function public.search_index(text[], integer, integer) from public, anon;
 grant execute on function public.search_index(text[], integer, integer) to authenticated, service_role;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Beta feedback. Applied 2026-10-05 as migration feedback_table.
+--
+-- `context` is the reason this is a table here and not a Google Form. A form
+-- that carries only prose gets "search was slow", and nobody can tell which
+-- search, on which model, over how many rows. The app already knows all of
+-- that, so it attaches it: the open track, the counts, the last model to score,
+-- the theme, whether a run was in flight. Nothing typed, nothing secret -- no
+-- keys, no CV text, no posting bodies.
+--
+-- Own rows only, same shape as jobs and profiles. Insert is the point; select
+-- exists so the app can confirm rather than hope. Verified 2026-10-05 against
+-- the live policy: an insert naming another user_id is blocked, a kind outside
+-- the four is rejected by the check, and the owner sees only their own.
+create table if not exists public.feedback (
+  id         bigserial   primary key,
+  user_id    uuid        not null references auth.users(id) on delete cascade,
+  kind       text        not null check (kind in ('bug','idea','confusing','other')),
+  message    text        not null,
+  context    jsonb       not null default '{}',
+  created_at timestamptz not null default now()
+);
+alter table public.feedback enable row level security;
+drop policy if exists "own rows: insert" on public.feedback;
+create policy "own rows: insert" on public.feedback
+  for insert to authenticated with check (auth.uid() = user_id);
+drop policy if exists "own rows: select" on public.feedback;
+create policy "own rows: select" on public.feedback
+  for select to authenticated using (auth.uid() = user_id);
+create index if not exists feedback_time on public.feedback (created_at desc);

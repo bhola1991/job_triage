@@ -3831,6 +3831,59 @@ async function runAts(lines){
 /* ═══ cold target ═══
    A company with no posting. Same two axes, but the action is a DM rather than
    an application — which is where most of these roles actually get filled. */
+/* Beta feedback, with the state the app was in attached.
+
+   A form that only carries prose gets "search was slow" and nobody can tell
+   which search, on what model, with how many rows. So `context` records what is
+   already in memory at the moment they click: the open track, the counts, which
+   model last scored, and whether the last scoring run failed. None of it is
+   typed by the user and none of it is a secret -- no keys, no CV text, no
+   posting bodies, just the shape of the session.
+
+   One credit is not charged and nothing is metered: this is the only write in
+   the app that exists for us rather than for them. */
+function feedbackDialog(){
+  const p=P();
+  const kinds=[['bug','Something broke'],['confusing','I could not tell what to do'],
+               ['idea','It should do this instead'],['other','Something else']];
+  const d=modal(`<div class="eyebrow">Beta feedback</div>
+    <h2 style="margin:6px 0 6px">What happened?</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">Blunt is useful. This sends what the app was doing at the time, so you do not have to describe it.</p>
+    <label class="lab">Kind</label>
+    <select id="fbKind">${kinds.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
+    <label class="lab" style="margin-top:10px">In your words</label>
+    <textarea id="fbMsg" rows="6" placeholder="What you expected, what happened instead."></textarea>
+    <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="fbSend">Send</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
+    <div id="fbErr" class="err" style="display:none;margin-top:10px"></div>`);
+  d.querySelector('#fbSend').onclick=async()=>{
+    const msg=d.querySelector('#fbMsg').value.trim();
+    const err=d.querySelector('#fbErr');
+    if(!msg){ err.textContent='Say something first.'; err.style.display='block'; return; }
+    if(!CLOUD||!USER){ err.textContent='Feedback needs you signed in — it is tied to your account so we can reply.'; err.style.display='block'; return; }
+    const ctx={
+      track: p&&p.track ? String(p.track).slice(0,80) : null,
+      jobs: p&&p.jobs ? p.jobs.length : 0,
+      scored: p&&p.jobs ? p.jobs.filter(isScored).length : 0,
+      model: globalThis.LAST_MODEL||null,
+      theme: THEME, busy: !!busy,
+      agent: String(navigator.userAgent||'').slice(0,160),
+      at: new Date().toISOString(),
+    };
+    const btn=d.querySelector('#fbSend'); btn.disabled=true; btn.textContent='Sending…';
+    try{
+      const { error }=await SB.from('feedback').insert({
+        user_id: USER.id, kind: d.querySelector('#fbKind').value, message: msg.slice(0,4000), context: ctx });
+      if(error) throw new Error(error.message);
+      d.remove(); setInfo('Thanks — that landed.');
+    }catch(e){
+      btn.disabled=false; btn.textContent='Send';
+      err.textContent='Could not send: '+e.message; err.style.display='block';
+    }
+  };
+  d.querySelector('#fbMsg').focus();
+}
+
 function coldDialog(){
   const d=modal(`<div class="eyebrow">Cold target</div>
     <h2 style="margin:6px 0 6px">Add a company with no posting</h2>
@@ -4649,6 +4702,7 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnSwitch">Switch profile</button>
+    <button class="btn-sm" id="btnFeedback" title="Tell us what broke">Feedback</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits" onclick="buyDialog()">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -4892,6 +4946,7 @@ function renderApp(){
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
+  { const b=$('#btnFeedback'); if(b) b.onclick=feedbackDialog; }
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
