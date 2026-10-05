@@ -46,6 +46,10 @@ supabase/.temp/
 # what to exclude rather than what to keep.
 .claude/*.local.json
 .claude/launch.json
+# Worktrees Claude Code creates under here are whole clones of this repo, so
+# `git add -A` stages them as embedded git repositories -- a commit that is
+# useless to anyone cloning. Per-machine by nature, like the two above.
+.claude/worktrees/
 claude --teleport*.txt
 
 # Index build output: crawl it, do not commit it (37 MB per 5k jobs).
