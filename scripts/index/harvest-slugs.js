@@ -54,7 +54,30 @@ if (!files.length) {
   process.exit(1);
 }
 
-const read = (f) => (f === '-' ? fs.readFileSync(0, 'utf8') : fs.readFileSync(f, 'utf8'));
+/* Stdin is read in chunks, not in one shot. `fs.readFileSync(0, 'utf8')` is the
+   obvious spelling and it SEGFAULTS on a large pipe: the first scheduled run of
+   refresh.sh died with status 134, core dumped, 1.8 GB peak, on
+   `corpus-urls.js | harvest-slugs.js -` carrying 23,057 urls. The same input
+   from a FILE was fine, which is what made it look like a data problem rather
+   than a read problem. corpus-urls then reported Exit 1, which was only EPIPE
+   from its consumer dying -- so the failing process was not the one the log
+   named first. EAGAIN is retried because a pipe can be non-blocking. */
+const readStdin = () => {
+  const out = [], buf = Buffer.alloc(1 << 16);
+  for (;;) {
+    let n;
+    try { n = fs.readSync(0, buf, 0, buf.length, null); }
+    catch (e) {
+      if (e.code === 'EAGAIN') continue;
+      if (e.code === 'EOF') break;
+      throw e;
+    }
+    if (!n) break;
+    out.push(Buffer.from(buf.subarray(0, n)));
+  }
+  return Buffer.concat(out).toString('utf8');
+};
+const read = (f) => (f === '-' ? readStdin() : fs.readFileSync(f, 'utf8'));
 
 /* Any shape at all. A Backup & transfer export, index.jsonl, a bare array of
    strings — the only thing asked of the input is that URLs appear in it
