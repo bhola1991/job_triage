@@ -1,0 +1,177 @@
+#!/usr/bin/env node
+// Do the Worker's two public write routes accept only what they should?
+//
+//   node scripts/selfcheck-worker.js
+//
+// Why this exists
+// ---------------
+// /api/feedback and /api/contact are the only endpoints in this project that
+// an unauthenticated stranger can write through, and /api/feedback inserts
+// with the SERVICE ROLE -- it is the one place where an anonymous request
+// reaches past RLS. Everything else the app does goes through the anon key
+// under a policy.
+//
+// It also could not be checked in production, which is what prompted this: the
+// route answers 503 until SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY are set
+// as Worker secrets, and that check runs before validation -- so every probe
+// came back 503 and proved nothing about the validation behind it.
+//
+// Offline: the handler is imported and driven with a stub env and a stubbed
+// global fetch, so nothing is sent and no key is needed.
+'use strict';
+
+let fail = 0;
+const ok = (name, cond, got) => {
+  if (cond) return;
+  fail++;
+  console.log(`  FAIL ${name}${got === undefined ? '' : `  got ${JSON.stringify(got)}`}`);
+};
+
+/* Node warns that src/index.js is ESM without a "type": "module" nearby --
+   caused by a package.json OUTSIDE this repo, in the home directory, which is
+   not ours to edit. The repo has no root package.json on purpose (CLAUDE.md
+   §3). Silenced here only, so a real warning still shows. */
+const realWarn = process.emitWarning;
+process.emitWarning = (w, ...rest) =>
+  /MODULE_TYPELESS_PACKAGE_JSON/.test(String(rest[0] && rest[0].code || rest[0] || '')) ||
+  /Module type of/.test(String(w)) ? undefined : realWarn.call(process, w, ...rest);
+
+const ENV = { SUPABASE_URL: 'https://stub.supabase.co', SUPABASE_SERVICE_ROLE_KEY: 'stub-service-role' };
+
+/* The handler logs to console.error on the 503 and 502 paths, which is correct
+   in production and confusing in a check that ends in ALL PASS -- a reader
+   cannot tell an expected log from a real one. Muted around the cases that
+   provoke it, and asserted to have happened, so the logging itself is still
+   covered rather than merely hidden. */
+let logged = [];
+async function quiet(fn) {
+  const real = console.error;
+  logged = [];
+  console.error = (...a) => { logged.push(a.join(' ')); };
+  try { return await fn(); } finally { console.error = real; }
+}
+
+/* Captures what the handler would have sent to PostgREST, and answers 201 so
+   the happy path completes. Restored after each call. */
+let sent = null;
+function withStubbedFetch(fn, reply = { ok: true, status: 201 }) {
+  const real = globalThis.fetch;
+  globalThis.fetch = async (url, init) => {
+    sent = { url: String(url), init, body: init && init.body ? JSON.parse(init.body) : null };
+    return { ok: reply.ok, status: reply.status, text: async () => '', json: async () => ({}) };
+  };
+  return fn().finally(() => { globalThis.fetch = real; });
+}
+
+const post = (body, env = ENV) =>
+  new Request('https://x/api/feedback', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: typeof body === 'string' ? body : JSON.stringify(body),
+  });
+
+(async () => {
+  const W = (await import('../src/index.js')).default;
+  const call = (req, env = ENV) => W.fetch(req, env, {});
+  const json = async (r) => [r.status, await r.json()];
+
+  /* ── routing ──────────────────────────────────────────────────────────── */
+  console.log('routing');
+  let [st, b] = await json(await call(new Request('https://x/api/feedback')));
+  ok('GET is refused', st === 405, [st, b]);
+
+  // Anything not a named route must fall through to the static assets, never
+  // be handled here.
+  let served = false;
+  await call(new Request('https://x/index.html'), { ...ENV, ASSETS: { fetch: async () => { served = true; return new Response('ok'); } } });
+  ok('unknown path falls through to ASSETS', served);
+
+  /* ── the misconfiguration that bit in production ──────────────────────── */
+  console.log('misconfiguration');
+  [st, b] = await json(await quiet(() => call(post({ kind: 'bug', message: 'x' }), {})));
+  ok('no Supabase binding is a 503, not a 500', st === 503, [st, b]);
+  ok('and says so', /not configured/i.test(b.error), b);
+  ok('and leaves a log line to find it by', logged.some(l => /no Supabase binding/i.test(l)), logged);
+
+  /* ── validation ───────────────────────────────────────────────────────── */
+  console.log('validation');
+  const cases = [
+    ['invalid JSON',        'not json',                                        400, /Invalid JSON/i],
+    ['no message',          { kind: 'bug' },                                   400, /required/i],
+    ['blank message',       { kind: 'bug', message: '   ' },                   400, /required/i],
+    ['unknown kind',        { kind: 'nope', message: 'x' },                    400, /Unknown kind/i],
+    ['missing kind',        { message: 'x' },                                  400, /Unknown kind/i],
+    ['honeypot filled',     { kind: 'bug', message: 'x', website: 'spam' },     400, /Invalid submission/i],
+    ['non-string message',  { kind: 'bug', message: { a: 1 } },                400, /required/i],
+  ];
+  for (const [name, body, want, re] of cases) {
+    const [s, j] = await json(await withStubbedFetch(() => call(post(body))));
+    ok(name + ' is rejected', s === want && re.test(j.error || ''), [s, j]);
+  }
+  for (const k of ['bug', 'idea', 'confusing', 'other']) {
+    const [s] = await json(await withStubbedFetch(() => call(post({ kind: k, message: 'x' }))));
+    ok(`kind ${k} is accepted`, s === 200, s);
+  }
+
+  /* ── what actually gets written ───────────────────────────────────────── */
+  console.log('the insert');
+  sent = null;
+  let [s2] = await json(await withStubbedFetch(() => call(post({
+    kind: 'bug', message: 'it broke', reply_to: '  me@example.test  ',
+    context: { jobs: 12, scored: 3, track: 'AI Ops', busy: true, nothing: null },
+  }))));
+  ok('happy path is 200', s2 === 200, s2);
+  ok('writes to feedback', /\/rest\/v1\/feedback$/.test(sent.url), sent.url);
+  ok('uses the service role', sent.init.headers.apikey === ENV.SUPABASE_SERVICE_ROLE_KEY);
+  // The whole point of the anonymous door: it must never claim a user.
+  ok('user_id is null', sent.body.user_id === null, sent.body.user_id);
+  ok('via records the door', sent.body.via === 'anon', sent.body.via);
+  ok('reply_to is trimmed', sent.body.reply_to === 'me@example.test', sent.body.reply_to);
+  ok('context survives', sent.body.context.jobs === 12 && sent.body.context.busy === true, sent.body.context);
+  ok('null in context survives', sent.body.context.nothing === null, sent.body.context);
+
+  /* Context comes from the client, so it is bounded and never trusted. It is
+     read by a human and a reader script, never executed and never used to
+     authorise anything -- but it must not be usable as free storage either. */
+  console.log('context is bounded');
+  const big = {};
+  for (let i = 0; i < 60; i++) big['k' + i] = 'v';
+  big.nested = { a: 1 };
+  big.arr = [1, 2, 3];
+  big.long = 'x'.repeat(5000);
+  big['n'.repeat(200)] = 'y';
+  sent = null;
+  await withStubbedFetch(() => call(post({ kind: 'other', message: 'm', context: big })));
+  const c = sent.body.context;
+  ok('key count capped at 24', Object.keys(c).length <= 24, Object.keys(c).length);
+  ok('nested objects dropped', c.nested === undefined, c.nested);
+  ok('arrays dropped', c.arr === undefined, c.arr);
+  ok('long values truncated', !Object.values(c).some(v => typeof v === 'string' && v.length > 300));
+  ok('long keys truncated', !Object.keys(c).some(k => k.length > 40));
+  sent = null;
+  await withStubbedFetch(() => call(post({ kind: 'other', message: 'm', context: [1, 2, 3] })));
+  ok('an array context becomes {}', JSON.stringify(sent.body.context) === '{}', sent.body.context);
+  sent = null;
+  await withStubbedFetch(() => call(post({ kind: 'bug', message: 'z'.repeat(9000) })));
+  ok('message capped at 4000', sent.body.message.length === 4000, sent.body.message.length);
+
+  /* ── a failed insert must not read as success ─────────────────────────── */
+  console.log('failure');
+  const [s3, j3] = await json(await quiet(() => withStubbedFetch(
+    () => call(post({ kind: 'bug', message: 'x' })), { ok: false, status: 401 })));
+  ok('a rejected insert is a 502', s3 === 502, [s3, j3]);
+  ok('and does not claim ok', j3.ok === false, j3);
+  ok('and logs the upstream status', logged.some(l => /feedback insert 401/.test(l)), logged);
+
+  /* ── the contact route keeps its honeypot ─────────────────────────────── */
+  console.log('contact');
+  const cpost = (body) => new Request('https://x/api/contact', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  });
+  [st, b] = await json(await call(cpost({ email: 'a@b.c', message: 'x', website: 'spam' })));
+  ok('contact honeypot rejects', st === 400 && /Invalid submission/i.test(b.error), [st, b]);
+  [st, b] = await json(await call(cpost({ message: 'x' })));
+  ok('contact needs an email', st === 400, [st, b]);
+
+  console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
+  process.exitCode = fail ? 1 : 0;
+})().catch((e) => { console.error('failed:', e); process.exit(1); });

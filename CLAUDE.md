@@ -443,6 +443,7 @@ scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST 
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-reply.js          Inbound-mail decision check. Offline, no model.
 scripts/read-feedback.js            Reads public.feedback with the service role. The ONLY reader; RLS gives the app no view of it.
+scripts/selfcheck-worker.js         The Worker's two public write routes: /api/feedback and /api/contact. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.
 scripts/tune-flag-thresholds.js     FLAG_P sweep per code, offline against judgments.json. A measurement, not a gate.
@@ -518,6 +519,7 @@ that skill with it rather than every machine being set up by hand.
    node scripts/selfcheck-sync.js       # save/load/migrate cycle, two-tab cases
    node scripts/selfcheck-boards.js     # board search pipeline
    node scripts/selfcheck-reply.js      # inbound-mail decisions; offline, no model
+   node scripts/selfcheck-worker.js     # the Worker's public write routes
    node scripts/selfcheck-tokens.js     # token drift across the four consumers
    node scripts/eval-matcher.js         # matcher metrics vs the committed baseline
    node scripts/pipeline-map.js --check
