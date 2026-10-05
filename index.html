@@ -3853,6 +3853,12 @@ function feedbackDialog(){
     <select id="fbKind">${kinds.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
     <label class="lab" style="margin-top:10px">In your words</label>
     <textarea id="fbMsg" rows="6" placeholder="What you expected, what happened instead."></textarea>
+    <div id="fbAnon" style="display:none">
+      <label class="lab" style="margin-top:10px">Email, if you want an answer</label>
+      <input type="text" id="fbReply" placeholder="Optional — leave blank to stay anonymous">
+      <input type="text" id="fbHP" tabindex="-1" autocomplete="off"
+             style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
+    </div>
     <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="fbSend">Send</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
     <div id="fbErr" class="err" style="display:none;margin-top:10px"></div>`);
@@ -3860,7 +3866,12 @@ function feedbackDialog(){
     const msg=d.querySelector('#fbMsg').value.trim();
     const err=d.querySelector('#fbErr');
     if(!msg){ err.textContent='Say something first.'; err.style.display='block'; return; }
-    if(!CLOUD||!USER){ err.textContent='Feedback needs you signed in — it is tied to your account so we can reply.'; err.style.display='block'; return; }
+    /* No account is the COMMON case here, not an error: the README promises
+       "no signup". Signed-in reports go straight to the table under RLS with a
+       real auth.uid(); anonymous ones go through the Worker, which inserts
+       with the service role because an anon-key insert policy would let anyone
+       holding the public key fill the table. Two doors, one table. */
+    const anon = !CLOUD || !USER;
     const ctx={
       track: p&&p.track ? String(p.track).slice(0,80) : null,
       jobs: p&&p.jobs ? p.jobs.length : 0,
@@ -3870,17 +3881,34 @@ function feedbackDialog(){
       agent: String(navigator.userAgent||'').slice(0,160),
       at: new Date().toISOString(),
     };
+    const kind=d.querySelector('#fbKind').value;
     const btn=d.querySelector('#fbSend'); btn.disabled=true; btn.textContent='Sending…';
     try{
-      const { error }=await SB.from('feedback').insert({
-        user_id: USER.id, kind: d.querySelector('#fbKind').value, message: msg.slice(0,4000), context: ctx });
-      if(error) throw new Error(error.message);
+      if(anon){
+        const r=await fetch('/api/feedback',{ method:'POST', headers:{'content-type':'application/json'},
+          body: JSON.stringify({ kind, message: msg.slice(0,4000), context: ctx,
+            reply_to: d.querySelector('#fbReply').value.trim()||null,
+            website: d.querySelector('#fbHP').value }) });
+        const j=await r.json().catch(()=>({}));
+        if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+      }else{
+        const { error }=await SB.from('feedback').insert({
+          user_id: USER.id, kind, message: msg.slice(0,4000), context: ctx, via:'app' });
+        if(error) throw new Error(error.message);
+      }
       d.remove(); setInfo('Thanks — that landed.');
     }catch(e){
       btn.disabled=false; btn.textContent='Send';
       err.textContent='Could not send: '+e.message; err.style.display='block';
     }
   };
+  if(!CLOUD||!USER){
+    d.querySelector('#fbAnon').style.display='';
+    const note=document.createElement('p');
+    note.style.cssText='color:var(--muted);font-size:11px;margin:8px 0 0';
+    note.textContent='You are not signed in, which is fine — this still sends. Your CV and job list stay in this browser; only what you typed above and the counts shown go with it.';
+    d.querySelector('#fbAnon').appendChild(note);
+  }
   d.querySelector('#fbMsg').focus();
 }
 

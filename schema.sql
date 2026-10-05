@@ -791,10 +791,21 @@ grant execute on function public.search_index(text[], integer, integer) to authe
 -- the four is rejected by the check, and the owner sees only their own.
 create table if not exists public.feedback (
   id         bigserial   primary key,
-  user_id    uuid        not null references auth.users(id) on delete cascade,
+  -- Nullable since 2026-10-05, because the README's pitch is "no signup" and a
+  -- tester who never signs in is the COMMON case, not an edge. A null user_id
+  -- is an anonymous report, written by the service role through
+  -- POST /api/feedback on the Worker -- never by the anon key, which ships in
+  -- config.js to every browser and which RLS gives no way to rate-limit.
+  user_id    uuid        references auth.users(id) on delete cascade,
   kind       text        not null check (kind in ('bug','idea','confusing','other')),
   message    text        not null,
   context    jsonb       not null default '{}',
+  -- Where to write back, when an anonymous tester volunteers it. Optional:
+  -- the point of the anonymous door is that it costs nothing to use.
+  reply_to   text,
+  -- 'app' (signed in, anon key, under RLS) or 'anon' (the Worker, service
+  -- role). Recorded so the two doors can be told apart when reading.
+  via        text,
   created_at timestamptz not null default now()
 );
 alter table public.feedback enable row level security;
@@ -805,16 +816,27 @@ drop policy if exists "own rows: select" on public.feedback;
 create policy "own rows: select" on public.feedback
   for select to authenticated using (auth.uid() = user_id);
 create index if not exists feedback_time on public.feedback (created_at desc);
+-- No policy covers an anonymous row, and that is the whole posture: the select
+-- policy is `auth.uid() = user_id`, which is never true for a null user_id, so
+-- an anonymous report is invisible to every signed-in user -- including
+-- whoever wrote it -- and readable only by the service role. That is
+-- scripts/read-feedback.js, which is the only reader of this table; RLS means
+-- there is deliberately no view of it from inside the product.
 
 
 -- ═══════════════════════════════════════════════════════════════════════════
 -- Inbound mail: the automation channel for "did anybody answer?"
 -- ═══════════════════════════════════════════════════════════════════════════
 --
--- NOT APPLIED to production yet. Written here because the shape is settled and
--- channel-independent; the ingestion end (see src/reply-match.mjs) is not
--- deployed, and an unused table in production is a liability rather than a
--- head start.
+-- Applied to production 2026-10-05, and RLS verified live: the owner sees their
+-- own rows, another user sees none, and there is no insert policy at all, so a
+-- user cannot forge a reply into their own ground truth.
+--
+-- The FEATURE is off. src/index.js has the email() handler, but
+-- jobtriage.app is not registered and workers.dev is Cloudflare's own zone
+-- with no MX records to add -- so nothing can be received yet, and
+-- INBOX_LIVE = false in index.html keeps the panel from handing out an address
+-- that would swallow mail.
 --
 -- What this is for
 -- ----------------
