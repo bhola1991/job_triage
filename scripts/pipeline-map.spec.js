@@ -164,8 +164,8 @@ module.exports = {
       note: 'Unwraps the edge-function error body. NEEDCREDITS is the one case that opens a dialog rather than throwing a message.' },
 
     'bd.filter':   { diagram: 'board', group: 'free triage — before anything is paid for', kind: 'sync', label: 'boardFilter',
-      anchor: { file: 'index.html', fn: 'boardFilter' }, section: "board search: every source's results, scored, 50+ kept", body: 'cc19dc',
-      note: 'Three counters, nothing else. There is deliberately no title-word filter — it threw away half of real searches, and every job is scored against the CV anyway.' },
+      anchor: { file: 'index.html', fn: 'boardFilter' }, section: "board search: every source's results, scored, 50+ kept", body: '22a82d',
+      note: 'Three counters, nothing else. There is deliberately no title-word filter -- it threw away half of real searches, and every job is scored against the CV anyway. Dedupes on keyOf plus tcKey(), the shared title+company identity: an empty or placeholder company yields NO second key, because "tc:<title>|" would match every unattributed posting sharing a title.' },
     'bd.url':      { diagram: 'board', group: 'free triage — before anything is paid for', kind: 'branch', label: 'isPostingUrl',
       anchor: { file: 'index.html', fn: 'isPostingUrl' }, section: "board search: every source's results, scored, 50+ kept",
       note: 'A search results page is not a job. Per-host allow shapes, then a generic "looks searchy" reject.' },

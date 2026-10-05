@@ -37,7 +37,7 @@ const cloudNow=()=>CLOUD;
 const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
 const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -66,6 +66,30 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
   J('https://a/4','Senior Data Analyst','[from search — verify]','B')],{titles:['Data Engineer','Data Analyst']});
  ok(f.jobs.map(j=>j.url).join()==='https://a/1,https://a/4', 'filter '+f.jobs.map(j=>j.url));
  ok(JSON.stringify(f.dropped)==='{"listing":1,"old":1,"dupe":2}','dropped '+JSON.stringify(f.dropped));
+
+ /* The second identity key, and the reason it is one shared function.
+    boardFilter and the yield counter each had their own spelling and the two
+    disagreed: boardFilter rejected only a BRACKETED company, so a posting whose
+    company was the empty string got the key "tc:<title>|" -- which matches every
+    unattributed posting sharing that title, so the first through would drop the
+    rest as duplicates. An empty company is not an identity. */
+ ok(tcKey({title:'Data Engineer',company:'Acme'})==='tc:data engineer|acme','tcKey normal '+tcKey({title:'Data Engineer',company:'Acme'}));
+ ok(tcKey({title:'Data Engineer',company:''})==='','an empty company yields no second key');
+ ok(tcKey({title:'Data Engineer',company:'   '})==='','a whitespace company yields no second key');
+ ok(tcKey({title:'Data Engineer',company:'[from search — verify]'})==='','a placeholder company yields no second key');
+ ok(tcKey({})==='' && tcKey(null)==='','a missing company does not throw');
+ // Two blank-company postings sharing a title are two jobs, not a duplicate.
+ const blankco=T.boardFilter([
+   J('https://n/1','Data Engineer','','Q'), J('https://n/2','Data Engineer','','Q')],
+   {titles:['Data Engineer']});
+ ok(blankco.jobs.length===2 && !blankco.dropped.dupe,
+   'two blank-company postings with one title both survive '+JSON.stringify(blankco.dropped));
+ // But a real shared company still dedupes, which is what the key is for.
+ const sameco=T.boardFilter([
+   J('https://m/1','Data Engineer','Acme','Q'), J('https://m/2','Data Engineer','Acme','Q')],
+   {titles:['Data Engineer']});
+ ok(sameco.jobs.length===1 && sameco.dropped.dupe===1,
+   'the same role at the same company still dedupes '+JSON.stringify(sameco.dropped));
  const many=[...Array(30)].map((_,i)=>J('https://z/'+i,'T'+i,'C','Q'));
  SCORES=j=>{ const i=+j.url.split('/').pop(); return i===29?null:(i%3===0?80:40); };
  const sc=await scoreAndCut(many,{},'t');

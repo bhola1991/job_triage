@@ -3731,6 +3731,27 @@ function isPostingUrl(u){
 
 /* seen: shared across calls when one search feeds in several batches, so a
    job found by two sources is only kept once. */
+/* The second identity a posting has, after keyOf: title+company, so the same
+   role syndicated to five boards is recognised once. ONE spelling, shared,
+   because there were two and they disagreed -- boardFilter guarded only a
+   bracketed company (a suggested-company placeholder) while idsOf guarded
+   falsiness as well, so a posting whose company was the EMPTY STRING got the
+   key "tc:<title>|" in boardFilter and no second key in idsOf.
+
+   An empty company is not an identity: that key matches every unattributed
+   posting sharing a title, and the first one through would drop the rest as
+   duplicates. Latent rather than harmful so far -- 29 of 30,372 corpus rows
+   carry a blank company and no two of them share a title -- but it is one
+   syndicated blank-company posting away from silently eating real jobs.
+
+   Returns '' when there is no usable company, and every caller must treat ''
+   as "no second key" rather than as a key. */
+function tcKey(j){
+  const co = String((j && j.company) || '').trim();
+  if(!co || co.startsWith('[')) return '';
+  return 'tc:' + (String((j && j.title) || '').trim() + '|' + co).toLowerCase();
+}
+
 function boardFilter(jobs, trk, seen){
   const p=P(); seen=seen||new Set(p?p.jobs.map(keyOf):[]);
   const dropped={listing:0, old:0, dupe:0};
@@ -3743,7 +3764,7 @@ function boardFilter(jobs, trk, seen){
     const age=ageOf(j);                       // unknown age is kept: not the same as old
     if(age!==null && age>MAX_AGE_DAYS){ dropped.old++; return; }
     // The same role syndicated to several boards, or already in the list.
-    const tc=j.company.startsWith('[') ? '' : 'tc:'+[j.title,j.company].join('|').toLowerCase();
+    const tc=tcKey(j);
     if(seen.has(keyOf(j)) || (tc && seen.has(tc))){ dropped.dupe++; return; }
     seen.add(keyOf(j)); if(tc) seen.add(tc);
     out.push(j);
@@ -3830,7 +3851,7 @@ function liveBoard(trk, prof, track){
      returned by two sources counts as new for whichever arrived first. */
   const by={}, O=o=>by[o]||(by[o]={found:0, unique_new:0, kept_50:0, exclusive_50:0});
   const seenIn=new Map();
-  const idsOf=j=>[keyOf(j)].concat(j.company&&!j.company.startsWith('[')?['tc:'+(j.title+'|'+j.company).toLowerCase()]:[]);
+  const idsOf=j=>{ const tc=tcKey(j); return tc ? [keyOf(j), tc] : [keyOf(j)]; };
   const draw=(extra)=>{
     setSearchInfo(`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
       + (st.checking?` · scoring ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));

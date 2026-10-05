@@ -92,6 +92,81 @@ New tools, none of them gates:
 
 ---
 
+## Branches: what was deleted, and the hash to get it back
+
+Eight branches were deleted on 2026-10-06. **The commits are not gone** — a
+tip hash is all that is needed, and they are recorded here precisely so that
+deleting a branch is a tidy-up rather than a loss:
+
+```
+git fetch origin <hash>          # or: git log <hash>   while it is still local
+```
+
+| Branch | Tip | Why it went |
+| --- | --- | --- |
+| `pipeline-fixes` | `c063abc` | Fully landed by effect. Its last gap, `20260929_01_score_tier.sql`, closed in `6e8e2fc`. Its edge function was then purely *older* than main's — still carrying the LinkedIn scraper and the 4-arg `refund()` without `why`. |
+| `feat/free-tier-2` | `be80c88` | A free tier of 2 searches on **LinkedIn**, Indeed and Naukri. LinkedIn was removed deliberately; this contradicts that call. |
+| `jev-pin-and-threshold` | `6cc19a6` | Fully landed. `FLAG_P` and the Jev pin were already in; the last commit was cherry-picked in `8562937`. |
+| `worktree-apply-first-steps-1-2` | `c7682ba` | Merged in `b8021bb` — the apply-first redesign. |
+| `worktree-grow-eval-set` | `66d40c6` | Fully landed. Merging it would only have *deleted* 18 lines of newer `CLAUDE.md`. |
+| `test/live-url` | `2b9f3b7` | Fully landed, including the "GitHub Pages" wording. |
+| `ponytail/cut-v2` | `aba3071` | Superseded. Row-click-to-expand was replaced by the decision pane (`SEL_JOB`); main has no `OPEN_JOB` left. |
+| `ponytail/cut-duplication` | `598d113` | 203 commits behind and written before the redesign rewrote the file it de-duplicates. Its Google Fonts removal already landed. Re-do the dedup against today's `index.html` if it is still wanted. |
+
+**Two of those were worth deleting for a reason beyond tidiness.**
+`pipeline-fixes` and `feat/free-tier-2` both still carried the LinkedIn
+scraper and `FREE_SCRAPERS = ["linkedin", …]`. A stale branch holding code
+removed on legal grounds is a loaded gun, not an archive: one careless
+conflict resolution puts it back.
+
+### Still standing
+
+`claude/inspiring-brahmagupta-k0b4l7` (`8235557`) — **kept, and not merged.**
+One commit, 139 behind, conflicting in `index.html` and the edge function, and
+its edge function also still carries LinkedIn. It holds two things:
+
+- **Rejection memory, which is the money.** The search window is floored at 7
+  days but `p.jobs` keeps only what scores `MIN_FIT` or better, so every
+  posting judged and dropped comes back the next day and is re-filtered,
+  re-pulled from its ATS feed and **re-scored**. A daily searcher buys the same
+  verdict up to seven times — which is exactly the usage pattern a beta
+  produces. Worth re-implementing fresh against today's file, in its own
+  session: it adds persisted state to the sync blob, with pruning keyed to
+  `MAX_AGE_DAYS`.
+- **A dedup collision, now fixed separately** — see `tcKey` below. That half
+  no longer needs the branch.
+
+Its remaining third — pruning freshness steps the 7-day floor made unreachable,
+and correcting stale comments — the commit itself calls "no behaviour change".
+Not worth the conflict churn.
+
+### The collision that half of it was fixing
+
+`boardFilter` and the yield counter each had their own spelling of the same
+second identity key, and they disagreed. `boardFilter` rejected only a
+**bracketed** company (the suggested-company placeholder), so a posting whose
+company was the **empty string** got the key `tc:<title>|` — which matches
+every unattributed posting sharing that title, so the first one through would
+drop the rest as duplicates. `idsOf` guarded falsiness as well and produced no
+second key at all.
+
+Fixed 2026-10-06 as one shared `tcKey()` both call sites use, rather than two
+patches that could drift apart again. Latent rather than harmful so far: **29
+of 30,372 corpus rows carry a blank company and no two of them share a
+title** — but it was one syndicated blank-company posting away from silently
+eating real jobs. `selfcheck-boards.js` now asserts it, and the assertions were
+mutation-tested: restoring the old guard fails three of them.
+
+### Seven local branches were left alone
+
+`add-google-signin`, `add-icon-selfcheck`, `contact-debug-logging`,
+`fix-contact-recipient`, `test/panel-fixes`, `worktree-contact-api` and the
+local copy of `worktree-apply-first-steps-1-2` are all **zero commits ahead of
+`main`** — already merged, carrying nothing. Clutter, not risk, and not deleted
+without being asked.
+
+---
+
 ## The beta is gated behind an account, and the README says it is not
 
 Found 2026-10-05 by checking the live site as a new visitor.
