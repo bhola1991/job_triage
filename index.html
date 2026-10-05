@@ -5751,7 +5751,14 @@ let PAL = null;   // null closed, else { q, sel }
 
 function commands(){
   const list=[
-    ['Find work','Search the job boards','#btnBoards'],
+    /* Worded from freeFirstNow() for the same reason renderApp is: after the
+       free-corpus split this button says one of two things, and a palette entry
+       that said the other would be describing a button that is not there. */
+    ['Find work', freeFirstNow()?'Search the free index':'Search the job boards','#btnBoards'],
+    /* Only exists while an offer is live, so most of the time this resolves to
+       nothing -- which runCommand already answers honestly rather than failing
+       silently, because a click on an absent control is the one case it checks. */
+    ['Find work','Search live boards \u2014 '+BOARD_COST+' credits','#btnPaidBoards'],
     ['Find work','Suggest companies for me','#btnSuggest'],
     ['Find work','Pull a company I already know','#btnAts'],
     ['Find work','Add a job by hand','#btnPaste'],
@@ -5766,7 +5773,8 @@ function commands(){
     ['Data','Export CSV','#btnExport'],
     ['Data','Trim to top '+KEEP_TOP,'#btnTrim'],
     ['Data','Clear jobs','#btnClear'],
-    ['View','Theme','#btnTheme']
+    ['View','Theme','#btnTheme'],
+    ['View','Send feedback','#btnFeedback']
   ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
   // The four views are state rather than controls, so these set it directly.
   [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
