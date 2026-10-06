@@ -223,6 +223,48 @@ const post = (body, env = ENV) =>
     ['LinkedIn', 'Glassdoor'].forEach((gone) =>
       ok(`${gone} is not advertised as a board we read`, !new RegExp(gone, 'i').test(html)));
 
+    /* privacy.html names Apify's scrapers one by one, so a deleted scraper is a
+       false DISCLOSURE as well as a false advert -- it tells someone their
+       search terms go to a LinkedIn scraper that no longer exists. Checked
+       against SCRAPERS rather than a hard-coded list, so the next removal is
+       caught too. */
+    const priv = fs.readFileSync(path.join(ROOT, 'privacy.html'), 'utf8');
+    const apifyList = /runs the searches on ([^)]*)\)/.exec(priv);
+    ok('privacy.html names Apify\'s scrapers', !!apifyList);
+
+    /* Matched against the SCRAPERS DECLARATION, not the file's text. The first
+       version of this check searched the whole edge function for the site name
+       and was therefore vacuous: "linkedin" still appears twenty times in the
+       comments that record its removal, so re-adding it to the disclosure
+       passed. A name must resolve to a live actor key or one of the boards an
+       actor is configured with. */
+    /* Anchored on the `}> = {` that closes the TYPE annotation. A plainer
+       /const SCRAPERS[^=]*=/ does not work: the annotation contains
+       `input: (c: Ctx, rows: number) => object`, so [^=]* stops at that
+       arrow and the match dies. */
+    const block = /const SCRAPERS[\s\S]*?\}>\s*=\s*\{([\s\S]*?)\n\};/.exec(fn);
+    ok('the SCRAPERS declaration was found', !!block);
+    const live = new Set();
+    if (block) {
+      for (const m of block[1].matchAll(/^  ([a-z][a-z0-9]*):\s*\{/gm)) live.add(m[1]);
+      for (const m of block[1].matchAll(/boards:\s*\[([^\]]*)\]/g)) {
+        for (const b of m[1].split(',')) {
+          const t = b.trim().replace(/^["']|["']$/g, '');
+          if (t) live.add(t.toLowerCase());
+        }
+      }
+    }
+    ok('SCRAPERS keys parsed', live.size >= 4, [...live]);
+    ok('the deleted linkedin actor is really gone from SCRAPERS', !live.has('linkedin'), [...live]);
+    if (apifyList) {
+      apifyList[1].split(/,| and /).map((x) => x.trim()).filter(Boolean).forEach((site) => {
+        // Google is the search-scraper actor, declared as ACTOR not in SCRAPERS.
+        if (/^google$/i.test(site)) return;
+        ok(`privacy.html: Apify really does run ${site}`,
+          live.has(site.replace(/\s+/g, '').toLowerCase()), { site, live: [...live] });
+      });
+    }
+
     /* And a board the page names must still be declared in the edge function. */
     ['Indeed', 'Naukri', 'Instahyre', 'CutShort', 'Foundit', 'Upwork',
      'Workable', 'Adzuna', 'Jooble', 'Careerjet', 'Remotive', 'Remote OK'].forEach((b) => {
