@@ -610,7 +610,9 @@ const pick = (x: Any, ...keys: string[]) => { for (const k of keys) { const v = 
    same rule from the other side, where index_search is wrapped so the
    optimisation can never stop a search someone paid for. */
 const INDEX_MAX_AGE_DAYS = 35;   // as scripts/index/push-index.js: do not store
-const INDEX_DESC_CAP = 4000;     // what search_index could never return anyway
+const INDEX_DESC_CAP = 4000;     // the deposit cap, and what index_search returns at
+                                 // (it used to say "what search_index could never return
+                                 // anyway" -- it returns it as of 2026-10-06)
 const INDEX_DEPOSIT_CAP = 600;
 /* TODO (product/legal, not a code question — do not "fix" this in passing).
    Everything below is deposited into public.job_index, which is the SHARED
@@ -1249,10 +1251,21 @@ Deno.serve(async (req) => {
           company: r.company || "",
           url: String(r.job_key || "").replace(/^u:/, ""),
           location: r.location || "",
-          // Thin rows carry no description by design; the app's own `thin`
-          // handling is what should decide what to do about that, not a
-          // fabricated snippet here.
-          description: "",
+          /* The real description, which this used to throw away. The comment
+             here was about THIN rows -- those genuinely carry none, and come
+             back null -- but the code applied `""` to every row, including the
+             ~30,000 `full` ones holding 2-4 KB of text. So the free index path
+             read a description out of job_index and discarded it, and almost
+             everything it returned arrived flagged `thin` and scored at low
+             confidence off title and company alone. Measured on the first
+             external profile, 2026-10-05: 16 of 16 rows full in the corpus,
+             13 delivered empty. Fixed 2026-10-06, both halves -- search_index
+             did not return the column at all until then.
+             Still `cut` rather than raw: it is surrogate-safe, and a lone high
+             surrogate in a JSON body is what took a 500-row batch down on
+             2026-10-04. Thin rows keep an empty string, which is what the
+             app's own `thin` handling expects to see. */
+          description: cut(String(r.description || ""), INDEX_DESC_CAP),
           posted: r.posted || "",
           publisher: r.source || "index",
           origin: "index",

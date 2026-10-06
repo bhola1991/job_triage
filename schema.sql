@@ -697,7 +697,18 @@ create or replace function public.search_index(
   p_titles text[], p_days integer default 30, p_limit integer default 60)
 returns table (job_key text, title text, company text, location text,
                posted date, tier text, source text, closed_on date,
-               duplicates integer, channel text)
+               duplicates integer, channel text,
+               -- Added 2026-10-06. It was missing, and index_search in the edge
+               -- function therefore returned description: "" for EVERY row --
+               -- including the 30,000-odd `full` ones that carry 2-4 KB of real
+               -- text. The free index path was reading a description out of this
+               -- table and throwing it away, so almost everything it returned
+               -- came back flagged `thin` ("no description available") and scored
+               -- at low confidence off title and company alone. Measured on the
+               -- first external profile: 16 of 16 rows full in the corpus, 13 of
+               -- them delivered empty. The three that survived were Ashby boards
+               -- rescued client-side by fromAts().
+               description text)
 language plpgsql stable security definer set search_path = public as $$
 declare
   v_phrase tsquery; v_words tsquery; v_any tsquery; v_filter tsquery; t text; w text;
@@ -733,6 +744,7 @@ begin
   return query
   with cand as (
     select i.job_key, i.title, i.company, i.location, i.posted, i.tier, i.source, i.dedup_key,
+           i.description,
            case when to_tsvector('simple', i.title) @@ v_phrase then 0
                 when to_tsvector('simple', i.title) @@ v_words  then 1
                 else 2 end as chan,
@@ -764,7 +776,8 @@ begin
   )
   select h.job_key, h.title, h.company, h.location, h.posted, h.tier, h.source,
          c.closed_on, h.dupes::integer,
-         (array['phrase','words','partial'])[h.chan + 1]
+         (array['phrase','words','partial'])[h.chan + 1],
+         h.description
     from hit h
     left join public.job_checks c on c.job_key = h.job_key
    where c.closed_on is null
