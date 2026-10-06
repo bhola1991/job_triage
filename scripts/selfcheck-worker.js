@@ -19,6 +19,8 @@
 // Offline: the handler is imported and driven with a stub env and a stubbed
 // global fetch, so nothing is sent and no key is needed.
 'use strict';
+const fs = require('fs');
+const path = require('path');
 
 let fail = 0;
 const ok = (name, cond, got) => {
@@ -171,6 +173,64 @@ const post = (body, env = ENV) =>
   ok('contact honeypot rejects', st === 400 && /Invalid submission/i.test(b.error), [st, b]);
   [st, b] = await json(await call(cpost({ message: 'x' })));
   ok('contact needs an email', st === 400, [st, b]);
+
+  /* ── the public price list against the code ─────────────────────────────
+     A price on a public page is a promise about money, and it was the only
+     number in this project nothing compared against its source. The drift it
+     catches had already happened twice, and in both cases the code KNEW: the
+     edge function carries the comment "linkedin is gone (see SCRAPERS).
+     pricing.html must not promise it." and the page promised it for three more
+     days; the same page charged "AI scoring or drafting ... 1" after drafting
+     moved to the pro tier at 3.
+
+     Asserted here rather than in a block of its own, because a separate
+     top-level IIFE raced this one and its `process.exitCode` was then reset by
+     the line below -- a failing price check that exits 0 is worse than no
+     check, and this repo has been bitten by invisible failures before. */
+  console.log('pricing');
+  {
+    const ROOT = path.resolve(__dirname, '..');
+    const fn = fs.readFileSync(path.join(ROOT, 'supabase/functions/api/index.ts'), 'utf8');
+    const html = fs.readFileSync(path.join(ROOT, 'pricing.html'), 'utf8');
+    const num = (re, what) => { const m = re.exec(fn); if (!m) throw new Error('could not read ' + what); return Number(m[1]); };
+    const board = num(/boardSearch:\s*(\d+)/, 'COST.boardSearch');
+    const apifyQ = num(/apifyQuery:\s*(\d+)/, 'COST.apifyQuery');
+    const pro = num(/LLM_COST[^=]*=\s*\{[^}]*pro:\s*(\d+)/, 'LLM_COST.pro');
+    const flash = num(/LLM_COST[^=]*=\s*\{[^}]*flash:\s*(\d+)/, 'LLM_COST.flash');
+
+    /* Tempered so the body cannot cross </tr>. Without that the non-greedy
+       match ran from the packs table's first row all the way to the credits
+       table's first price, and reported the two tables as one row. */
+    const rows = [...html.matchAll(/<tr>\s*<td>((?:(?!<\/tr>)[\s\S])*?)<\/td>\s*<td>(\d+)<\/td>\s*<\/tr>/g)]
+      .map((m) => ({ text: m[1].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), price: Number(m[2]) }));
+    const row = (re) => rows.find((r) => re.test(r.text));
+
+    ok('the credits table parsed', rows.length >= 4, rows.length);
+    const search = row(/^Job board search/i);
+    ok(`board search is priced at COST.boardSearch (${board})`, search && search.price === board, search && search.price);
+    const score = row(/^AI scoring/i);
+    ok(`scoring is priced at the flash tier (${flash})`, score && score.price === flash, score && score.price);
+    const draft = row(/^Draft/i);
+    ok(`drafting is priced at the pro tier (${pro})`, draft && draft.price === pro, draft && draft.price);
+    const hr = row(/hiring contacts/i);
+    ok(`a contact lookup is priced at apifyQuery x3 (${apifyQ * 3})`, hr && hr.price === apifyQ * 3, hr && hr.price);
+
+    /* A source the code removed must not be advertised. LinkedIn went on
+       2026-10-03 because scraping it directly is against its terms; Glassdoor
+       is only ever reached through the Google fallback, and only when every
+       other source came back empty, so naming it as a board we read is a
+       promise the product does not keep. */
+    ['LinkedIn', 'Glassdoor'].forEach((gone) =>
+      ok(`${gone} is not advertised as a board we read`, !new RegExp(gone, 'i').test(html)));
+
+    /* And a board the page names must still be declared in the edge function. */
+    ['Indeed', 'Naukri', 'Instahyre', 'CutShort', 'Foundit', 'Upwork',
+     'Workable', 'Adzuna', 'Jooble', 'Careerjet', 'Remotive', 'Remote OK'].forEach((b) => {
+      const flat = fn.toLowerCase().replace(/\s+/g, '');
+      ok(`${b}: named on the price list and live in the code`,
+        !new RegExp(b, 'i').test(html) || flat.includes(b.replace(/\s+/g, '').toLowerCase()));
+    });
+  }
 
   console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
   process.exitCode = fail ? 1 : 0;

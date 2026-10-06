@@ -443,7 +443,7 @@ scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST 
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-reply.js          Inbound-mail decision check. Offline, no model.
 scripts/read-feedback.js            Reads public.feedback with the service role. The ONLY reader; RLS gives the app no view of it.
-scripts/selfcheck-worker.js         The Worker's two public write routes: /api/feedback and /api/contact. Offline, stubbed env.
+scripts/selfcheck-worker.js         The Worker's two public write routes, and pricing.html's prices against the code. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.
 scripts/tune-flag-thresholds.js     FLAG_P sweep per code, offline against judgments.json. A measurement, not a gate.
