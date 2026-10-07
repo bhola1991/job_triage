@@ -159,13 +159,35 @@ if (DRY) { console.log('\n--dry: nothing sent.'); process.exit(0); }
     console.log('  They live in supabase/.env, which is gitignored. Run with --dry to see the shape.');
     return;
   }
+  /* A timeout, because the retry below cannot fire without one. On 2026-10-07
+     a push stopped here and stayed stopped: 17 hours 33 minutes in
+     do_epoll_wait, zero CPU, three open sockets, waiting on a request that
+     neither completed nor failed. fetch has no default timeout, so there was
+     nothing to reject, nothing to retry, and nothing to log -- the last line in
+     the journal was the payload summary printed just before the first send.
+
+     The cost was not one lost push. refresh.sh waits on this process, so the
+     systemd service stayed `activating` for a day, and a timer will not
+     schedule its next run while its service is still active -- so the hang
+     silently cancelled every following night too. The corpus simply stopped
+     updating, with a green `enabled` timer and no error anywhere.
+
+     120s per chunk: a chunk is up to ~2.2 MB of descriptions and a slow link
+     is not a failure, so this has to clear a legitimate slow push by a wide
+     margin and only catch a dead one. */
+  const PUSH_TIMEOUT_MS = 120_000;
   const send = async (body) => {
     const r = await fetch(`${url}/rest/v1/job_index?on_conflict=job_key`, {
       method: 'POST',
       headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal' },
       body: JSON.stringify(body),
-    }).catch((e) => ({ ok: false, status: 0, text: async () => e.message }));
+      signal: AbortSignal.timeout(PUSH_TIMEOUT_MS),
+    }).catch((e) => ({ ok: false, status: 0,
+      // A timeout aborts with a bare "This operation was aborted", which says
+      // nothing about which limit was hit. Name it, so the journal does.
+      text: async () => (e && e.name === 'TimeoutError')
+        ? `no answer in ${PUSH_TIMEOUT_MS / 1000}s` : String(e && e.message || e) }));
     return r.ok ? null : `${r.status} ${(await r.text()).slice(0, 200)}`;
   };
 

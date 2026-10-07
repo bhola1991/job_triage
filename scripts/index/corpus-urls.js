@@ -55,6 +55,11 @@ if (!SB || !KEY) {
   let from = 0, seen = 0;
   for (;;) {
     const r = await fetch(`${SB}/rest/v1/job_index?select=job_key&${where}`, {
+      // No default timeout on fetch, and this runs unattended: a request that
+      // never answers hangs refresh.sh, which keeps the systemd service
+      // `activating`, which stops the timer scheduling any further night.
+      // That cost a day of the corpus on 2026-10-07; see push-index.js.
+      signal: AbortSignal.timeout(60000),
       headers: {
         apikey: KEY, Authorization: `Bearer ${KEY}`,
         Range: `${from}-${from + CHUNK - 1}`, 'Range-Unit': 'items',

@@ -303,6 +303,11 @@ async function push() {
   for (let i = 0; i < rows.length; i += CHUNK) {
     const body = rows.slice(i, i + CHUNK);
     const r = await fetch(`${url}/rest/v1/job_checks?on_conflict=job_key`, {
+      // No default timeout on fetch, and this runs unattended: a request that
+      // never answers hangs refresh.sh, which keeps the systemd service
+      // `activating`, which stops the timer scheduling any further night.
+      // That cost a day of the corpus on 2026-10-07; see push-index.js.
+      signal: AbortSignal.timeout(60000),
       method: 'POST',
       headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json',
         Prefer: 'resolution=merge-duplicates,return=minimal' },
@@ -325,6 +330,7 @@ async function push() {
   const days = Number(arg('prune', '')) || 0;
   if (!days) return;
   const pr = await fetch(`${url}/rest/v1/rpc/prune_index`, {
+    signal: AbortSignal.timeout(60000),   // as above
     method: 'POST',
     headers: { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ p_days: days }),
