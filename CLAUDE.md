@@ -2,8 +2,15 @@
 
 Guidance for working on this codebase, and for importing Figma designs through the
 Figma MCP server. Every claim below was checked against the files on
-2026-09-15, §§1, 2, 7 and 8 again on 2026-09-18, and §§7 and 8 again on
-2026-09-24; file:line references are the authority, not this summary.
+2026-09-15, §§1, 2, 7 and 8 again on 2026-09-18, §§7 and 8 again on
+2026-09-24, and the counts in §§3, 6 and 7 on 2026-10-08; file:line
+references are the authority, not this summary.
+
+Two of those counts had gone stale by a wide margin and are worth knowing as a
+caution about every other number here: `index.html` was described as ~4,670
+lines when it had reached 6,748, and `components.css` as 163 when it was 176.
+Nothing checks the prose in this file. Where a claim can be checked by a script
+it is — §1 and §8 list those — and where it cannot, treat it as dated.
 
 ---
 
@@ -303,7 +310,7 @@ This repo contains **three separate runtimes**. Do not carry conventions across 
 
 ### The app has no build step
 
-`index.html` is ~4,670 lines: markup, CSS and application JS in one file. `README.md`
+`index.html` is ~6,750 lines: markup, CSS and application JS in one file. `README.md`
 states it plainly: *"Open `index.html`. That's the whole install."* No bundler, no
 transpiler, no `package.json` at the root, no framework.
 
@@ -390,7 +397,7 @@ and no styled-prop system."*
 ### Class naming
 
 Short, flat, hand-written. No BEM, no hashing. The full `ui-kit` vocabulary
-(`ui-kit/src/v2/components.css`, 163 lines):
+(`ui-kit/src/v2/components.css`, 176 lines):
 
 ```
 .topbar2 .pill2 .btn2 .btn2-row .qsec .qsec-head .qrow .dhead .dhead-eb
@@ -428,7 +435,7 @@ No CSS framework grid. Layout is flex and `grid-template-columns`.
 ## 7. Project structure
 
 ```
-index.html              The entire app — markup, CSS, JS. ~4,670 lines, no build.
+index.html              The entire app — markup, CSS, JS. ~6,750 lines, no build.
 config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
 src/index.js            Cloudflare Worker: POST /api/contact, else env.ASSETS.fetch().
@@ -438,6 +445,22 @@ pricing/terms/refund/privacy/contact.html
 sw.js  manifest.json  icon.svg      PWA shell.
 schema.sql  billing.sql             Supabase tables, RLS, credit functions, usage ledger.
 supabase/functions/api/index.ts     Deno edge function: search, scoring, payments.
+supabase/functions/reap-apify/      Cancels Apify runs nobody is polling. Needs pg_cron + pg_net; not scheduled.
+supabase/migrations/                What has actually been applied to the live project, newest last. schema.sql is the shape; these are the history.
+scripts/index/                      The OFFLINE CRAWLER, and the reason the corpus exists: 99.8% of job_index comes
+                                    from here, not from a user's search. Parked outside the app -- nothing in
+                                    index.html reads it -- and run nightly by a systemd timer (§8 of STATUS.md).
+  ingest.js                         Crawls 324 ATS boards across 6 platforms + 3 aggregator feeds. Per-host pacing.
+  push-index.js                     Pushes to job_index: 35-day cap, thin-row refusal, retry-then-halve, 120s timeout.
+  verify.js                         Liveness: a set difference over daily snapshots. Two absences close a posting.
+  harvest-slugs.js  probe-ats.js    Finding new boards. probe-ats guesses a company's ATS; --write names orphans.
+  sitemap-jobs.js  corpus-urls.js   Sitemap harvesting and the url list verify.js reads.
+  retrieve.js  validate.js          Local read and check helpers. No network.
+  refresh.sh                        What the timer runs. Waits on the above, so a hang there cancels every later night.
+  sources.json                      The board catalogue: greenhouse 150, ashby 84, lever 40, smartrecruiters 23, recruitee 19, workable 8.
+scripts/compare-tiers.js            Top-K overlap between two models' rankings, from ai_model. A measurement.
+scripts/record-deepseek.js          Scores the eval cases on a named tier (DEEPSEEK_API_KEY, from the SHELL).
+scripts/check-jsearch-overlap.js    Whether a source returns postings the corpus already holds.
 scripts/selfcheck-rows.js           Job/profile <-> typed row round trip.
 scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST stand-in.
 scripts/selfcheck-boards.js         Board-source check.
@@ -467,7 +490,7 @@ ui-kit/
   src/index.ts → src/v2/index.ts    Barrel exports.
   src/styles.css                    @imports tokens.css + components.css.
   src/v2/tokens.css                 [data-palette="v2"] token block.
-  src/v2/components.css             All component CSS, 163 lines.
+  src/v2/components.css             All component CSS, 176 lines.
   src/v2/components/*.tsx           14 components.
   .design-sync/conventions.md       Usage law. Read before writing against the kit.
   .design-sync/NOTES.md             Incident history. Read before debugging a blank render.

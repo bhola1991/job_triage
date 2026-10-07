@@ -5,6 +5,15 @@ scope; the **future** section is saved context, explicitly out of scope for this
 brief. Reads with `AUDIT.md`, which records the findings and decisions this plan
 is built on.
 
+> **Dated record, not current state.** Read as of its own date. Where anything
+> here conflicts with the code or with `STATUS.md`, the code wins and `STATUS.md`
+> records why. Deliberately not rewritten as the project moved: a brief that is
+> quietly edited to stay true stops being evidence of what was planned. Known
+> divergences since: the LinkedIn scraper was demoted on 2026-09-24 and
+> **deleted on 2026-10-03**, so passages treating it as a live source are
+> history; `FLAG_P` moved 0.5 → 0.8; and the corpus went from thousands of
+> mostly-thin rows to ~30,600 all-judgeable ones.
+
 ## Context
 
 Job Triage is a single-user job-search tool: it scrapes job boards, scores every

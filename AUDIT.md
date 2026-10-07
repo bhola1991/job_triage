@@ -10,6 +10,15 @@ undercharge findings below are fixed. The 🟠 service-role/RLS finding was
 audited clean (every `admin.*` query is scoped by `user`; no cross-user leak).
 The 🔴 last-writer-wins finding is still open.
 
+> **Dated record, not current state.** Read as of its own date. Where anything
+> here conflicts with the code or with `STATUS.md`, the code wins and `STATUS.md`
+> records why. Deliberately not rewritten as the project moved: a finding that
+> is quietly edited to stay true stops being evidence of what was found. Known
+> divergences since: the LinkedIn scraper was demoted on 2026-09-24 and
+> **deleted on 2026-10-03**, so passages treating it as a live source are
+> history; `FLAG_P` moved 0.5 → 0.8; and the corpus went from thousands of
+> mostly-thin rows to ~30,600 all-judgeable ones.
+
 ## The app in one pass
 
 A job enters one of seven doors (`runBoards`, `runAts`, `addSuggested`, `onCsv`,

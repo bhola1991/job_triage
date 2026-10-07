@@ -1,4 +1,4 @@
-# Where this stands — 2026-10-05
+# Where this stands — 2026-10-08
 
 Six days in which the corpus stopped being a thing that sat in a table and
 became the cheapest source in the product, and in which four bugs were found by
@@ -17,6 +17,155 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 ---
 
+## 2026-10-06 to 10-08: a silent outage, and three false public claims
+
+### The nightly refresh had stopped, and nothing said so
+
+Found on 2026-10-08 while checking a number before writing it into this file.
+`job_index.last_touched` was 2026-10-07, not today.
+
+`push-index.js` was 17 hours 33 minutes into `do_epoll_wait` with **zero CPU**
+and three open sockets, waiting on a request that neither completed nor failed.
+`fetch` has no default timeout, so there was nothing to reject — and the careful
+retry-then-halve loop directly below the call could not fire, because it only
+runs when `send` returns an error.
+
+The damage was not one lost push. `refresh.sh` waits on that process, so the
+systemd service stayed `activating` for a day, and **a timer will not schedule
+its next run while its service is still active**. So one dead socket silently
+cancelled every following night. The state while this was true: timer
+`enabled`, timer `active`, previous run `Result=success`, no error in the
+journal, and a corpus quietly frozen. The last journal line was the payload
+summary printed just before the first send.
+
+Fixed: 120s per chunk in `push-index.js`, with a `TimeoutError` reported as
+"no answer in 120s" rather than `fetch`'s bare "This operation was aborted",
+which names no limit and would have been just as silent. `verify.js` (both
+PostgREST calls) and `corpus-urls.js` had the same exposure, at 60s.
+`ingest.js`, `harvest-slugs.js`, `probe-ats.js` and `sitemap-jobs.js` already
+had timeouts and were never at risk.
+
+Stopping the service let `Persistent=true` catch the missed 04:00 at once; the
+catch-up ran 2026-10-08 04:39 and **finished in 8 minutes 37 seconds** — the
+hung run had been going 17 hours 33 minutes without completing. It took the
+corpus 30,647 -> **34,801**, touched 19,146 rows, and brought the newest posting
+date to today. Liveness saw 602,720 postings known, 465,441 currently listed,
+22,396 reposted, 323 expired by their board. The timer is now scheduled again:
+next run Fri 2026-10-09 04:20 IST.
+
+One wrinkle if you check this yourself: the database is **UTC** and the machine
+is IST, so just after a 04:39 IST run `max(updated_at)::date` still reads
+*yesterday* while `count(*) filter (where updated_at::date = current_date)` is
+19,146. Compare dates in one timezone or the freshness check lies in the
+reassuring direction.
+
+**The general lesson, which applies past this bug:** "the timer is enabled" is
+not "the pipeline is running". The check that would have caught this is whether
+`job_index` was touched today, and nothing performs it.
+
+### Three public claims were false, and one was a disclosure
+
+| Page | Claimed | Reality |
+| --- | --- | --- |
+| `pricing.html` | LinkedIn, twice | the actor was **deleted 2026-10-03** on legal grounds |
+| `pricing.html` | Glassdoor, beside Indeed | only via the Google *fallback*, which runs when every API source came back empty and **never on a free search** |
+| `pricing.html` | "AI scoring or drafting … 1 credit" | drafting is the **pro** tier at **3** — a real charge understated 3× |
+| `pricing.html` | "up to 6 jobs per request" | the search path batches **12** |
+| `privacy.html` | Apify "runs the searches on LinkedIn, …" | a **disclosure** naming a scraper that no longer exists, and omitting Workable, which does receive search terms |
+
+The edge function had carried the comment `// linkedin is gone (see SCRAPERS).
+pricing.html must not promise it.` since 2026-10-03. A note is not a check, and
+the page promised it for five more days.
+
+`selfcheck-worker.js` now asserts the page against the code: every price against
+`COST`/`LLM_COST`, that LinkedIn and Glassdoor are not advertised, and that every
+scraper `privacy.html` names resolves to a live `SCRAPERS` key. The in-app
+credits dialog had all of this right the whole time; only the public pages were
+stale, which is the direction that matters least internally and most legally.
+
+**Two of my own checks were wrong before they were right**, and both passed
+while being useless — worth recording as the failure mode to expect:
+- the pricing row regex crossed `</tr>` and parsed two tables as one row, so it
+  matched nothing and reported `ALL PASS`;
+- the privacy check searched the whole edge function for "linkedin", which still
+  appears **20 times** in the comments recording its deletion, so re-adding the
+  claim passed. It now parses the `SCRAPERS` declaration itself, anchored on the
+  `}> = {` that closes the type annotation — a plainer `[^=]*` dies on the
+  `=> object` inside it.
+
+Mutation-testing caught both. Running a new check and seeing it pass proves
+nothing.
+
+### The free index search was discarding the descriptions it had
+
+`index_search` hard-coded `description: ""` for every row, under a comment about
+*thin* rows — but it applied to all of them, including the ~30,000 `full` ones
+holding 2–4 KB of text. And `search_index` did not return the column at all, so
+there were two halves to fix.
+
+Exposed by the **first external profile** (2026-10-05, a video editor in Delhi,
+a track the corpus was never curated for): 16 jobs, all `tier=full` in the
+corpus with 1,665–4,000 characters each, **13 delivered with zero**. 13 of 16
+flagged `thin`; 13 of 16 scored at confidence `low`. The matcher was working
+from title, company and location — and still returned an 85, which is a model
+being confident on no evidence, exactly what the thin gate exists to damp.
+
+The three rows that survived were Ashby boards, rescued client-side by
+`fromAts()`. That is why this looked fine on the owner's own ATS-heavy list and
+only broke for someone else: it bites rows from `himalayas`, `arbeitnow` and
+`workable`, which are 43% of the corpus and most of what a non-ATS track
+returns.
+
+After: 60 of 60 rows for his titles come back with a description, averaging
+**3,372 characters**.
+
+### Also landed
+
+- **`reflagJudged`**, cherry-picked from a branch that never merged. `FLAG_P`
+  had moved to 0.8 while `ai_flags` still held whatever cleared the *old* cut,
+  and nothing re-read it. Dry-run against the live rows: **283 of 315 judged
+  rows changed, 930 flags → 226, 704 false chips removed, nothing added** —
+  "a raised cut can only remove" proven on real data rather than fixtures. Free:
+  the probabilities were already in `ai_judgment`.
+- **`tcKey`** — one shared title+company identity key. `boardFilter` guarded only
+  a *bracketed* company, so an **empty** one produced `tc:<title>|`, which
+  matches every unattributed posting sharing that title. Latent: 29 of 30,372
+  rows blank, no two sharing a title.
+- **`score_tier`** recorded as a migration and documented as **dead** — live and
+  constrained in production, 0 of 418 rows carrying a value, superseded by
+  `ai_model`. Dropping it is the remaining cleanup.
+- **Eight branches deleted**, tips recorded below. Two of them
+  (`pipeline-fixes`, `feat/free-tier-2`) still carried the LinkedIn scraper — a
+  stale branch holding code removed on legal grounds is a loaded gun.
+- **`AGENTS.md` collapsed from 651 lines to a pointer.** It was a hand-maintained
+  copy of `CLAUDE.md`, already 36 lines adrift, and its only unique content — a
+  section on `.Codex/settings.json` — described a path that has never existed
+  (`.codex/config.toml`, lowercase, TOML, untracked). Two copies of the project's
+  law, one silently wrong, in a repo whose own rule is that a hand-transcribed
+  value drifts.
+- **`CLAUDE.md` counts corrected**: `index.html` was described as ~4,670 lines at
+  6,748, and `components.css` as 163 at 176. §7 also omitted `scripts/index/`
+  entirely — the crawler that produces 99.8% of the corpus — and
+  `supabase/migrations/`.
+
+### I broke production for two minutes doing it
+
+Deploying the description fix, I called the Supabase MCP `deploy_edge_function`
+with `"content": "PLACEHOLDER"` as a stand-in and **it deployed**. That shipped
+as v39, the function failed to boot, and every cloud action answered **500**. It
+also dropped `_shared/judge.ts` and `api-clients.ts`, because that tool replaces
+the whole file set.
+
+Recovered with `npx supabase functions deploy` from disk — the CLI was already
+authenticated and linked — rather than retyping 1,384 lines of payment and
+scoring code into a tool call. Then verified by diffing all three deployed files
+against the working tree: byte-identical. Live at **v40**.
+
+**Never use the MCP deploy tool for this function.** Use the CLI; it reads from
+disk and carries the `_shared/` files.
+
+---
+
 ## Live in production
 
 | Layer | Version | How it was checked |
@@ -31,8 +180,8 @@ Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.reachbhola.workers.de
 
 | | 2026-09-28 | now |
 | --- | --- | --- |
-| `job_index` | 347,092 | **22,962** — every row judgeable |
-| of which `full` | 8,082 | **22,962** (thin: 341,383 -> **0**) |
+| `job_index` | 347,092 | **34,801** — every row judgeable (2026-10-08) |
+| of which `full` | 8,082 | **34,801** (thin: 341,383 -> **0**) |
 | distinct sources | ~40 | **309** |
 | ATS boards crawled | 44 | **324** |
 | `job_checks` | 429,018 | 429,018 (76,857 closed) |
@@ -51,6 +200,7 @@ node scripts/selfcheck-rows.js      # row round-trip, the zero-score trap, extra
 node scripts/selfcheck-sync.js      # migrate/save/load, two-tab cases, tombstones
 node scripts/selfcheck-boards.js    # board pipeline, and that a search is judged in one pass
 node scripts/selfcheck-reply.js     # inbound-mail decisions; offline, no model, no network
+node scripts/selfcheck-worker.js    # the Worker's public write routes, and pricing.html vs the code
 node scripts/eval-matcher.js        # the gate, now with Jev measured beside DeepSeek
 node scripts/pipeline-map.js --check
 node scripts/selfcheck-tokens.js
@@ -58,6 +208,19 @@ node scripts/selfcheck-icon.js      # needs Obsidian; a SKIP is not a pass
 deno check --node-modules-dir=auto supabase/functions/api/index.ts
 cd ui-kit && npm run build && npm run selfcheck   # 17/17
 ```
+
+Not a gate, but run it when the cut moves:
+
+```bash
+node scripts/tune-flag-thresholds.js   # per-code FLAG_P sweep; reads the SHIPPED cut from index.html
+```
+
+**What the harness still does not cover**, and both gaps cost something this
+week: nothing checks that the nightly pipeline actually ran (the test is whether
+`job_index` was touched today — a timer reporting `enabled` and `success` was
+frozen for a day), and nothing renders a page, which is why a 13-of-16 missing
+description reached a real user. The eight checks above are all offline and all
+about code; the two failures that mattered were about *operations* and *output*.
 
 All pass as of `cf3b267`, **checked by exit code**. That qualifier is new and it
 is there because piping a check into `tail` hid a crash twice in one day: the
@@ -207,7 +370,7 @@ Verified at the same time, so nobody re-derives it:
 
 | | |
 | --- | --- |
-| `job_index` | **26,508 rows, every one judgeable**, 25,201 posted in the last 30 days, newest posted today — up from 22,962, so the nightly timer is running |
+| `job_index` | **34,801 rows, every one judgeable**, 20,667 posted in the last 7 days, 33,465 in the last 30, newest posted today (2026-10-08, after the catch-up run). The line here used to read "newest posted today, so the nightly timer is running" — see the hang below for why that inference does not follow |
 | `config.js` | live and correct in production |
 | caching | `max-age=0, must-revalidate`; the service worker is network-first. No stale-shell bug |
 | new account | `free_search = 5`, `free_llm = 60`, `balance = 0` |
@@ -599,9 +762,9 @@ Jev cannot replace all of it, and the reasons are in the notes:
 Two things settled on 2026-10-04, both of which had been open for a while as
 opinions rather than measurements.
 
-### The corpus holds 22,962 rows and every one of them is judgeable
+### The corpus holds 34,801 rows and every one of them is judgeable
 
-`job_index` went 364,345 -> **22,962**; the 341,383 thin rows are gone and
+`job_index` went 364,345 -> 22,962 and has since grown to **34,801**; the 341,383 thin rows are gone and
 `push-index.js` refuses more. The argument that decided it was not storage —
 564 MB of 8 GB on Pro — and not accumulation either. It was this: `live.add`
 sends every index row through `scoreAndCut`, so a thin row **is** scored, on
@@ -648,7 +811,7 @@ inside a rolled-back transaction:
 | as | jobs | profiles | user_state | job_index |
 | --- | --- | --- | --- | --- |
 | the real owner | 402 | 1 | — | — |
-| **a different user** | **0** | **0** | **0** | **22,962** |
+| **a different user** | **0** | **0** | **0** | **34,801** |
 | anon, through PostgREST with the key from `config.js` | `[]` | `[]` | `[]` | — |
 
 The anon row is the end-to-end one: the real key, the real path a browser takes,
@@ -805,7 +968,7 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 2. ~~Verify RLS on `public.jobs` and `public.profiles`~~ — done 2026-10-04.
 3. **Fix `kept_50`.** Report yield after scoring, or the source economics the
    whole acquisition strategy rests on stay wrong.
-4. **Write more eval cases with a clean holdout**, from the 22,962 judgeable
+4. **Write more eval cases with a clean holdout**, from the 34,801 judgeable
    rows now available. Everything about the matcher is blocked behind ten cases.
 5. **Build `score_trials`** so a model comparison is possible at all, then
    answer whether pro is ever worth it for prose.
@@ -814,8 +977,8 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 
 ### The decision that is not a task
 
-The corpus is no longer the open question — 22,962 rows, every one of them
-judgeable, 309 sources, a flywheel that grows it on every paid search, and the
+The corpus is no longer the open question — 34,801 rows, every one of them
+judgeable, 308 sources, a flywheel that grows it on every paid search, and the
 341,383 rows that could never be scored are gone. RLS is verified. The nightly
 crawl is scheduled. What has not moved is **who it is
 for**: `public.jobs` holds 402 rows and `matcher_outcomes` holds 10, so every
