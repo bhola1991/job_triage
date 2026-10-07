@@ -26,8 +26,8 @@
 <h2>Services that process your data</h2>
 <p>To search and score jobs, the app sends the minimum needed to these providers:</p>
 <ul>
-  <li><strong>DeepSeek</strong>, to build your profile, score jobs and draft messages. When you first add a CV, <strong>the whole text of it is sent</strong> so the profile can be extracted from it. After that, each scoring request carries the job text plus your name, location and country, your level and years of experience, your headline, strengths, gaps and what is unusual about you, and the titles of the direction being searched;</li>
-  <li><strong>TypeSafe</strong> (their System One model, &ldquo;Jev&rdquo;), which decides the flags shown on a job &mdash; whether the posting is too senior, gated behind a credential, or too thin to judge. It receives one posting at a time (title, company, location and up to 4,000 characters of the description) together with your name, location, level, headline, the direction and titles you are targeting, what is unusual about you, your strengths, your gaps, and the kinds of role you have ruled out;</li>
+  <li><strong>DeepSeek</strong>, to build your profile, score jobs and draft messages. When you first add a CV the text of it is sent so the profile can be extracted from it &mdash; but <strong>with your email addresses, phone numbers and the handles in any links removed first</strong>, in your browser, before it leaves. After that, each scoring request carries the job text plus your location and country, your level and years of experience, your headline, strengths, gaps and what is unusual about you, and the titles of the direction being searched. <strong>Scoring no longer sends your name.</strong> The two message drafters do, because a message you send is signed by you;</li>
+  <li><strong>TypeSafe</strong> (their System One model, &ldquo;Jev&rdquo;), which decides the flags shown on a job &mdash; whether the posting is too senior, gated behind a credential, or too thin to judge. It receives one posting at a time (title, company, location and up to 4,000 characters of the description) together with your location, level, headline, the direction and titles you are targeting, what is unusual about you, your strengths, your gaps, and the kinds of role you have ruled out. <strong>Not your name;</strong></li>
   <li><strong>JSearch (OpenWeb Ninja), Adzuna, Jooble, Careerjet, Remotive, Remote OK, Workable</strong> and <strong>Apify</strong> (which runs the searches on Indeed, Naukri, Instahyre, CutShort, Foundit, Upwork and Google): the job titles and location you search for, to find postings. Careerjet also receives your IP address and browser type, which its API requires;</li>
   <li><strong>Greenhouse, Lever, Ashby, Workable, SmartRecruiters and Recruitee</strong> public job feeds: company names, to read full job postings;</li>
   <li><strong>Mantiks</strong>, when you ask who to contact about a job: the company name, its website and the job title. This route is built but has not yet been used on any live lookup; the fallback route asks Apify to run public web searches for the same purpose;</li>
@@ -36,6 +36,19 @@
 <p>Nothing in this list receives your password, your payment details, or any API key of yours.</p>
 <p>When you use the app's credits or free searches, these requests go through our server using our API keys. If you add your own API keys, the app calls those providers directly from your browser and <strong>your keys are never uploaded</strong> to us; they stay in that browser.</p>
 <p>We do not sell your data or use it for advertising.</p>
+
+<h2>What those providers do with it</h2>
+<p>Read from each provider's own published terms on 8 October 2026. We are telling you this because the honest summary is uneven, and the unevenness matters more than any wording of ours.</p>
+<div class="scroll"><table>
+  <tr><th>Provider</th><th>Trains on what we send?</th><th>Keeps it for</th><th>Stored in</th></tr>
+  <tr><td>DeepSeek</td><td><strong>Yes, unless opted out</strong></td><td>&ldquo;as long as you have an account&rdquo; &mdash; no fixed period published</td><td><strong>People's Republic of China</strong></td></tr>
+  <tr><td>TypeSafe</td><td>No &mdash; they state they will not train or fine-tune on inputs</td><td>no fixed period published</td><td>United States</td></tr>
+  <tr><td>Apify</td><td>No &mdash; not without a separate agreement</td><td>no fixed period published</td><td>European Union and United States</td></tr>
+  <tr><td>Resend</td><td>not addressed in their policy</td><td><strong>30 days</strong></td><td>United States</td></tr>
+</table></div>
+<p><strong>DeepSeek is the one to know about.</strong> Its privacy policy says it stores input data in the People's Republic of China, keeps it for as long as the account exists, and uses it to train its models unless that is opted out of &mdash; and it does not distinguish the developer API we call from its consumer chat app. It is also the provider that reads your CV.</p>
+<p>That is why the redaction above exists, and why scoring stopped sending your name: the exposure we could remove, we removed, rather than only describing it. What is left is the body of the CV on the single extraction call, and the profile summary on each scoring call. If that is not acceptable to you, the app can be used entirely without an account and without a server &mdash; see below &mdash; and nothing is sent anywhere at all.</p>
+<p>We have not independently audited any of these providers. The table is what they publish, not a guarantee by us, and they can change it.</p>
 
 <h2>Hosting and delivery</h2>
 <p>The site and its small API are served by <strong>Cloudflare</strong>, so every request to the app passes through their network and they process the ordinary technical details of it &mdash; your IP address, your browser type and the page requested. The database, accounts and the server that holds our API keys are hosted by <strong>Supabase</strong>, in their <strong>Sydney, Australia</strong> region (<code>ap-southeast-2</code>) &mdash; so your data is stored outside India, and transferred there when you use the app.</p>

@@ -2494,6 +2494,40 @@ function grabJSON(txt){
    markdown a person drops in and turns it into the structured facts the
    scorer needs: where they are, what level they're at, what they can
    honestly claim, what they can't, and which directions are open. */
+/* Strip the contactable identifiers out of a CV before it is sent to a model.
+   Checked 2026-10-08: DeepSeek's own privacy policy says inputs are stored in
+   the People's Republic of China, kept "for as long as you have an account",
+   and used to train its models unless you opt out -- and it draws no
+   distinction between the developer API and the consumer app. This one call
+   sends the WHOLE CV, so it is the largest and most sensitive payload in the
+   product by a wide margin.
+
+   What this removes: email addresses, dialable phone numbers, and the PATH of
+   any url, so `linkedin.com/in/priyarao` becomes `linkedin.com` -- the handle
+   is the identifier, the host is only a signal that they have a profile there.
+
+   What it does NOT remove, and the honest limit of it: the person's name and
+   the body of the CV still go. The extraction's whole job is to read that
+   prose, and the name cannot be found before it has been extracted without
+   being circular. The name is removed from every LATER call instead -- scoring,
+   judging and track assessment no longer send it (see sysPrompt, candidateOf,
+   assessTrack), so it crosses the wire once rather than on every batch.
+
+   A year range is deliberately kept. `2019-2023` is eight digits and an early
+   version of this ate it, which would have cost the extraction the dates its
+   seniority judgement rests on. Ten digits is the shortest number anyone can
+   actually ring. */
+const YEAR_RANGE = /^\s*(19|20)\d{2}\s*[-\u2013\u2014]\s*(19|20)\d{2}\s*$/;
+const redactCV = (text) => String(text || '')
+  .replace(/[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+\.[A-Za-z0-9.-]+/g, '[email removed]')
+  .replace(/(?:https?:\/\/)?(?:www\.)?([a-z0-9-]+(?:\.[a-z0-9-]+)+)\/[^\s,;)\]]*/gi,
+    (m, host) => /\.(com|org|net|io|dev|co|in|me|ai|app|uk|gov|edu)/i.test(host) ? host : m)
+  .replace(/\+?\(?\d[\d ()\-.]{6,}\d/g, (m) => {
+    if (YEAR_RANGE.test(m)) return m;
+    const digits = m.replace(/\D/g, '').length;
+    return (digits >= 10 || /^\+/.test(m.trim())) ? '[phone removed]' : m;
+  });
+
 const EXTRACT_PROMPT = raw => `Read this person's career profile and extract a structured summary.
 
 Return ONLY a JSON object, no preamble, no markdown fences:
@@ -2547,7 +2581,9 @@ PROFILE:
 ${String(raw).slice(0,16000)}`;
 
 async function extractProfile(raw){
-  const txt = await claude(EXTRACT_PROMPT(raw), TOK_CAP);
+  // Redacted, not raw: see redactCV. The CV is still stored unredacted in
+  // the person's own account -- this is about what leaves for a vendor.
+  const txt = await claude(EXTRACT_PROMPT(redactCV(raw)), TOK_CAP);
   const p = grabJSON(txt);
   p.name = p.name || 'Unnamed';
   // Google's countryCode wants "in" -- not "India", and not "IN".
@@ -2733,7 +2769,6 @@ async function assessTrack(want, prof){
   const txt = await claude(`A person wants to know whether a particular kind of job is realistic for them.
 
 THEIR PROFILE
-Name: ${prof.name}
 Based in: ${prof.location||'unspecified'}
 Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
 In short: ${prof.headline||''}
@@ -2807,7 +2842,6 @@ function sysPrompt(prof, track){
   return `You score job listings for one specific candidate. You will be given their profile and a batch of jobs.
 
 CANDIDATE SNAPSHOT
-Name: ${prof.name}
 Based in: ${prof.location||'unspecified'}${prof.country?', '+prof.country:''}
 Level: ${prof.seniority||'unspecified'}${prof.years_experience?` (~${prof.years_experience} years)`:''}
 What they are: ${prof.headline||''}
@@ -3397,7 +3431,13 @@ const candidateOf = (prof, track) => {
   const ts = prof.tracks || [];
   const t = ts.find(x => x.id === track) || ts[0] || {};
   return {
-    name: prof.name || '', location: prof.location || '',
+    /* No name. TypeSafe's judgements are about the posting against the shape of
+       a career, and a name moves none of them; it was being sent on every
+       judged search for nothing. Their policy is the better of the two we use
+       -- "We will not train or fine tune any artificial intelligence or machine
+       learning models on your prompts or other Input" -- which is a reason to
+       send less, not a reason to relax. */
+    location: prof.location || '',
     seniority: prof.seniority || '', headline: prof.headline || '',
     targeting: t.label || '', target_titles: t.titles || [],
     rare_combination: prof.unusual_combination || '',

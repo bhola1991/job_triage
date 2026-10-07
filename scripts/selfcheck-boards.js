@@ -7,6 +7,13 @@ const src=[
   grab(/const ATS = \{[\s\S]*?\n\};\n/), grab(/const stripTags[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
+  // What leaves for a model, and what is stripped before it does.
+  grab(/const YEAR_RANGE = [\s\S]*?\n  }\);\n/),
+  // candidateOf arrives inside the FLAG_CODES..addSpans slice above; grabbing
+  // it again is a redeclaration in the same eval.
+  // sysPrompt interpolates today(); record-deepseek.js grabs it the same way.
+  grab(/const today = [^\n]*\n/),
+  grab(/function sysPrompt[\s\S]*?\n}\n/),
   /* scoreAndCut writes flags through these now. It also swallows anything a
      batch throws, by design -- so without them in the slice this file went on
      passing its imports and reported every job unscored instead, which is
@@ -37,7 +44,7 @@ const cloudNow=()=>CLOUD;
 const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
 const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -162,5 +169,50 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  FEEDS={'smartrecruiters:Acme':{rows:[{url:'https://jobs.smartrecruiters.com/Acme/744000012345678',desc:'SR FULL'}]}};
  const sr=await fromAts([J('https://jobs.smartrecruiters.com/Acme/744000012345678-data-engineer','t','c','q')]);
  ok(sr.closed===0 && sr.jobs[0].description==='SR FULL','sr match '+JSON.stringify(sr));
+
+ /* ── what leaves this browser for a model ─────────────────────────────────
+    Checked 2026-10-08, after reading the four vendors' own policies. DeepSeek
+    stores inputs in the PRC, keeps them "for as long as you have an account"
+    and trains on them unless you opt out, with no API/consumer distinction --
+    and profile extraction sends it the whole CV. So what goes, and what has
+    been taken out first, is a property worth asserting rather than reviewing.
+
+    The name is the one identifier that was crossing the wire on EVERY batch.
+    It decides nothing about whether a posting fits, so scoring, judging and
+    track assessment no longer send it. The two drafters still do, because a
+    message you send is signed by you -- that is not leakage, it is the point. */
+ {
+  const CV = [
+    'Priya Rao', 'priya.rao+jobs@example.co.in', '+91 98765 43210',
+    'linkedin.com/in/priyarao', 'https://github.com/priyarao/thing',
+    'Senior Engineer 2019-2023, led a team of 12',
+    'Grew ARR from 1.2M to 4.5M across 2021 and 2022',
+  ].join('\n');
+  const red = T.redactCV(CV);
+  ok(!/priya\.rao\+jobs@/.test(red), 'redactCV removes the email: '+red);
+  ok(!/98765/.test(red), 'redactCV removes a dialable number');
+  ok(!/in\/priyarao/.test(red) && /linkedin\.com/.test(red), 'redactCV drops a url path but keeps the host');
+  ok(!/priyarao\/thing/.test(red) && /github\.com/.test(red), 'redactCV drops a github handle, keeps the host');
+  // Dates and quantities are what the extraction reads seniority from. An
+  // earlier version of the phone rule ate "2019-2023" -- eight digits.
+  ok(/2019-2023/.test(red), 'redactCV keeps a year range');
+  ok(/1\.2M to 4\.5M/.test(red) && /2021 and 2022/.test(red), 'redactCV keeps quantities and single years');
+  ok(/led a team of 12/.test(red), 'redactCV keeps prose');
+
+  const prof = { name:'Priya Rao', location:'Delhi, India', seniority:'senior',
+    headline:'Payments engineer', strengths:['Go','Postgres'], gaps:['k8s'],
+    wrong_shapes:['frontend only'], unusual_combination:'payments + linguistics',
+    tracks:[{id:'t1', label:'Payments', titles:['Backend Engineer']}] };
+
+  const cand = T.candidateOf(prof, 't1');
+  ok(!('name' in cand), 'candidateOf sends no name to TypeSafe: '+Object.keys(cand).join(','));
+  ok(cand.strengths && cand.targeting, 'candidateOf still sends what the judgement needs');
+  ok(!JSON.stringify(cand).includes('Priya'), 'the name is nowhere in the TypeSafe payload');
+
+  const sp = T.sysPrompt(prof, 't1');
+  ok(!/Priya/.test(sp), 'sysPrompt sends no name to DeepSeek');
+  ok(/Payments engineer/.test(sp) && /Go/.test(sp), 'sysPrompt still carries the headline and strengths');
+ }
+
  console.log(process.exitCode?'SOME FAILED':'ALL PASS');
 })();
