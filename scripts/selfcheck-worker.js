@@ -265,6 +265,43 @@ const post = (body, env = ENV) =>
       });
     }
 
+    /* Every outbound processor must be NAMED in privacy.html. This is the
+       direction of error that matters in a disclosure: an over-disclosure is
+       untidy, an omission is the thing a regulator asks about. Four were missing
+       until 2026-10-08 -- TypeSafe, Mantiks, Resend and Cloudflare -- and
+       TypeSafe was the significant one, because it receives the posting text
+       together with the person's name, location, strengths and gaps on every
+       judged search. */
+    [
+      ['DeepSeek', /api\.deepseek\.com/],
+      ['TypeSafe', /typesafe/i],
+      ['Mantiks', /dashboard\.mantiks\.io/],
+      ['Apify', /api\.apify\.com/],
+      ['Razorpay', /razorpay/i],
+    ].forEach(([name, re]) => {
+      if (!re.test(fn)) return;         // not wired, so not required to be named
+      ok(`privacy.html names ${name}, which the edge function calls`,
+        new RegExp(name, 'i').test(priv), name);
+    });
+    const worker = fs.readFileSync(path.join(ROOT, 'src/index.js'), 'utf8');
+    if (/api\.resend\.com/.test(worker)) {
+      ok('privacy.html names Resend, which the Worker calls', /resend/i.test(priv));
+    }
+    /* The CDNs the BROWSER is sent to, which no server-side grep would find. */
+    const app = fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8');
+    [['jsDelivr', /cdn\.jsdelivr\.net/], ['cdnjs', /cdnjs\.cloudflare\.com/]]
+      .forEach(([name, re]) => {
+        if (!re.test(app)) return;
+        ok(`privacy.html names ${name}, which index.html loads from`,
+          new RegExp(name, 'i').test(priv), name);
+      });
+
+    /* Data residency is a compliance claim, so it is checked against the
+       project, not remembered. ap-southeast-2 is SYDNEY; this check exists
+       because the first draft of that sentence said Singapore. */
+    ok('privacy.html does not claim a Supabase region it is not in',
+      !/singapore/i.test(priv) || !/ap-southeast-2/.test(priv));
+
     /* And a board the page names must still be declared in the edge function. */
     ['Indeed', 'Naukri', 'Instahyre', 'CutShort', 'Foundit', 'Upwork',
      'Workable', 'Adzuna', 'Jooble', 'Careerjet', 'Remotive', 'Remote OK'].forEach((b) => {

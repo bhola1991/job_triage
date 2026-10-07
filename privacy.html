@@ -6,7 +6,7 @@
   <nav><a href="pricing.html">Pricing</a><a href="terms.html">Terms</a><a href="refund.html">Refunds</a><a href="privacy.html">Privacy</a><a href="contact.html">Contact</a></nav></header>
 <main>
 <h1>Privacy Policy</h1>
-<p class="updated">Last updated: 14 September 2026</p>
+<p class="updated">Last updated: 8 October 2026</p>
 
 <p>Job Triage is owned and operated by Soumyadip Banerjee, Kolkata, India. This policy explains what we collect and what happens to it.</p>
 
@@ -26,15 +26,24 @@
 <h2>Services that process your data</h2>
 <p>To search and score jobs, the app sends the minimum needed to these providers:</p>
 <ul>
-  <li><strong>DeepSeek</strong>: the job text and relevant parts of your profile (headline, level, location, target roles, strengths and gaps), to score jobs and draft messages;</li>
+  <li><strong>DeepSeek</strong>, to build your profile, score jobs and draft messages. When you first add a CV, <strong>the whole text of it is sent</strong> so the profile can be extracted from it. After that, each scoring request carries the job text plus your name, location and country, your level and years of experience, your headline, strengths, gaps and what is unusual about you, and the titles of the direction being searched;</li>
+  <li><strong>TypeSafe</strong> (their System One model, &ldquo;Jev&rdquo;), which decides the flags shown on a job &mdash; whether the posting is too senior, gated behind a credential, or too thin to judge. It receives one posting at a time (title, company, location and up to 4,000 characters of the description) together with your name, location, level, headline, the direction and titles you are targeting, what is unusual about you, your strengths, your gaps, and the kinds of role you have ruled out;</li>
   <li><strong>JSearch (OpenWeb Ninja), Adzuna, Jooble, Careerjet, Remotive, Remote OK, Workable</strong> and <strong>Apify</strong> (which runs the searches on Indeed, Naukri, Instahyre, CutShort, Foundit, Upwork and Google): the job titles and location you search for, to find postings. Careerjet also receives your IP address and browser type, which its API requires;</li>
-  <li><strong>Greenhouse, Lever, Ashby, Workable, SmartRecruiters and Recruitee</strong> public job feeds: company names, to read full job postings.</li>
+  <li><strong>Greenhouse, Lever, Ashby, Workable, SmartRecruiters and Recruitee</strong> public job feeds: company names, to read full job postings;</li>
+  <li><strong>Mantiks</strong>, when you ask who to contact about a job: the company name, its website and the job title. This route is built but has not yet been used on any live lookup; the fallback route asks Apify to run public web searches for the same purpose;</li>
+  <li><strong>Resend</strong>, only if you send a message through the contact page: the name, email address and message you type there, so it can be delivered to us as email.</li>
 </ul>
+<p>Nothing in this list receives your password, your payment details, or any API key of yours.</p>
 <p>When you use the app's credits or free searches, these requests go through our server using our API keys. If you add your own API keys, the app calls those providers directly from your browser and <strong>your keys are never uploaded</strong> to us; they stay in that browser.</p>
 <p>We do not sell your data or use it for advertising.</p>
 
+<h2>Hosting and delivery</h2>
+<p>The site and its small API are served by <strong>Cloudflare</strong>, so every request to the app passes through their network and they process the ordinary technical details of it &mdash; your IP address, your browser type and the page requested. The database, accounts and the server that holds our API keys are hosted by <strong>Supabase</strong>, in their <strong>Sydney, Australia</strong> region (<code>ap-southeast-2</code>) &mdash; so your data is stored outside India, and transferred there when you use the app.</p>
+<p>Two libraries are fetched by your browser from public CDNs the first time they are needed: the Supabase client from <strong>jsDelivr</strong>, and the PDF reader from <strong>cdnjs</strong>. Requesting a file tells that CDN your IP address and browser type. The PDF reader is the one that matters here: a PDF CV is read <strong>inside your browser</strong> and the file itself is never uploaded anywhere &mdash; though the text taken out of it is then sent to DeepSeek, as described above, to build your profile.</p>
+
 <h2>Without an account</h2>
-<p>If you use the app without signing in, your data stays in your browser's local storage and nothing is sent to us. Clearing your site data erases it permanently.</p>
+<p>Job Triage is also published as a single file you can run yourself. Used that way, with no server configured, your data stays in your browser's local storage, nothing is sent to us, and clearing your site data erases it permanently.</p>
+<p><strong>On this hosted site an account is required</strong> &mdash; the app asks you to sign in before it will show you anything. An earlier version of this policy said you could use it without signing in, which was true of the self-hosted file and not of this site.</p>
 
 <h2>Deleting and exporting your data</h2>
 <ul>
