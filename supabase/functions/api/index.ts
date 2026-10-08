@@ -1096,16 +1096,10 @@ Deno.serve(async (req) => {
       case "judge": {
         const posting = (b.posting || {}) as Record<string, unknown>;
         if (!posting.title && !posting.description) throw new Http(400, "no posting");
-        /* Same optional exemplar as judge_batch below. Nothing in the app calls
-           this action today -- judgeMany subsumes it at one posting -- but it is
-           the same function, and an action that answers two of the three fit
-           dimensions when the other path answers three is a trap for whoever
-           reaches for it next. */
-        const ex1 = typeof b.exemplar === "string" ? b.exemplar.slice(0, JUDGE_EXEMPLAR_CAP) : "";
-        if (JSON.stringify({ posting, candidate: b.candidate || {}, exemplar: ex1 }).length > 20000) throw new Http(400, "posting too large");
+        if (JSON.stringify({ posting, candidate: b.candidate || {} }).length > 20000) throw new Http(400, "posting too large");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
-          const out = await judge(posting, b.candidate || {}, ex1);
+          const out = await judge(posting, b.candidate || {});
           /* Every other spend in this function writes a ledger row; this one
              did not, so TypeSafe was the one vendor we paid with no record of
              what for. `note` carries the model the call actually ran on --

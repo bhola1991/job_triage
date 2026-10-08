@@ -41,11 +41,11 @@ const T = new Function(
   grab(/function keyOf[\s\S]*?\n}\n/) +
   grab(/const dayDiff = [^\n]*\n/) +
   grab(/const listOf = [^\n]*\n/) +
-  grab(/const EXEMPLAR_CAP = [^\n]*\nconst exemplarOf = [^\n]*\n/) +
+  grab(/const exemplarOf = [^\n]*\n/) +
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
   + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
-  + 'exemplarOf,EXEMPLAR_CAP,'
+  + 'exemplarOf,'
   + 'reflagJob,storedFlagList,'
   + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
@@ -254,7 +254,7 @@ const spanRate = r3(withSpan / flagsTotal);
   /* Bounded, not decisive: the exemplar is one posting the person happened to
      pick, and if it could drag a job they plainly cannot do above a job they
      plainly can, the queue would fill with near-copies of that one posting.
-     Capability at 0.6 outweighs targeting and exemplar together at 0.7, so this
+     Capability at 0.6 outweighs targeting and exemplar together at 0.55, so this
      asserts the ordering rather than the weight -- read it as the floor on how
      much capability must keep. */
   if (!(T.fitFromJudgment({ scores: { fit_capability: dist(top), fit_targeting: dist(bot), fit_exemplar: dist(bot) } })
@@ -267,8 +267,6 @@ const spanRate = r3(withSpan / flagsTotal);
   eq(T.exemplarOf({}), '', 'a profile that skipped the field reads as no exemplar');
   eq(T.exemplarOf({ exemplar: '   \n  ' }), '', 'whitespace is no exemplar, so the question is not asked');
   eq(T.exemplarOf({ exemplar: '  Senior Editor at Acme  ' }), 'Senior Editor at Acme', 'the exemplar is trimmed');
-  eq(T.exemplarOf({ exemplar: 'x'.repeat(T.EXEMPLAR_CAP + 500) }).length, T.EXEMPLAR_CAP,
-     'a long paste is capped before it can eat the batch character budget');
 
   /* Reachability is composed from four nouls rather than asked. Each has a
      direction, and getting one backwards would be invisible in any single

@@ -1247,14 +1247,10 @@ const strictOf = p => {
 };
 
 /* The one posting the person said they would apply to today, read back for the
-   judge. Capped at the same 2000 as JUDGE_EXEMPLAR_CAP in supabase/functions/
-   _shared/judge.ts, which caps it again server-side -- this copy exists so a
-   long paste cannot eat the JUDGE_BATCH_CHARS budget the whole batch shares;
-   scripts/pipeline-map.js asserts the two agree. Returns ''
-   for anyone who skipped the field, and '' means the question is not asked at
-   all rather than asked about nothing. */
-const EXEMPLAR_CAP = 2000;
-const exemplarOf = p => String((p && p.exemplar) || '').trim().slice(0, EXEMPLAR_CAP);
+   judge. Not capped here: the edge function slices it to JUDGE_EXEMPLAR_CAP
+   before it measures the batch. Returns '' for anyone who skipped the field,
+   and '' means the question is not asked at all rather than asked about nothing. */
+const exemplarOf = p => String((p && p.exemplar) || '').trim();
 
 const PROF_TEXT = ['name','headline','location','country','country_code','seniority','unusual_combination','intent','exemplar'];
 const PROF_JSON = ['domains','strengths','hard_skills','gaps','wrong_shapes','tracks'];
@@ -1950,13 +1946,12 @@ async function judgeJob(posting, candidate){
 const JUDGE_BATCH = 50;
 async function judgeMany(postings, candidate, exemplar){
   const out = [];
-  const ex = String(exemplar || '');
   for(let i=0;i<postings.length;i+=JUDGE_BATCH){
     // search_id ties the charge to the board search it belongs to, as claude() does.
     // exemplar rides every batch because it is the comparable, not a posting:
     // the same text for all fifty rows, and omitted entirely when empty so the
     // server asks two scores per posting instead of three.
-    const r = await hosted('judge_batch', { postings: postings.slice(i,i+JUDGE_BATCH), candidate, exemplar: ex, search_id:SEARCH_ID });
+    const r = await hosted('judge_batch', { postings: postings.slice(i,i+JUDGE_BATCH), candidate, exemplar, search_id:SEARCH_ID });
     const got = (r && r.judgments) || [];
     // Short replies pad with nulls: index k of the answer must stay index k of
     // the input, or every judgement lands on the wrong job.
