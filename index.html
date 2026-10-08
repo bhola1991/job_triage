@@ -1246,6 +1246,16 @@ const strictOf = p => {
   return Number.isFinite(n) ? Math.min(STRICT_MAX, Math.max(STRICT_MIN, Math.trunc(n))) : STRICT_DEFAULT;
 };
 
+/* The one posting the person said they would apply to today, read back for the
+   judge. Capped at the same 2000 as JUDGE_EXEMPLAR_CAP in supabase/functions/
+   _shared/judge.ts, which caps it again server-side -- this copy exists so a
+   long paste cannot eat the JUDGE_BATCH_CHARS budget the whole batch shares;
+   scripts/pipeline-map.js asserts the two agree. Returns ''
+   for anyone who skipped the field, and '' means the question is not asked at
+   all rather than asked about nothing. */
+const EXEMPLAR_CAP = 2000;
+const exemplarOf = p => String((p && p.exemplar) || '').trim().slice(0, EXEMPLAR_CAP);
+
 const PROF_TEXT = ['name','headline','location','country','country_code','seniority','unusual_combination','intent','exemplar'];
 const PROF_JSON = ['domains','strengths','hard_skills','gaps','wrong_shapes','tracks'];
 /* NOT in PROF_JSON. coerceProfile coerces every member of that list to an
@@ -1938,11 +1948,15 @@ async function judgeJob(posting, candidate){
    Must equal MAX_JUDGE_BATCH in the edge function, which rejects anything
    longer; scripts/pipeline-map.js asserts the two agree. */
 const JUDGE_BATCH = 50;
-async function judgeMany(postings, candidate){
+async function judgeMany(postings, candidate, exemplar){
   const out = [];
+  const ex = String(exemplar || '');
   for(let i=0;i<postings.length;i+=JUDGE_BATCH){
     // search_id ties the charge to the board search it belongs to, as claude() does.
-    const r = await hosted('judge_batch', { postings: postings.slice(i,i+JUDGE_BATCH), candidate, search_id:SEARCH_ID });
+    // exemplar rides every batch because it is the comparable, not a posting:
+    // the same text for all fifty rows, and omitted entirely when empty so the
+    // server asks two scores per posting instead of three.
+    const r = await hosted('judge_batch', { postings: postings.slice(i,i+JUDGE_BATCH), candidate, exemplar: ex, search_id:SEARCH_ID });
     const got = (r && r.judgments) || [];
     // Short replies pad with nulls: index k of the answer must stay index k of
     // the input, or every judgement lands on the wrong job.
@@ -3508,11 +3522,34 @@ function scoreFromDist(ans){
   return mass ? Math.max(0, Math.min(100, Math.round(acc / mass * 100))) : null;
 }
 
-/* Two questions, because "fit" was always two: whether the person can do the
-   work, and whether it is the work they want. Capability carries more weight —
-   a role someone can do but is not aiming at is still an application they could
-   win, while the reverse is a wish. */
-const FIT_W = {fit_capability:0.6, fit_targeting:0.4};
+/* Three questions, because "fit" was always at least two: whether the person
+   can do the work, and whether it is the work they want. Capability carries
+   more weight — a role someone can do but is not aiming at is still an
+   application they could win, while the reverse is a wish.
+
+   fit_exemplar is the third, and it is asked ONLY when the person pasted a
+   posting they would apply to today (exemplarOf above). So it is absent from
+   most judgements, and from every judgement recorded before it existed --
+   fitFromJudgment normalises by the weight it actually found, which is why a
+   third key here leaves a row with no exemplar scoring exactly what it scored
+   before, to the point.
+
+   0.15, and the small number is the considered part. An exemplar is evidence
+   about TARGETING -- the same axis as fit_targeting, stated concretely instead
+   of as adjectives -- so the two of them sit on the same side of the sentence
+   above, and "the reverse is a wish" only holds while capability outweighs
+   both together: 0.6 > 0.4 + 0.15. At 0.3, which this was first written at, it
+   did not (0.6 < 0.7), and the eval caught the consequence -- a job the person
+   plainly cannot do, matching their pasted posting, outranking one they
+   plainly can. The queue would have filled with near-copies of whatever single
+   posting they happened to paste.
+
+   What 0.15 buys: a top-to-bottom swing on the exemplar moves fit about 13
+   points, which re-orders a shortlist, where adjacent rows sit a few points
+   apart, and cannot dictate it. scripts/eval-matcher.js asserts both halves of
+   that -- that the exemplar moves fit in each direction, and that it plus
+   targeting still lose to capability. */
+const FIT_W = {fit_capability:0.6, fit_targeting:0.4, fit_exemplar:0.15};
 /* Probabilities by code, from the flags array Jev always returns in full. */
 function flagProbs(jv){
   const p = {};
@@ -3856,7 +3893,7 @@ async function runScoring(all, auto){
         title:String(j.title||''), company:String(j.company||''),
         location:String(j.location||''),
         description:String(j.description||'').slice(0,4000),
-      })), cand);
+      })), cand, exemplarOf(p.profile));
       scoredRows.forEach(({j, r}, k)=>{
         const jv=judged[k];
         if(!jv) return;
@@ -4049,7 +4086,7 @@ async function scoreAndCut(jobs, prof, track){
         title:String(j.title||''), company:String(j.company||''),
         location:String(j.location||''),
         description:String(j.description||'').slice(0,4000),
-      })), cand);
+      })), cand, exemplarOf(prof));
       scored.forEach(({j, r}, k)=>{
         const jv=judged[k];
         if(!jv) return;

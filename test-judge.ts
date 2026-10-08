@@ -25,7 +25,15 @@ const candidate = {
   wrong_shapes: ["front-end only", "people management"],
 };
 
-const { state, questions } = buildJudge(posting, candidate);
+/* The intake's optional "paste one job you'd apply to today". Supplied here so
+   the smoke test exercises fit_exemplar, which is only asked when it is
+   non-empty -- run it with `const exemplar = "";` to see the two-score shape
+   that every profile without one gets. */
+const exemplar = `Platform Engineer, Zephyr Labs, Remote (India).
+Own the deployment and observability story for a small Go/Postgres backend.
+No front-end work, no line management. IC role reporting to the CTO.`;
+
+const { state, questions } = buildJudge(posting, candidate, exemplar);
 const r = await typesafe().systemOne({ state, questions });
 
 console.log("model:", r.model);
@@ -34,6 +42,9 @@ console.log("confidence:", r.answers.confidence.choice, JSON.stringify(r.answers
 // deliberately ignores, so printing it alone would hide what is composed from.
 for (const dim of JUDGE_SCORE_DIMS) {
   const a = r.answers[dim];
+  // fit_exemplar is absent unless an exemplar was supplied, which is the same
+  // check shapeJudge makes -- not defensiveness, the documented shape.
+  if (!a) { console.log(`score ${dim}: not asked`); continue; }
   console.log(`score ${dim}: ${a.score.toFixed(2)} conf ${a.confidence.toFixed(2)} ${JSON.stringify(a.probabilities)}`);
 }
 for (const code of JUDGE_FLAG_CODES) {

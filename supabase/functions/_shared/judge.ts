@@ -31,8 +31,11 @@ export const JUDGE_FLAG_CODES = [
   "fit", "sen_hi", "sen_lo", "cred", "shape", "loc", "thin", "comp", "open", "rare",
 ] as const;
 
-// Mirrors JUDGE_SCORE_DIMS in index.html.
-export const JUDGE_SCORE_DIMS = ["fit_capability", "fit_targeting"] as const;
+/* The pair this mirrors is FIT_W's keys in index.html, not a list of the same
+   name -- there is no JUDGE_SCORE_DIMS there. fit_exemplar is OPTIONAL: it is
+   only asked when the person supplied an exemplar, so shapeJudge below skips
+   any dimension the answer set does not carry. */
+export const JUDGE_SCORE_DIMS = ["fit_capability", "fit_targeting", "fit_exemplar"] as const;
 
 // Jev reads scoping words and negations at face value, so every level below
 // states what IS true of a posting at that level rather than what is missing.
@@ -52,12 +55,37 @@ const TARGETING_LEVELS = [
   "The posting matches the candidate's stated target closely, down to the seniority and the kind of company they name.",
 ] as const;
 
-export function buildJudge(posting: unknown, candidate: unknown) {
+/* What the person said they would apply to today, read as a comparable rather
+   than as adjectives. "What would you love to do" returns aspiration; one real
+   posting is falsifiable, and comparing against it is a Score over supplied
+   state, which is the shape System One answers well. See INTAKE.md.
+
+   Capped, because this is pasted text and the whole batch shares a character
+   budget (JUDGE_BATCH_CHARS in the edge function). 2,000 is a full posting. */
+export const JUDGE_EXEMPLAR_CAP = 2000;
+const EXEMPLAR_LEVELS = [
+  "The posting describes work in a different discipline from the role in `exemplar`.",
+  "The posting and `exemplar` share tools or vocabulary, while the day-to-day work each describes is different.",
+  "The posting and `exemplar` are the same family of work with a different emphasis or specialism.",
+  "The posting describes the same kind of work as `exemplar`.",
+  "The posting describes the same work as `exemplar`, at a comparable level and in a comparable kind of organisation.",
+] as const;
+
+export function buildJudge(posting: unknown, candidate: unknown, exemplar?: unknown) {
+  /* Only a non-empty string earns a question. Asking how close a posting is to
+     an exemplar nobody gave would spend a question to get a meaningless
+     answer, and the caller cannot tell that answer from a real one. */
+  const ex = typeof exemplar === "string" ? exemplar.trim().slice(0, JUDGE_EXEMPLAR_CAP) : "";
   return {
     // Plain JSON at runtime (the browser sends objects); `as any` sidesteps the
     // SDK's JsonValue index signature, which `unknown` cannot satisfy.
-    state: { posting, candidate } as any,
+    state: (ex ? { posting, candidate, exemplar: ex } : { posting, candidate }) as any,
     questions: {
+      ...(ex
+        ? { fit_exemplar: score(
+            "Judge how close the role in `posting` is to the kind of work described in `exemplar`, which is a posting the person said they would apply to today. Compare the work itself rather than the job titles, and set aside how likely they are to win either one.",
+            EXEMPLAR_LEVELS) }
+        : {}),
       // c in the old prompt: how much of the posting is actually visible.
       confidence: choice("How much of the posting in `posting` is actually visible?",
         { high: "a real, full job description", medium: "a short snippet", low: "title and company only" }),
@@ -108,7 +136,11 @@ export function shapeJudge(r: any) {
     flags: JUDGE_FLAG_CODES.map((code) => ({ code, probability: r.answers[code].noul })),
     // The interpolated `score` float is carried, but jev-1.13 is weak at numeric
     // calibration, so `probabilities` is the field to compose from.
-    scores: Object.fromEntries(JUDGE_SCORE_DIMS.map((dim) => [dim, {
+    /* Filtered, not mapped blind: fit_exemplar is absent whenever the person
+       gave no exemplar, and r.answers[dim].score would throw on it. A missing
+       dimension is also exactly what fitFromJudgment in index.html already
+       handles -- it skips a null score rather than weighting it. */
+    scores: Object.fromEntries(JUDGE_SCORE_DIMS.filter((dim) => r.answers[dim]).map((dim) => [dim, {
       score: r.answers[dim].score,
       probabilities: r.answers[dim].probabilities,
       confidence: r.answers[dim].confidence,
@@ -118,7 +150,7 @@ export function shapeJudge(r: any) {
 }
 
 /** One posting, judged. Used by the `judge` edge-function action. */
-export async function judge(posting: unknown, candidate: unknown) {
-  const { state, questions } = buildJudge(posting, candidate);
+export async function judge(posting: unknown, candidate: unknown, exemplar?: unknown) {
+  const { state, questions } = buildJudge(posting, candidate, exemplar);
   return shapeJudge(await typesafe().systemOne({ state, questions }));
 }

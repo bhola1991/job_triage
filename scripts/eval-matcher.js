@@ -41,9 +41,11 @@ const T = new Function(
   grab(/function keyOf[\s\S]*?\n}\n/) +
   grab(/const dayDiff = [^\n]*\n/) +
   grab(/const listOf = [^\n]*\n/) +
+  grab(/const EXEMPLAR_CAP = [^\n]*\nconst exemplarOf = [^\n]*\n/) +
   grab(/const isScored = [\s\S]*?\nfunction rankOf[\s\S]*?\n}\n/) +
   ';return {FLAG_CODES,FLAG_SHORT,normFlags,flagsOf,bestSentence,addSpans,mergeJudgment,rankOf,fitOf,reachOf,isScored,SPAN_FLOOR,FLAG_P,'
   + 'scoreFromDist,fitFromJudgment,reachFromJudgment,judgmentOf,confWeight,FIT_W,REACH_W,REACH_BASE,'
+  + 'exemplarOf,EXEMPLAR_CAP,'
   + 'reflagJob,storedFlagList,'
   + 'actionableOf,liveOf,reachableOf,ageOf,CHECKS};'
 )();
@@ -230,6 +232,43 @@ const spanRate = r3(withSpan / flagsTotal);
     fail('fit no longer weighs capability above targeting'); bad++;
   }
   eq(T.fitFromJudgment({ scores: {} }), null, 'a judgement with no scores composes to nothing');
+
+  /* fit_exemplar is the one dimension Jev is asked CONDITIONALLY -- only when
+     the person pasted a posting they would apply to today -- so the judgements
+     already recorded in scripts/eval/judgments.json carry two scores and the
+     ones made after an exemplar is supplied carry three. Both have to compose,
+     and the two-score one has to compose to EXACTLY what it did before the
+     dimension existed, or adding it silently re-scored every row in the app
+     that has no exemplar. That is what fitFromJudgment's normalise-by-found-
+     weight does, and it is the whole reason a third key could be added at all. */
+  const two = jv(top, bot);
+  eq(T.fitFromJudgment(two), Math.round(100 * 0.6 / (0.6 + 0.4)),
+     'two scores compose on their own weights alone, as if fit_exemplar did not exist');
+  const withEx = w => ({ scores: { ...two.scores, fit_exemplar: dist(w) } });
+  if (!(T.fitFromJudgment(withEx(top)) > T.fitFromJudgment(two))) {
+    fail('a posting matching the pasted exemplar should score above the same posting with no exemplar'); bad++;
+  }
+  if (!(T.fitFromJudgment(withEx(bot)) < T.fitFromJudgment(two))) {
+    fail('a posting unlike the pasted exemplar should score below the same posting with no exemplar'); bad++;
+  }
+  /* Bounded, not decisive: the exemplar is one posting the person happened to
+     pick, and if it could drag a job they plainly cannot do above a job they
+     plainly can, the queue would fill with near-copies of that one posting.
+     Capability at 0.6 outweighs targeting and exemplar together at 0.7, so this
+     asserts the ordering rather than the weight -- read it as the floor on how
+     much capability must keep. */
+  if (!(T.fitFromJudgment({ scores: { fit_capability: dist(top), fit_targeting: dist(bot), fit_exemplar: dist(bot) } })
+      > T.fitFromJudgment({ scores: { fit_capability: dist(bot), fit_targeting: dist(top), fit_exemplar: dist(top) } }))) {
+    fail('the exemplar and targeting together now outweigh capability; fit can be dictated by one pasted posting'); bad++;
+  }
+
+  // What is sent for the exemplar question, which is what the Score is about.
+  eq(T.exemplarOf(null), '', 'no profile reads as no exemplar');
+  eq(T.exemplarOf({}), '', 'a profile that skipped the field reads as no exemplar');
+  eq(T.exemplarOf({ exemplar: '   \n  ' }), '', 'whitespace is no exemplar, so the question is not asked');
+  eq(T.exemplarOf({ exemplar: '  Senior Editor at Acme  ' }), 'Senior Editor at Acme', 'the exemplar is trimmed');
+  eq(T.exemplarOf({ exemplar: 'x'.repeat(T.EXEMPLAR_CAP + 500) }).length, T.EXEMPLAR_CAP,
+     'a long paste is capped before it can eat the batch character budget');
 
   /* Reachability is composed from four nouls rather than asked. Each has a
      direction, and getting one backwards would be invisible in any single

@@ -236,18 +236,45 @@ re-recording and re-running `scripts/tune-flag-thresholds.js`. That sweep alread
 reports a per-code optimum and says plainly that per-code thresholds are a
 product decision no F1 score can make — read it before touching the cut.
 
-### 3d. `exemplar` as a Jev comparable
+### 3d. `exemplar` as a Jev comparable — done
 
-Only if 3a–3c have shipped. TypeSafe's System One returns typed judgments over
-supplied state, so the right shape is a **Score**: "how close is `posting` to
-the kind of work in `exemplar`", with the exemplar in state alongside the
-posting. It cannot be an extraction — System One selects among candidates code
-has already found and cannot generate. See the TypeSafe skill and
-`supabase/functions/_shared/judge.ts` for the question style.
+A third Score, `fit_exemplar`, in `supabase/functions/_shared/judge.ts`: "how
+close is the role in `posting` to the kind of work in `exemplar`", with the
+exemplar in state beside the posting. Not an extraction — System One selects
+among candidates code has already found and cannot generate.
 
-One new Score on an existing call is roughly free: Jev is already asked ten
-nouls and two scores per posting, and independent questions over the same state
-run in parallel.
+Three things about it are worth knowing before changing it.
+
+**It is the only question that is conditional.** `buildJudge` omits
+`fit_exemplar` entirely when the exemplar is empty, so nobody who skipped the
+field pays a token for a question about nothing — and `shapeJudge` therefore
+*filters* `JUDGE_SCORE_DIMS` instead of mapping it, because `r.answers.fit_exemplar`
+is undefined on those calls and `.score` would throw. Every judgement recorded
+in `scripts/eval/judgments.json` predates the dimension and carries two scores;
+they still compose, because `fitFromJudgment` normalises by the weight it
+actually found.
+
+**The weight is 0.15, and it was 0.3 first.** An exemplar is evidence about
+*targeting* — the same axis as `fit_targeting`, stated concretely rather than as
+adjectives — so the two belong on the same side of `FIT_W`'s own rule that
+capability outweighs wanting it. At 0.3 they did not (0.6 < 0.4 + 0.3) and
+`eval-matcher.js` caught the consequence: a job the person plainly cannot do,
+matching their pasted posting, outranking one they plainly can. The queue would
+have filled with near-copies of whatever single posting they pasted. At 0.15 a
+top-to-bottom exemplar swing moves fit about 13 points — enough to re-order a
+shortlist, not enough to dictate one.
+
+**Two constants and one list now have to agree across runtimes**, and
+`scripts/pipeline-map.js` asserts all three: `FIT_W`'s keys against
+`JUDGE_SCORE_DIMS` (a dimension asked but not weighted is paid for and thrown
+away; one weighted but not asked silently makes the weights lie), and
+`EXEMPLAR_CAP` against `JUDGE_EXEMPLAR_CAP` (the app truncates before posting so
+a long paste cannot push a batch of fifty past `JUDGE_BATCH_CHARS`, which the
+server answers 400 for and `scoreAndCut` swallows by design).
+
+The cost was the easy part, and the estimate held: one more Score on a call that
+already asks ten nouls and two scores, over the same state, answered in
+parallel.
 
 ---
 
@@ -277,11 +304,11 @@ only thing that justifies keeping the gates.
 | ~~3a~~ | **Done** — `redLine()`, gated at read time, reason shown, count on screen | — |
 | ~~3b~~ | **Done** — `rankFor`/`freshWeight`; `rankOf` left pure for the eval slice and the map anchor | — |
 | ~~3c~~ | **Done** — `STRICT_SHIFT` over the four constants; display bands only, MIN_FIT untouched | — |
-| 3d | `exemplar` as one extra Jev Score | 3a–3c shipped |
+| ~~3d~~ | **Done** — `fit_exemplar`, conditional, weighted 0.15 so targeting plus exemplar still lose to capability | — |
 | 4 | Measure it | a domain, so `replied` has data |
 
-1–3c are a day and change nothing for a person who skips the step. 3d is an
-hour. 4 is the one that decides whether any of it was right.
+1–3d are a day and change nothing for a person who skips the step. 4 is the one
+that decides whether any of it was right.
 
 ## Checks to add
 
@@ -290,7 +317,14 @@ hour. 4 is the one that decides whether any of it was right.
   keys.
 - `selfcheck-boards.js` — a posting that trips a red line gates to fit 0; a
   posting with **no stated pay** does **not** gate on `min_pay`; `strict` 1/2/3
-  move `MIN_FIT` and nothing else.
+  move `MIN_FIT` and nothing else. For 3d: that `scoreAndCut` actually passes
+  the profile's exemplar as `judgeMany`'s third argument, trimmed, and sends
+  `''` when there is none. A dropped argument there costs nothing visible — Jev
+  is simply not asked, and fit falls back to two dimensions and a plausible
+  number.
+- `eval-matcher.js` — for 3d: that a two-score judgement composes to exactly
+  what it did before `fit_exemplar` existed; that the exemplar moves fit in both
+  directions; and that it plus targeting still lose to capability.
 - Mutation-test each one. Three checks written on 2026-10-08 passed while being
   vacuous — a pricing regex that crossed `</tr>` and matched nothing, a privacy
   check that found "linkedin" in a comment about its removal, and a systemd

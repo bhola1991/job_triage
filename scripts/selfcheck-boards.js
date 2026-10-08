@@ -60,7 +60,7 @@ const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); co
    swallowed into "no flags" instead. */
 let CLOUD=false, JUDGED=async()=>[];
 const cloudNow=()=>CLOUD;
-const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
+const judgeMany=async(postings, cand, ex)=>JUDGED(postings, cand, ex);
 /* rankOf is no longer stubbed here: the real one is sliced in above, with
    confWeight and fitOf, because the freshness assertions need the actual
    ranking rather than a stand-in. Keeping the stub made the eval fail with
@@ -136,7 +136,8 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  const mk=n=>[...Array(n)].map((_,i)=>J('https://j/'+i,'T'+i,'C','Q'));
  CLOUD=true; SCORES=()=>60;
  let calls=0, sizes=[];
- JUDGED=async(postings)=>{ calls++; sizes.push(postings.length);
+ let gotEx;
+ JUDGED=async(postings, cand, ex)=>{ calls++; sizes.push(postings.length); gotEx=ex;
    return postings.map(p=>({ok:true, confidence:'high', _title:p.title,
      flags:[{code:'loc',probability:0.9},{code:'fit',probability:0.1}]})); };
  const jg=await scoreAndCut(mk(20),{},'t');
@@ -144,6 +145,14 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  const jf=JSON.parse(jg.kept[0].ai_flags);
  ok(jf.length===1 && jf[0].code==='loc','Jev decides which flags fire at intake, got '+jg.kept[0].ai_flags);
  ok(JSON.parse(jg.kept[0].ai_judgment)._title===jg.kept[0].title,'each judgement lands on the posting it was asked about');
+ /* The exemplar rides the judge call, and the wiring is what breaks silently:
+    it is one argument out of three, read off the profile rather than off the
+    posting, and a dropped one costs nothing visible -- Jev simply is not asked
+    the fit_exemplar question and the composed fit quietly falls back to two
+    dimensions, which is a perfectly plausible number. */
+ ok(gotEx==='','no exemplar on the profile sends none, so the question is not asked');
+ await scoreAndCut(mk(2),{exemplar:'  Platform Engineer, remote, Go and Postgres  '},'t');
+ ok(gotEx==='Platform Engineer, remote, Go and Postgres','the profile exemplar reaches the judge, trimmed, got '+JSON.stringify(gotEx));
  // A judgement that fails costs the flags, never the scoring already paid for.
  JUDGED=async()=>{ throw new Error('typesafe down'); };
  const jd=await scoreAndCut(mk(3),{},'t');

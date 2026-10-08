@@ -12,7 +12,7 @@
 // SUPABASE_URL, SUPABASE_ANON_KEY and SUPABASE_SERVICE_ROLE_KEY are provided automatically.
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { judge } from "../_shared/judge.ts";
+import { JUDGE_EXEMPLAR_CAP, judge } from "../_shared/judge.ts";
 
 // Prices are server-side only; the browser sends just the pack id. paise: ₹1 = 100.
 // A credit sells for ₹0.80 (Pro) to ₹0.99 (Starter).
@@ -1096,10 +1096,16 @@ Deno.serve(async (req) => {
       case "judge": {
         const posting = (b.posting || {}) as Record<string, unknown>;
         if (!posting.title && !posting.description) throw new Http(400, "no posting");
-        if (JSON.stringify({ posting, candidate: b.candidate || {} }).length > 20000) throw new Http(400, "posting too large");
+        /* Same optional exemplar as judge_batch below. Nothing in the app calls
+           this action today -- judgeMany subsumes it at one posting -- but it is
+           the same function, and an action that answers two of the three fit
+           dimensions when the other path answers three is a trap for whoever
+           reaches for it next. */
+        const ex1 = typeof b.exemplar === "string" ? b.exemplar.slice(0, JUDGE_EXEMPLAR_CAP) : "";
+        if (JSON.stringify({ posting, candidate: b.candidate || {}, exemplar: ex1 }).length > 20000) throw new Http(400, "posting too large");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
-          const out = await judge(posting, b.candidate || {});
+          const out = await judge(posting, b.candidate || {}, ex1);
           /* Every other spend in this function writes a ledger row; this one
              did not, so TypeSafe was the one vendor we paid with no record of
              what for. `note` carries the model the call actually ran on --
@@ -1142,13 +1148,18 @@ Deno.serve(async (req) => {
         if (!postings.length) throw new Http(400, "no postings");
         if (postings.length > MAX_JUDGE_BATCH) throw new Http(400, `at most ${MAX_JUDGE_BATCH} postings per batch`);
         const candidate = b.candidate || {};
-        if (JSON.stringify({ postings, candidate }).length > JUDGE_BATCH_CHARS) throw new Http(400, "batch too large");
+        /* One posting the person said they would apply to today, compared
+           against every row in the batch. Sent once per batch, not per posting,
+           because it is the same text for all fifty -- and counted against the
+           same character budget, since it rides the same requests. */
+        const exemplar = typeof b.exemplar === "string" ? b.exemplar.slice(0, JUDGE_EXEMPLAR_CAP) : "";
+        if (JSON.stringify({ postings, candidate, exemplar }).length > JUDGE_BATCH_CHARS) throw new Http(400, "batch too large");
         const s = await spend("spend_llm", { p_user: user, p_n: COST.llm });
         try {
           const out = await mapLimit(postings, JUDGE_FANOUT, async (p) => {
             if (!p || (!p.title && !p.description)) return { ok: false, error: "no posting" };
             try {
-              return { ok: true, ...(await judge(p, candidate)) };
+              return { ok: true, ...(await judge(p, candidate, exemplar)) };
             } catch (e) {
               // One posting Jev could not answer does not fail the other 49.
               return { ok: false, error: String((e as Error)?.message ?? e) };

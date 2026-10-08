@@ -44,6 +44,10 @@ module.exports = {
     { name: 'MAX_JUDGE_BATCH', file: 'supabase/functions/api/index.ts' },
     { name: 'FLAG_CODES',       file: 'index.html',                          keys:  true },
     { name: 'JUDGE_FLAG_CODES', file: 'supabase/functions/_shared/judge.ts', array: true },
+    { name: 'FIT_W',            file: 'index.html',                          keys:  true },
+    { name: 'JUDGE_SCORE_DIMS', file: 'supabase/functions/_shared/judge.ts', array: true },
+    { name: 'EXEMPLAR_CAP',       file: 'index.html' },
+    { name: 'JUDGE_EXEMPLAR_CAP', file: 'supabase/functions/_shared/judge.ts' },
   ],
 
   /* ── invariants ──────────────────────────────────────────────────────────
@@ -81,6 +85,25 @@ module.exports = {
            '        silent in both directions -- a flag the model can raise that is never judged, or a\n' +
            '        judgement whose answer nothing reads. Neither errors; both just quietly do less\n' +
            '        than they look like they do.' },
+
+    { equal: ['FIT_W', 'JUDGE_SCORE_DIMS'],
+      why: 'The same pairing as FLAG_CODES, for the scores: judge.ts decides which Score\n' +
+           '        questions Jev is asked, and FIT_W in index.html decides which answers are composed\n' +
+           '        into a fit number and at what weight. A dimension asked but not weighted is paid\n' +
+           '        for and thrown away; one weighted but not asked contributes nothing at all, because\n' +
+           '        fitFromJudgment normalises by the weight it actually found -- so the number stays\n' +
+           '        plausible and the weights stop meaning what they say. This compares the SET, not\n' +
+           '        the weights: 0.6/0.4/0.3 is a judgement call nothing here can check, and whether a\n' +
+           '        dimension exists at all is not.' },
+
+    { equal: ['EXEMPLAR_CAP', 'JUDGE_EXEMPLAR_CAP'],
+      why: 'How much of the pasted exemplar is sent. The browser truncates before posting so a\n' +
+           '        long paste cannot eat the JUDGE_BATCH_CHARS budget the whole batch shares; judge.ts\n' +
+           '        truncates again before building the question. If the app number is the larger one, a\n' +
+           '        big exemplar pushes a full batch of fifty over the limit and the server answers 400\n' +
+           '        "batch too large" -- which scoreAndCut swallows by design, so a whole search goes\n' +
+           '        unjudged and nothing is shown. If the server number is the smaller one, the exemplar\n' +
+           '        question quietly answers about less text than the app believes it sent.' },
   ],
 
   diagrams: [
@@ -245,7 +268,7 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'fd405e',
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '6179f6',
       note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Both scoring paths are on {DS_MODELS.flash} as of 2026-10-04 -- this one always was, for volume, and the rescore button moved after both tiers were measured through this prompt against the same ten labelled postings: calibration 0.9 each, flag recall 0.867 each, pro ahead only on flag precision (0.765 to 0.684) in a field mergeJudgment overwrites from Jev on every judged row. So the {MIN_FIT} intake cut is applied to flash scores, and one list no longer holds numbers from two tiers. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
@@ -278,7 +301,7 @@ module.exports = {
       note: 'NOTHING CALLS THIS. runScoring was its last caller and judges through judgeMany now, so the node is drawn with no arrow into it on purpose -- it is reachable from no button, and so is judgeJob, which holds the only hosted(judge) call site. They are kept because scripts/pipeline-map.js asserts the hosted call sites map 1:1 onto the actions of the edge function, so deleting them means retiring the `judge` ACTION too, which judge_batch subsumes at one posting. Left as a decision to take deliberately rather than as a side effect. What it cost while it was live: one run on 2026-10-03 logged 168 judge calls at {COST.llm} each against 30 DeepSeek calls beside them.' },
     'sc.judgeMany': { diagram: 'scoring', group: 'back in the browser', kind: 'credit', label: 'judgeMany \u2014 {COST.llm} credit per {JUDGE_BATCH}',
       anchor: { file: 'index.html', fn: 'judgeMany' }, section: 'Credits',
-      note: 'What makes judging a whole search affordable: one charge and one round trip for {JUDGE_BATCH} postings, against one per job on the rescore path. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens.' },
+      note: 'What makes judging a whole search affordable: one charge and one round trip for {JUDGE_BATCH} postings, against one per job on the rescore path. The server still makes one Jev call per posting \u2014 Jev takes one state per request, and postings sharing a state would distract each other \u2014 so what is batched here is the trip and the meter, never the judgement itself. Runs once after the whole scoring loop rather than per batch of {SCORE_BATCH}, which is the difference between a handful of charges for a search and dozens. It carries one thing that is not a posting: the exemplar, the job the person said at intake they would apply to today, capped at {EXEMPLAR_CAP} chars and sent once per batch because it is the comparable the whole batch is measured against. Empty for anyone who skipped that field, and empty means judge.ts omits the fit_exemplar question entirely rather than asking it about nothing — so the third of the three fit dimensions is the only one that is conditional, and no tokens are spent on it for a profile that has no exemplar.' },
     'sc.merge':   { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'mergeJudgment \u2014 Jev fires, DeepSeek explains',
       anchor: { file: 'index.html', fn: 'mergeJudgment' }, section: 'scoring run',
       note: 'Jev decides which flags are true above {FLAG_P}; the fact behind each comes from DeepSeek. A flag Jev raises that DeepSeek never mentioned shows with no fact rather than borrowing one from its neighbour.' },
