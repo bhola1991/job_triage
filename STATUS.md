@@ -1023,6 +1023,17 @@ After `pipeline-fixes` turned up, the check was not widened to the rest.
 
 ## Next, in order
 
+**Intake is specified but not built.** `INTAKE.md` is the brief: five fields
+(`intent`, `strict`, `limits`, `exemplar`, and asking `mode` instead of
+inferring it), where each one is consumed, and what not to do. The finding
+behind it is that the app has no representation of what a person *wants* —
+every one of the live profile's `wrong_shapes` is a capability judgement
+("Broadcast editor: no broadcast credits shown"), not a preference, and `gaps`
+restates the same six facts. It deliberately excludes personality profiling,
+and step 4 of it is gated on `replied` having data, because with 15 applied and
+0 replied nothing can currently tell whether an intake change helped.
+
+
 0. ~~Decide which eval implementation survives~~ — done 2026-10-05,
    `grow-eval-set` kept, the other two deleted, `FLAG_P` and the model pin
    salvaged out of one of them first.

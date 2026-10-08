@@ -438,6 +438,9 @@ No CSS framework grid. Layout is flex and `grid-template-columns`.
 index.html              The entire app — markup, CSS, JS. ~6,750 lines, no build.
 config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
+STATUS.md               Where this stands: what is live, what drifted, what is measured. The gap-tracking document.
+INTAKE.md               Build brief: asking the person what they WANT (intent, strictness, red lines). Specified, not built.
+PLAN.md  AUDIT.md       Dated records of earlier briefs and findings. NOT rewritten as the project moves; read as of their own date.
 src/index.js            Cloudflare Worker: POST /api/contact, else env.ASSETS.fetch().
 src/reply-match.mjs     Inbound-mail decision logic. One copy, two consumers.
 src/mime-lite.mjs       Just enough MIME to classify a mail. Hand-written: no root package.json.
