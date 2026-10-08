@@ -119,6 +119,46 @@ returns.
 After: 60 of 60 rows for his titles come back with a description, averaging
 **3,372 characters**.
 
+### Sending a model less of the person — verified live 2026-10-08
+
+Both changed paths were checked against the real vendors, not just the harness.
+
+**TypeSafe**, same posting judged with and without the name (`test-judge.ts`,
+`jev-1.13.0`): confidence `medium` 0.89 both ways, `fit` **0.870 both ways**,
+`fit_capability` 3.16 → 3.13, `open` 0.55 → 0.50, 1088 → 1080 input tokens.
+**No flag changes which side of `FLAG_P` 0.8 it falls on**, so the flags a user
+sees are identical. The name was crossing the wire on every judged posting and
+moving nothing.
+
+**DeepSeek**, one extraction from a redacted CV and one name-free scoring call
+(₹0.826 total):
+
+| | |
+| --- | --- |
+| headline | "Senior payments engineer with Go/Postgres settlement and reconciliation depth" |
+| strengths | the 4M-transactions system, the team of 12, the 40% disputes cut |
+| gaps | "No Kubernetes experience at scale", plus one it inferred |
+| seniority · country_code | `senior` · `in` |
+| scoring | fit **95**, reachability 60, flags `fit`,`rare`, not truncated |
+
+The useful detail: `country_code` came back `in` **without the +91 phone
+number**, which would have been the easy tell — it read Bengaluru, Pune and
+Jadavpur. Redaction removed the contactable identifiers without blinding the
+extraction, which was the thing worth being unsure about. Every quantity in the
+prose survived. `fit` and `rare` are the two documented structural extras that
+fire on almost any well-matched posting (§9 of `eval-matcher.js`), so that is
+known behaviour rather than a new problem.
+
+The name is still inferred from the CV body on that one extraction call, exactly
+as the privacy policy now says. It cannot be stripped before it has been
+extracted without being circular.
+
+**Found while trying to run this:** the DeepSeek account answered `402
+Insufficient Balance`, so scoring and drafting were dead in production and
+nothing surfaced it — the ledger's last DeepSeek row was 2026-10-05 and nothing
+had attempted a call since. Topped up, then verified. A balance that runs out
+looks exactly like a feature nobody used.
+
 ### Also landed
 
 - **`reflagJudged`**, cherry-picked from a branch that never merged. `FLAG_P`
