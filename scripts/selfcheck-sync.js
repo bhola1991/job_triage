@@ -190,7 +190,32 @@ const profileRec = jobs => ({
   ok(got.current === 'p_1', 'the open profile survives a reload');
   ok(Object.keys(got.profiles).length === 1, 'the profile comes back');
   ok(got.profiles.p_1.jobs.length === 2, 'both jobs come back, got ' + got.profiles.p_1.jobs.length);
-  ok(JSON.stringify(got) === JSON.stringify(a.getDB()), 'the whole DB is identical after a round trip');
+  /* The round trip is no longer byte-identical, and that is deliberate:
+     coerceProfile ALWAYS fills intent, strict and limits so no reader has to
+     test for them (see INTAKE.md). A profile written before those columns
+     existed therefore gains three fields on its first load.
+
+     What must still hold is that it settles. If each load produced a fresh
+     diff, snapshot() would see a change every time and the tab would re-save
+     forever, which is the failure this assertion is really guarding. So:
+     the first trip may add the defaults, and the SECOND must change nothing. */
+  const intakeDefaults = { intent: 'browsing', strict: 2,
+    limits: { relocate: true, onsite_ok: true, min_pay: 0, avoid: [] } };
+  const expected = JSON.parse(JSON.stringify(a.getDB()));
+  Object.values(expected.profiles).forEach(p => {
+    if (p && p.profile) Object.assign(p.profile, intakeDefaults, p.profile);
+  });
+  ok(JSON.stringify(got) === JSON.stringify(expected),
+    'the whole DB round-trips, with the intake defaults filled in' +
+    '\n  want ' + JSON.stringify(expected).slice(0, 300) +
+    '\n  got  ' + JSON.stringify(got).slice(0, 300));
+
+  // Idempotent: load what the first load produced and nothing moves.
+  await c.save();
+  const c2 = newTab(SB, KV);
+  await c2.load();
+  ok(JSON.stringify(c2.getDB()) === JSON.stringify(got),
+    'a SECOND round trip changes nothing — the defaults settle instead of re-saving forever');
 
   // ---- the two-tab case, which is the reason for all of this -----------
   const t1 = newTab(SB, KV), t2 = newTab(SB, KV);

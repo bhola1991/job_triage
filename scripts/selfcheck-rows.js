@@ -108,7 +108,46 @@ const prof = {
   raw: 'the whole CV text', track: 'be', jobs: [], created: '2026-08-01',
 };
 const pr = T.coerceProfile(wire(T.profileRow('p_abc', prof)));
-eq(pr, prof, 'a profile record round-trips whole');
+/* The read side ALWAYS sets intent, strict and limits, so a record written
+   before those columns existed comes back with them rather than with holes --
+   that is deliberate, and it is why the expected shape here carries them while
+   the input above does not. See INTAKE.md. */
+const withIntake = JSON.parse(JSON.stringify(prof));
+Object.assign(withIntake.profile, {
+  intent: 'browsing', strict: 2,
+  limits: { relocate: true, onsite_ok: true, min_pay: 0, avoid: [] },
+});
+eq(pr, withIntake, 'a profile record round-trips whole, with the intake defaults filled in');
+
+/* ── what the person wants, defaulted so nothing regresses ────────────────
+   Every one of these defaults has to mean "behave exactly as before". A
+   profile that predates the columns must not acquire a red line, and
+   `strict` must not land on its MINIMUM: Number(null) is 0, which clamped to
+   1 -- the loosest band -- instead of the balanced 2 everything was tuned at.
+   That was a real bug in the first version of strictOf. */
+ok(pr.profile.intent === 'browsing', 'a profile with no intent reads back as browsing, not undefined');
+ok(pr.profile.strict === 2, 'a profile with no strict reads back as the DEFAULT 2, not the minimum 1: ' + pr.profile.strict);
+ok(typeof pr.profile.limits === 'object' && !Array.isArray(pr.profile.limits),
+  'limits round-trips as an object, not the [] PROF_JSON would have made it');
+ok(pr.profile.limits.relocate === true && pr.profile.limits.onsite_ok === true,
+  'the limit defaults are PERMISSIVE — false would gate every job for every old profile');
+
+// Values the person actually chose must survive, including through extras.
+const wants = JSON.parse(JSON.stringify(prof));
+Object.assign(wants.profile, { intent: 'now', strict: 3, exemplar: 'Senior Editor at Acme',
+  limits: { relocate: false, onsite_ok: false, min_pay: 80000, avoid: ['agency'] } });
+const w = T.coerceProfile(wire(T.profileRow('p_w', wants))).profile;
+ok(w.intent === 'now' && w.strict === 3, 'chosen intent and strict survive the round trip: ' + w.intent + '/' + w.strict);
+ok(typeof w.strict === 'number', 'strict comes back a NUMBER, not the string PROF_TEXT would have made it');
+ok(w.exemplar === 'Senior Editor at Acme', 'the exemplar survives');
+ok(w.limits.min_pay === 80000 && w.limits.avoid.join() === 'agency' && w.limits.relocate === false,
+  'real limits survive: ' + JSON.stringify(w.limits));
+// An unknown intent is not a third state the gates have to handle.
+const junk = JSON.parse(JSON.stringify(prof));
+junk.profile.intent = 'whenever'; junk.profile.strict = 99;
+const jr = T.coerceProfile(wire(T.profileRow('p_j', junk))).profile;
+ok(jr.intent === 'browsing', 'an unknown intent falls back to browsing: ' + jr.intent);
+ok(jr.strict === 3, 'an out-of-range strict clamps rather than passing through: ' + jr.strict);
 ok(T.profileRow('p_abc', prof).cv_text === 'the whole CV text', 'raw is stored as cv_text');
 ok(T.profileRow('p_abc', prof).local_id === 'p_abc', 'the app’s own profile key is preserved');
 

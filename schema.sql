@@ -240,8 +240,32 @@ create table if not exists public.profiles (
   strengths    jsonb not null default '[]',
   hard_skills  jsonb not null default '[]',
   gaps         jsonb not null default '[]',
+  -- Capability, not preference. Every entry on the live profiles is a reason a
+  -- role is out of REACH ("Broadcast editor: no broadcast credits shown"),
+  -- never a reason it is unwanted -- so this field reads like a red line and
+  -- is not one. The four columns below are the red lines. See INTAKE.md.
   wrong_shapes jsonb not null default '[]',
   unusual_combination text,
+
+  -- ── what the person WANTS, asked rather than inferred (2026-10-08) ──────
+  -- 'now' | 'soon' | 'browsing'. Nothing captured urgency before this, and it
+  -- is most of the answer for someone who needs work: it weights freshness in
+  -- rankOf and decides what the queue leads with.
+  intent     text,
+  -- 1..3, where 2 is today's behaviour exactly. Maps onto MIN_FIT / WORK_FIT /
+  -- STRONG_FIT, which were already constants; the dial surfaces them.
+  strict     int,
+  -- One real posting they would apply to today, for Jev to score against.
+  -- A comparable rather than adjectives: "what would you love" returns
+  -- aspiration, a pasted posting is falsifiable.
+  exemplar   text,
+  -- HARD limits: {relocate, onsite_ok, min_pay, avoid[]}. These gate fit to
+  -- ZERO rather than down-weighting it, which is the whole difference between
+  -- a red line and a preference. Defaulted in the app to permissive -- see
+  -- LIMITS_DEFAULT in index.html, where `true` means "can", so an empty object
+  -- excludes nothing. A default of false here would have hidden every job
+  -- outside the person's city for every profile that predates the column.
+  limits     jsonb not null default '{}',
   -- The CV as typed or extracted. This is the most personal column in the
   -- database and the reason row-level security below is not optional.
   cv_text    text,

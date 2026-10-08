@@ -1116,8 +1116,63 @@ const JOB_JSON = ['contacts','events'];
    inheriting that bug. */
 const JOB_TEXT = COLS.filter(c => !JOB_INT.includes(c) && !JOB_DATE.includes(c) && !JOB_JSON.includes(c))
                      .concat('origin');
-const PROF_TEXT = ['name','headline','location','country','country_code','seniority','unusual_combination'];
+/* ── what the person WANTS, as opposed to what they can do ─────────────────
+   Light rule, not a ═══ banner: scripts/pipeline-map.js treats those as
+   SECTION boundaries and takes ownership of everything beneath, so putting one
+   here moved st.save and st.saveRows out of "rows: profiles and jobs" and the
+   map check failed. These are column lists; they belong to that section.
+   Everything the extraction produces is a judgement about capability, read off
+   a CV. `wrong_shapes` reads like preference and is not: on the live profiles
+   every entry is "Broadcast editor: no broadcast credits shown" or "Film
+   director: only assistant direction" -- reasons a role is out of reach, never
+   reasons it is unwanted. So the app could not tell "cannot" from "will not",
+   and these five fields are that distinction. See INTAKE.md.
+
+   All five are ASKED, never inferred, and all five default to today's exact
+   behaviour so that a person who skips the step loses nothing. */
+const INTENTS = ['now','soon','browsing'];
+const STRICT_MIN = 1, STRICT_MAX = 3, STRICT_DEFAULT = 2;
+
+/* POLARITY MATTERS HERE and it is the easy bug: these say what the person CAN
+   do, so `true` excludes nothing. A default of relocate:false would mean "will
+   not relocate" and would gate every job outside their city on day one, for
+   every profile that predates this field. Permissive by default, always. */
+const LIMITS_DEFAULT = Object.freeze({ relocate: true, onsite_ok: true, min_pay: 0, avoid: [] });
+const AVOID_OFFERED = ['agency or consultancy','night shift','commission-only','unpaid or equity-only'];
+
+/* One place that normalises whatever is on the row into the shape the gates
+   read, so a half-written object from an older save cannot reach them. */
+function limitsOf(prof){
+  const L = (prof && prof.limits) || {};
+  const avoid = Array.isArray(L.avoid) ? L.avoid.map(x => String(x||'').trim()).filter(Boolean) : [];
+  const pay = Number(L.min_pay);
+  return {
+    relocate:  L.relocate  === undefined ? LIMITS_DEFAULT.relocate  : !!L.relocate,
+    onsite_ok: L.onsite_ok === undefined ? LIMITS_DEFAULT.onsite_ok : !!L.onsite_ok,
+    min_pay:   Number.isFinite(pay) && pay > 0 ? Math.trunc(pay) : 0,
+    avoid,
+  };
+}
+const intentOf = p => INTENTS.includes(p && p.intent) ? p.intent : 'browsing';
+const strictOf = p => {
+  /* Absent must mean DEFAULT, not minimum. Number(null) is 0 and Number('') is
+     0, both finite, so clamping first turned every profile that predates this
+     column into strict=1 -- the loosest setting -- rather than the balanced one
+     everything was tuned at. Checked for emptiness before coercing. */
+  const v = p && p.strict;
+  if(v === null || v === undefined || v === '') return STRICT_DEFAULT;
+  const n = Number(v);
+  return Number.isFinite(n) ? Math.min(STRICT_MAX, Math.max(STRICT_MIN, Math.trunc(n))) : STRICT_DEFAULT;
+};
+
+const PROF_TEXT = ['name','headline','location','country','country_code','seniority','unusual_combination','intent','exemplar'];
 const PROF_JSON = ['domains','strengths','hard_skills','gaps','wrong_shapes','tracks'];
+/* NOT in PROF_JSON. coerceProfile coerces every member of that list to an
+   ARRAY (`Array.isArray(row[c]) ? row[c] : []`), so an object put there comes
+   back as []. And not in PROF_TEXT, or `strict` round-trips as the string "2".
+   Both are handled explicitly below, the way years_experience is. */
+const PROF_INT = ['strict'];
+const PROF_OBJ = ['limits'];
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 const chunks = (a,n) => { const o=[]; for(let i=0;i<a.length;i+=n) o.push(a.slice(i,i+n)); return o; };
 
@@ -1188,6 +1243,10 @@ function profileRow(localId, p){
   if(!usable(p)){
     PROF_TEXT.forEach(c => r[c] = null);
     PROF_JSON.forEach(c => r[c] = []);
+    // Same keys as the usable branch below, or a mixed batch nulls real
+    // columns: PostgREST's upsert unions the keys across the array.
+    PROF_INT.forEach(c => r[c] = null);
+    PROF_OBJ.forEach(c => r[c] = null);
     r.years_experience = null; r.cv_text = null; r.track = null; r.created = null;
     r.extras = { __raw: JSON.stringify(p) };
     return r;
@@ -1196,12 +1255,18 @@ function profileRow(localId, p){
   PROF_TEXT.forEach(c => { r[c] = (pr[c]===undefined||pr[c]===null) ? null : String(pr[c]); });
   PROF_JSON.forEach(c => { r[c] = Array.isArray(pr[c]) ? pr[c] : (pr[c]===undefined ? [] : jsonOut(pr[c],extras,c)); });
   r.years_experience = intOut(pr.years_experience, extras, 'years_experience');
+  PROF_INT.forEach(c => { r[c] = intOut(pr[c], extras, c); });
+  /* An object column, so neither jsonOut (which returns [] for anything it
+     cannot parse) nor String() will do. Normalised on the way out as well as
+     the way in, because a gate reading a half-written object is how a red line
+     hides jobs nobody asked it to hide. */
+  PROF_OBJ.forEach(c => { r[c] = (c === 'limits') ? limitsOf(pr) : (pr[c] ?? null); });
   r.cv_text = p.raw===undefined||p.raw===null ? null : String(p.raw);
   r.track   = p.track===undefined||p.track===null ? null : String(p.track);
   r.created = p.created===undefined||p.created===null ? null : String(p.created);
   /* Anything the extraction prompt returned that has no column. Prefixed so it
      cannot collide with a column name that arrives here for another reason. */
-  const known = new Set(PROF_TEXT.concat(PROF_JSON).concat(['years_experience']));
+  const known = new Set(PROF_TEXT.concat(PROF_JSON, PROF_INT, PROF_OBJ, ['years_experience']));
   Object.keys(pr).forEach(k => { if(!known.has(k)) extras['profile.'+k] = pr[k]; });
   /* The columns above are in this file's order, not the order the extraction
      prompt happened to return. Keeping the original means an exported backup
@@ -1220,6 +1285,14 @@ function coerceProfile(row){
   PROF_TEXT.forEach(c => { if(row[c]!=null) pr[c] = String(row[c]); });
   PROF_JSON.forEach(c => { pr[c] = Array.isArray(row[c]) ? row[c] : []; });
   if(row.years_experience!=null) pr.years_experience = row.years_experience;
+  /* Always set, never left undefined. Two live profiles and every CSV import
+     predate these columns, and nothing downstream should have to ask whether
+     the field exists before reading it -- that is how a gate ends up comparing
+     against undefined and excluding everything. */
+  pr.intent = INTENTS.includes(row.intent) ? row.intent : 'browsing';
+  pr.strict = strictOf({ strict: row.strict });
+  pr.limits = limitsOf({ limits: row.limits && typeof row.limits === 'object' && !Array.isArray(row.limits) ? row.limits : {} });
+  if(row.exemplar!=null) pr.exemplar = String(row.exemplar);
   Object.keys(ex).forEach(k => {
     if(k==='__order') return;
     if(k.indexOf('profile.')===0) pr[k.slice(8)] = ex[k];
