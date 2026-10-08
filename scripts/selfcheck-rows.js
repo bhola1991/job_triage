@@ -185,4 +185,41 @@ eq(b2, broken, 'a record with no .profile is stored verbatim and comes back brok
   ok(a === b, 'both profileRow branches emit the same columns, so a mixed batch nulls nothing');
 }
 
+/* ── no handler binds an id that nothing anywhere renders ─────────────────
+   `$('#x').onclick = …` throws TypeError on null, and inside a render
+   function that takes the whole screen down with it.
+
+   Be clear about what this does and does not catch. It is a WHOLE-FILE
+   check, so it catches an id that exists nowhere -- a rename, a deletion, a
+   typo. It does NOT catch the id being rendered on a different screen from
+   the one binding it, which is the bug that prompted this on 2026-10-08: the
+   onboarding finish button moved from step 2 to step 3, step 2 kept
+   `$('#onbDone').onclick`, and `id="onbDone"` still existed -- in step 3.
+   Catching that needs per-render-branch scope, which is a parser, not a
+   regex. This is the cheap half of the problem, and it is still worth having.
+
+   An id counts as rendered if it appears as id="x", as .id = 'x', or as a
+   bare quoted literal anywhere -- the last because several are passed into
+   helpers (pwField('auPass', …)) rather than written into markup. */
+{
+  const app = h;   // already the whole file, read at the top of this script
+  const rendered = new Set();
+  for (const m of app.matchAll(/\bid="([A-Za-z][\w-]*)"/g)) rendered.add(m[1]);
+  for (const m of app.matchAll(/\.id\s*=\s*'([A-Za-z][\w-]*)'/g)) rendered.add(m[1]);
+  // Ids handed to a helper that writes the markup, e.g. pwField('auPass', …).
+  for (const m of app.matchAll(/['"]([A-Za-z][\w-]*)['"]/g)) rendered.add(m[1]);
+  const bound = new Map();
+  for (const m of app.matchAll(/\$\('#([A-Za-z][\w-]*)'\)/g)) {
+    bound.set(m[1], (bound.get(m[1]) || 0) + 1);
+  }
+  const missing = [...bound.keys()].filter((id) => !rendered.has(id));
+  ok(missing.length === 0,
+    'every id bound with $("#…") is rendered somewhere: missing ' + JSON.stringify(missing));
+  ok(bound.size > 40, 'the id scan actually found bindings (' + bound.size + '), so this is not vacuous');
+
+  // The step the intake added, specifically.
+  ['onbWant', 'onbDone', 'onbBack3', 'limRelocate', 'limOnsite', 'limPay', 'onbExemplar']
+    .forEach((id) => ok(rendered.has(id), `intake step renders #${id}`));
+}
+
 console.log(process.exitCode ? 'SOME FAILED' : 'ALL PASS');

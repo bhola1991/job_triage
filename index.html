@@ -895,6 +895,10 @@ let KEY  = '';           // LLM key (DeepSeek or Anthropic)
 let PROV = 'deepseek';   // 'deepseek' | 'anthropic'
 let APIFY= '';           // Apify token for board search and contact lookup
 let CHFILT = 'all';      // 'all' | 'posted' | 'cold'
+/* Whether rows a red line removed are shown anyway. A gate that hides work
+   with no way to look is indistinguishable from a search that found nothing,
+   so this exists and the count is always on screen even when it is false. */
+let SHOW_GATED = false;
 let AUTO  = true;        // score whatever a pull brings in, without being asked
 let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
@@ -1153,6 +1157,83 @@ function limitsOf(prof){
     avoid,
   };
 }
+/* ── red lines ────────────────────────────────────────────────────────────
+   A limit EXCLUDES a posting. That is the whole difference between this and
+   `wrong_shapes`, which is a soft signal fed to the `shape` flag: a person may
+   well apply to a stretch, and should never be stopped. A red line is the
+   opposite kind of fact, and the only way to honour one is to stop multiplying
+   it by anything.
+
+   Three rules this follows, each because the alternative hides real jobs:
+
+   1. It returns a REASON, never a boolean. A row removed without a reason is
+      indistinguishable from a row that was never found, and the person cannot
+      tell a working filter from a broken search.
+   2. It gates at READ time and writes nothing. The score on the row stays what
+      the model said; unchecking a limit brings the jobs straight back with no
+      re-scoring and no lost data.
+   3. Pay gates ONLY on a figure the posting actually states. Absent is not
+      below -- most postings name no salary, and treating silence as "under
+      your floor" would quietly remove most of the market. When in doubt this
+      returns null and the row stays. */
+const AVOID_PATTERNS = {
+  'agency or consultancy': /\b(recruit(ment|ing)? agency|staffing|consultanc|manpower|rpo)\b/,
+  'night shift':           /\b(night shift|graveyard shift|us shift|overnight shift)\b/,
+  'commission-only':       /\b(commission[\s-]?only|purely commission|no fixed salary)\b/,
+  'unpaid or equity-only': /\b(unpaid|equity[\s-]?only|no salary|for exposure)\b/,
+};
+
+/* Only a clearly stated figure, normalised to rupees PER MONTH. Anything
+   ambiguous returns null, which means "do not gate". Deliberately narrow:
+   "competitive salary", "as per industry standards" and a bare "40" are all
+   unparseable and must stay unparsed. */
+function statedPayMonthly(text){
+  const t = String(text||'').toLowerCase().replace(/,/g,'');
+  // "8 LPA", "8.5 lakh per annum", "12 lac pa" -> annual lakhs
+  const lpa = /(\d+(?:\.\d+)?)\s*(?:lpa|lakhs?|lacs?)\s*(?:pa|p\.a\.|per annum|annually|\/year|a year)?/.exec(t);
+  if(lpa) return Math.round(Number(lpa[1]) * 100000 / 12);
+  // A currency marker is required, so a random number cannot become a salary.
+  const cur = /(?:₹|rs\.?|inr)\s*(\d{4,9})(?:\s*(?:-|to|–)\s*(\d{4,9}))?/.exec(t);
+  if(!cur) return null;
+  const lo = Number(cur[1]);
+  if(!Number.isFinite(lo) || lo <= 0) return null;
+  const per = t.slice(cur.index, cur.index + 160);
+  if(/per annum|p\.a\.|\/year|a year|annually|yearly/.test(per)) return Math.round(lo / 12);
+  if(/per month|\/month|a month|monthly|pm\b/.test(per))        return lo;
+  /* No period stated. A figure at or under 25,000 beside a rupee sign is far
+     more likely monthly than annual in this market, and above that it is a
+     coin toss -- so only the unambiguous end is used and the rest is null. */
+  return lo <= 25000 ? lo : null;
+}
+
+function redLine(j, prof){
+  const L = limitsOf(prof);
+  const loc = String((j && j.location) || '').toLowerCase();
+  const txt = `${(j&&j.title)||''} ${(j&&j.description)||''} ${loc}`.toLowerCase();
+  const remote = /\bremote\b|work from home|\bwfh\b|\banywhere\b|\bdistributed\b/.test(loc + ' ' + txt);
+
+  if(!L.onsite_ok && !remote && /\bon[\s-]?site\b|\bin[\s-]?office\b|\bhybrid\b/.test(txt)){
+    return 'you said you cannot work on-site';
+  }
+  if(!L.relocate && !remote){
+    const mine = String((prof && prof.location) || '').split(',')[0].trim().toLowerCase();
+    if(mine && loc && !loc.includes(mine)){
+      return `you said you would not move, and this is in ${String(j.location).split(',')[0].trim()}`;
+    }
+  }
+  if(L.min_pay > 0){
+    const pay = statedPayMonthly(txt);
+    if(pay !== null && pay < L.min_pay) return `states about ${pay.toLocaleString('en-IN')} a month, under your floor`;
+  }
+  const hit = (L.avoid||[]).find(a => {
+    const re = AVOID_PATTERNS[a];
+    return re ? re.test(txt)
+              : new RegExp('\\b' + String(a).toLowerCase().replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + '\\b').test(txt);
+  });
+  if(hit) return `you asked never to see: ${hit}`;
+  return null;
+}
+
 const intentOf = p => INTENTS.includes(p && p.intent) ? p.intent : 'browsing';
 const strictOf = p => {
   /* Absent must mean DEFAULT, not minimum. Number(null) is 0 and Number('') is
@@ -4481,7 +4562,7 @@ async function replyInboxDialog(){
 
 /* ═══════════════ ONBOARDING ═══════════════ */
 function renderOnb(){
-  const steps=['Your profile','What we found','Pick a direction'];
+  const steps=['Your profile','What we found','Pick a direction','What you want'];
   let body='';
 
   if(ONB.step===0){
@@ -4563,8 +4644,75 @@ function renderOnb(){
             <button class="btn-sm" id="wantDrop">Discard</button></div>`:''}
       </div>
       <div class="btn-row" style="margin-top:16px">
-        <button class="btn-go" id="onbDone" ${ONB.track?'':'disabled'}>Start finding jobs</button>
+        <button class="btn-go" id="onbWant" ${ONB.track?'':'disabled'}>Next</button>
         <button id="onbBack2">Back</button></div>`;
+  }
+
+  /* ── step 3: what the person wants ───────────────────────────────────────
+     Everything above this point is read off a CV, which can only say what
+     somebody is ABLE to do. This screen is the only place the app learns what
+     they actually want, and the only place a red line can come from. See
+     INTAKE.md.
+
+     Every control is pre-filled and the step is skippable: pressing the button
+     without touching anything yields browsing / balanced / the modes the model
+     guessed / no limits, which is exactly the behaviour before this existed.
+     That is deliberate -- an intake step that can block a person from finishing
+     is worse than no intake step. */
+  if(ONB.step===3){
+    const p=ONB.parsed;
+    const L=limitsOf(p), it=intentOf(p), st=strictOf(p);
+    const card=(name,val,cur,head,sub)=>`<label class="trk ${val===cur?'sel':''}" style="display:block;cursor:pointer">
+      <input type="radio" name="${name}" value="${esc(val)}" ${val===cur?'checked':''} style="margin-right:8px">
+      <b>${esc(head)}</b><div class="say" style="margin:2px 0 0">${esc(sub)}</div></label>`;
+    body=`<p class="lede">Last thing. The CV told us what you <em>can</em> do &mdash; this is what you <em>want</em>.</p>
+      <p class="say">Skip it if you like; the defaults are what the app did before we started asking.</p>
+
+      <div class="eyebrow" style="margin-top:22px">How soon</div>
+      <div id="onbIntent">
+        ${card('intent','now',it,'I need something now','Fresh postings lead the queue, and old ones are pushed down.')}
+        ${card('intent','soon',it,'In the next few months','A balance of fresh and strong.')}
+        ${card('intent','browsing',it,'Just looking','The strongest matches lead, whatever their age.')}
+      </div>
+
+      <div class="eyebrow" style="margin-top:22px">How picky</div>
+      <div id="onbStrict">
+        ${card('strict','1',String(st),'Show me everything','A longer list, including the near-misses.')}
+        ${card('strict','2',String(st),'Balanced','What the app has always done.')}
+        ${card('strict','3',String(st),'Only strong matches','A short list you could work through in a sitting.')}
+      </div>
+
+      <div class="eyebrow" style="margin-top:22px">Kind of work, per direction</div>
+      <p class="say" style="margin:0 0 8px">We guessed from your CV. Correcting it changes which sites we pay to search.</p>
+      ${(p.tracks||[]).map((t,i)=>`<div class="pfact" style="align-items:center">
+        <b style="flex:0 0 160px">${esc(t.label||('Direction '+(i+1)))}</b>
+        <select class="sel" data-mode="${esc(t.id)}">
+          ${['permanent','freelance','gig'].map(m=>`<option value="${m}" ${(t.mode||'permanent')===m?'selected':''}>${
+            m==='permanent'?'Salaried / permanent':m==='freelance'?'Freelance / contract':'Gig / shift work'}</option>`).join('')}
+        </select></div>`).join('')}
+
+      <div class="eyebrow" style="margin-top:22px">Your red lines</div>
+      <p class="say" style="margin:0 0 8px">These <b>remove</b> jobs from the list rather than scoring them lower. We will always say when something was removed, and you can see it anyway.</p>
+      <label class="say" style="display:flex;gap:8px;align-items:center;cursor:pointer">
+        <input type="checkbox" id="limRelocate" ${L.relocate?'checked':''}> I would move cities for the right job</label>
+      <label class="say" style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-top:6px">
+        <input type="checkbox" id="limOnsite" ${L.onsite_ok?'checked':''}> I can work on-site</label>
+      <label class="lab" style="margin-top:12px">Lowest monthly pay you would accept <span style="color:var(--dim)">&mdash; blank for no limit</span></label>
+      <input type="text" id="limPay" inputmode="numeric" value="${L.min_pay?esc(String(L.min_pay)):''}" placeholder="e.g. 80000">
+      <p class="say" style="margin:6px 0 0">A posting that does not state its pay is never removed by this &mdash; unstated is not low.</p>
+      <div class="eyebrow" style="margin-top:16px">Never show me</div>
+      <div id="onbAvoid">${AVOID_OFFERED.map((a,i)=>`
+        <label class="say" style="display:flex;gap:8px;align-items:center;cursor:pointer;margin-top:6px">
+          <input type="checkbox" data-avoid="${esc(a)}" ${L.avoid.includes(a)?'checked':''}> ${esc(a)}</label>`).join('')}</div>
+
+      <details style="margin-top:22px"><summary class="eyebrow" style="cursor:pointer">One job you would apply to today (optional)</summary>
+        <p class="say" style="margin:8px 0">Paste a real posting. We compare new ones against it, which works far better than adjectives.</p>
+        <textarea id="onbExemplar" rows="5" placeholder="Paste the posting, or a link and a line about why.">${esc(p.exemplar||'')}</textarea>
+      </details>
+
+      <div class="btn-row" style="margin-top:20px">
+        <button class="btn-go" id="onbDone">Start finding jobs</button>
+        <button id="onbBack3">Back</button></div>`;
   }
 
   $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
@@ -4611,7 +4759,9 @@ function renderOnb(){
   if(ONB.step===2){
     document.querySelectorAll('[data-track]').forEach(el=>el.onclick=()=>{ ONB.track=el.dataset.track; render(); });
     $('#onbBack2').onclick=()=>{ ONB.step=1; render(); };
-    $('#onbDone').onclick=finishOnb;
+    // The finish button moved to step 3. Leaving the old line here threw
+    // TypeError on null.onclick and took the whole of step 2 with it.
+    $('#onbWant').onclick=()=>{ ONB.step=3; render(); };
     const goAssess=async()=>{
       const v=$('#wantIn').value.trim();
       if(v.length<3){ ONB.assessErr='Say a bit more about the kind of work.'; render(); return; }
@@ -4632,6 +4782,41 @@ function renderOnb(){
       ONB.assessed=null; ONB.wantText=''; render();
     };
     if($('#wantDrop')) $('#wantDrop').onclick=()=>{ ONB.assessed=null; render(); };
+  }
+  if(ONB.step===3){
+    const p=ONB.parsed;
+    /* Read on CHANGE rather than only on submit, so a person who edits a field
+       and then hits Back does not silently lose it -- render() rebuilds this
+       screen from ONB.parsed, which is the only place the answers live until
+       finishOnb writes the profile. */
+    const commit=()=>{
+      const sel=n=>{ const el=document.querySelector(`input[name="${n}"]:checked`); return el?el.value:null; };
+      const i=sel('intent'); if(i) p.intent=i;
+      const st=sel('strict'); if(st) p.strict=Number(st);
+      document.querySelectorAll('[data-mode]').forEach(el=>{
+        const t=(p.tracks||[]).find(x=>x.id===el.dataset.mode);
+        if(t) t.mode=el.value;
+      });
+      /* Blank means NO limit, which is why this is parsed rather than
+         Number()'d: Number('') is 0 and 0 is also what "no limit" is stored
+         as, so the two agree -- but a junk value must not become 0 silently
+         either, so anything unparseable keeps the previous number. */
+      const payRaw=($('#limPay').value||'').replace(/[^0-9]/g,'');
+      const pay=payRaw===''?0:Number(payRaw);
+      p.limits={
+        relocate:  $('#limRelocate').checked,
+        onsite_ok: $('#limOnsite').checked,
+        min_pay:   Number.isFinite(pay)?pay:0,
+        avoid:     [...document.querySelectorAll('[data-avoid]')].filter(x=>x.checked).map(x=>x.dataset.avoid),
+      };
+      const ex=$('#onbExemplar'); if(ex) p.exemplar=ex.value.trim();
+    };
+    document.querySelectorAll('#onbIntent input, #onbStrict input').forEach(el=>el.onchange=()=>{ commit(); render(); });
+    document.querySelectorAll('[data-mode],[data-avoid],#limRelocate,#limOnsite').forEach(el=>el.onchange=commit);
+    $('#limPay').onblur=commit;
+    if($('#onbExemplar')) $('#onbExemplar').onblur=commit;
+    $('#onbBack3').onclick=()=>{ commit(); ONB.step=2; render(); };
+    $('#onbDone').onclick=()=>{ commit(); finishOnb(); };
   }
 }
 
@@ -5110,8 +5295,23 @@ const foldSect=(key,title,sub,rows)=>{
 
 function renderUnapplied(){
   const p=P();
-  const mine=p.jobs.map((j,i)=>({j,i}))
+  const all=p.jobs.map((j,i)=>({j,i}))
     .filter(x=>isOpen(x.j) && stOf(x.j)==='new' && (CHFILT==='all'||chOf(x.j)===CHFILT));
+  /* The red lines, applied HERE and nowhere else: at read time, over the list
+     the queue is about to draw. Nothing is written, no score is altered, and
+     unchecking a limit brings every one of these straight back on the next
+     render -- which is the only safe way to run a filter that removes work. */
+  all.forEach(x => { x.gated = redLine(x.j, p.profile); });
+  const gated = all.filter(x => x.gated);
+  const mine  = SHOW_GATED ? all : all.filter(x => !x.gated);
+  /* Said separately from "nothing waiting", because the two mean opposite
+     things: one is an empty pipeline, the other is a filter doing its job, and
+     telling a person their search found nothing when their own red line
+     removed it all is the worst version of this feature. */
+  if(!mine.length && gated.length) return `<div class="empty"><b>Everything here is behind one of your red lines</b>
+    ${gated.length} role${gated.length===1?'':'s'} matched your directions but ${gated.length===1?'was':'were'} removed by the limits you set.
+    <div class="btn-row" style="margin-top:12px;justify-content:center">
+      <button class="btn-sm" id="showGated">Show them anyway</button></div></div>`;
   if(!mine.length) return `<div class="empty"><b>Nothing waiting</b>
     Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>`;
 
@@ -5125,6 +5325,9 @@ function renderUnapplied(){
 
   return `<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
+      ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
+        title="${esc(gated.map(x=>x.gated).filter((v,i,a)=>a.indexOf(v)===i).slice(0,4).join(' · '))}">${
+        SHOW_GATED?`hide the ${gated.length} your limits remove`:`${gated.length} removed by your limits`}</button>`:''}
       <div class="spacer"></div>
       <span class="eyebrow">Sort</span>
       <div class="segs">
@@ -5490,6 +5693,10 @@ function renderApp(){
   document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
   document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
+  /* Two places render #showGated -- the list header and the all-gated empty
+     state -- and only one is on screen at a time, so this is guarded rather
+     than assumed. Binding a missing id throws and takes the render with it. */
+  if($('#showGated')) $('#showGated').onclick=()=>{ SHOW_GATED=!SHOW_GATED; render(); };
   if($('#btnNext')) $('#btnNext').onclick=()=>{
     const a=$('#btnNext').dataset.next;
     if(a==='suggest') return suggestDialog();

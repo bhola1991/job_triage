@@ -13,6 +13,10 @@ const src=[
   // it again is a redeclaration in the same eval.
   // sysPrompt interpolates today(); record-deepseek.js grabs it the same way.
   grab(/const today = [^\n]*\n/),
+  /* The whole intake block in one slice: redLine leans on limitsOf, which is
+     declared above AVOID_PATTERNS, so starting at AVOID_PATTERNS compiled to
+     a ReferenceError. Ends just before PROF_TEXT. */
+  grab(/const INTENTS = \[[\s\S]*?\nconst PROF_TEXT/).replace(/\nconst PROF_TEXT$/,''),
   grab(/function sysPrompt[\s\S]*?\n}\n/),
   /* scoreAndCut writes flags through these now. It also swallows anything a
      batch throws, by design -- so without them in the slice this file went on
@@ -44,7 +48,7 @@ const cloudNow=()=>CLOUD;
 const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
 const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt,redLine,statedPayMonthly};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -212,6 +216,60 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
   const sp = T.sysPrompt(prof, 't1');
   ok(!/Priya/.test(sp), 'sysPrompt sends no name to DeepSeek');
   ok(/Payments engineer/.test(sp) && /Go/.test(sp), 'sysPrompt still carries the headline and strengths');
+ }
+
+ /* ── red lines: the ones that must NOT fire matter most ───────────────────
+    A limit excludes a posting outright, so a false positive silently removes
+    real work. The pay rule is the dangerous one: most postings name no salary,
+    and treating silence as "under your floor" would quietly delete most of the
+    market. Every "KEPT" case below is guarding that. */
+ console.log('red lines');
+ {
+   const prof = lim => ({ location: 'Delhi, India', limits: lim });
+   const J = o => Object.assign({ title:'Video Editor', company:'Acme',
+     location:'Delhi, India', description:'Edit videos.' }, o);
+   const kept  = (n, j, l) => ok(T.redLine(j, prof(l)) === null, 'kept: ' + n + ' — ' + T.redLine(j, prof(l)));
+   const gated = (n, j, l) => ok(T.redLine(j, prof(l)) !== null, 'gated: ' + n);
+
+   // Defaults must gate nothing, for every profile that predates the field.
+   kept('default limits gate nothing', J({ location:'Mumbai' }), {});
+
+   // Pay: a figure the posting actually states, or no gate at all.
+   kept('no pay mentioned',        J({ description:'Great role.' }),            { min_pay:50000 });
+   kept('"competitive salary"',    J({ description:'Competitive salary.' }),    { min_pay:50000 });
+   kept('a bare number',           J({ description:'Team of 40000 users.' }),   { min_pay:50000 });
+   kept('ambiguous figure, no period', J({ description:'₹60000' }),             { min_pay:50000 });
+   kept('Rs 80,000 per month',     J({ description:'Rs 80,000 per month' }),    { min_pay:50000 });
+   kept('12 LPA',                  J({ description:'12 LPA' }),                 { min_pay:60000 });
+   kept('₹900000 per annum',       J({ description:'₹900000 per annum' }),      { min_pay:60000 });
+   gated('Rs 30,000 per month',    J({ description:'Rs 30,000 per month' }),    { min_pay:50000 });
+   gated('6 LPA under a 60k floor',J({ description:'6 LPA' }),                  { min_pay:60000 });
+   ok(T.statedPayMonthly('6 lpa') === 50000, '6 LPA reads as 50,000 a month: ' + T.statedPayMonthly('6 lpa'));
+   ok(T.statedPayMonthly('competitive') === null, 'unparseable pay is null, not 0');
+
+   // Relocation, and remote as the escape hatch.
+   kept('same city',               J({ location:'Delhi, India' }),              { relocate:false });
+   kept('other city but remote',   J({ location:'Mumbai (remote)' }),           { relocate:false });
+   kept('other city, will move',   J({ location:'Mumbai, India' }),             { relocate:true });
+   gated('other city, will not move', J({ location:'Mumbai, India' }),          { relocate:false });
+
+   // On-site only when the posting says so.
+   kept('silent on working mode',  J({ description:'Edit videos.' }),           { onsite_ok:false });
+   kept('fully remote',            J({ description:'Fully remote team.', location:'Remote' }), { onsite_ok:false });
+   gated('on-site stated',         J({ description:'This is an on-site role.' }), { onsite_ok:false });
+   gated('hybrid',                 J({ description:'Hybrid, 3 days in office.' }), { onsite_ok:false });
+
+   // avoid: the offered labels are patterns; anything else is a word match.
+   kept('unrelated job, avoid set',J({ description:'Edit videos.' }),           { avoid:['night shift'] });
+   gated('staffing agency',        J({ description:'Leading staffing partner.' }), { avoid:['agency or consultancy'] });
+   gated('night shift',            J({ description:'US shift, night shift work.' }), { avoid:['night shift'] });
+   gated('unpaid',                 J({ description:'Unpaid internship for exposure.' }), { avoid:['unpaid or equity-only'] });
+   gated('a custom term, matched literally', J({ description:'Door to door sales.' }), { avoid:['sales'] });
+
+   // A reason, never a bare boolean: a row removed without one cannot be told
+   // apart from a row that was never found.
+   const why = T.redLine(J({ location:'Mumbai, India' }), prof({ relocate:false }));
+   ok(typeof why === 'string' && why.length > 10, 'a gate explains itself: ' + JSON.stringify(why));
  }
 
  console.log(process.exitCode?'SOME FAILED':'ALL PASS');
