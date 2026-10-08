@@ -88,4 +88,24 @@ node --max-old-space-size=4096 scripts/index/verify.js \
   scripts/index/naukri.jsonl scripts/index/index.jsonl \
   --expired scripts/index/expired.jsonl --prune 30 $PUSH
 
+# ── is the live system actually working? ────────────────────────────────────
+# Last, and it decides this script's exit code. Everything above reports its
+# own step; nothing until now asked whether the SYSTEM is healthy -- and on
+# 2026-10-07 the answer was no in two places at once while every step above
+# printed normally. A non-zero exit here makes systemd record Result=exit-code
+# instead of success, which is the only signal an unattended job has.
+#
+# Skipped on --no-push for the same reason the harvest is: that flag means
+# "change nothing on the server", and the heartbeat logs a failure row.
+if [ -z "$DRY" ]; then
+  say "heartbeat"
+  if node scripts/heartbeat.js --in-refresh; then
+    :
+  else
+    echo "== the crawl finished but the system is NOT healthy (see above)"
+    say "done"
+    exit 1
+  fi
+fi
+
 say "done"

@@ -255,12 +255,36 @@ Not a gate, but run it when the cut moves:
 node scripts/tune-flag-thresholds.js   # per-code FLAG_P sweep; reads the SHIPPED cut from index.html
 ```
 
-**What the harness still does not cover**, and both gaps cost something this
-week: nothing checks that the nightly pipeline actually ran (the test is whether
-`job_index` was touched today — a timer reporting `enabled` and `success` was
-frozen for a day), and nothing renders a page, which is why a 13-of-16 missing
-description reached a real user. The eight checks above are all offline and all
-about code; the two failures that mattered were about *operations* and *output*.
+**The operations half of that gap is now closed.** `node scripts/heartbeat.js`
+asks the live system four questions the offline checks cannot: is `job_index`
+still being written to (within 26h, compared as an instant rather than a date,
+because the database is UTC and the crawl machine is IST); does DeepSeek report
+`is_available` with a balance over $1 (its `/user/balance` endpoint is free, so
+this answers "would scoring work" without spending anything to find out); does
+Mantiks still have credits; and is the refresh unit **stuck** rather than
+finished. It writes one `usage_events` row (`kind='error'`, `source='heartbeat'`)
+on failure so an outage has a queryable history, writes nothing when healthy,
+and treats a missing credential as a loud `SKIP` — never a pass. `refresh.sh`
+runs it last and exits non-zero on a problem, so systemd records
+`Result=exit-code` instead of `success`.
+
+Three of its four checks were wrong before they were right, which is the pattern
+of this whole week:
+- the stuck-unit check read systemd's default timestamp, `Thu 2026-10-08
+  04:48:15 IST`, which `Date.parse` returns **NaN** for — so `isFinite(ageH)`
+  was false, the stuck branch never ran, and a hung unit would have been
+  reported as merely `activating`. It now uses `--timestamp=unix` with a
+  day-name-stripping fallback, and an **unreadable** timestamp on an
+  `activating` unit now FAILS, because not knowing how long it has been running
+  is not evidence that it is fine;
+- `StateChangeTimestampMonotonic` was tried first and disagreed with
+  `/proc/uptime` by **49 hours** on a laptop that suspends;
+- run from inside `refresh.sh` the check saw its own unit as `activating` and
+  would have called a long crawl a hang, so the nightly invocation passes
+  `--in-refresh` and skips that one question.
+
+**What is still not covered:** nothing renders a page. That is why 13 of 16
+missing descriptions reached a real user while every check was green.
 
 All pass as of `cf3b267`, **checked by exit code**. That qualifier is new and it
 is there because piping a check into `tail` hid a crash twice in one day: the

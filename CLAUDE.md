@@ -466,6 +466,8 @@ scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST 
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-reply.js          Inbound-mail decision check. Offline, no model.
 scripts/read-feedback.js            Reads public.feedback with the service role. The ONLY reader; RLS gives the app no view of it.
+scripts/heartbeat.js                Is the LIVE system working? Corpus freshness, DeepSeek balance, Mantiks credits, whether the
+                                    refresh unit is stuck. NOT part of §8: it needs the network and real keys. refresh.sh runs it last.
 scripts/selfcheck-worker.js         The Worker's two public write routes, and pricing.html's prices against the code. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.
@@ -565,6 +567,17 @@ that skill with it rather than every machine being set up by hand.
    This list was four checks until 2026-09-24; `selfcheck-rows`, `selfcheck-sync`
    and `eval-matcher` were added on 2026-09-22 and went unlisted here.
    `selfcheck-reply` was added on 2026-10-05.
+
+   **These eight are all offline and all about code, and that is their limit.**
+   On 2026-10-08 two things were broken in production at once and every one of
+   them passed: the nightly refresh had been frozen for a day behind a socket
+   with no timeout, and the DeepSeek account was at `402 Insufficient Balance`,
+   so scoring and drafting were dead. Both failures look exactly like disuse.
+   `node scripts/heartbeat.js` is the other kind of check — it asks the live
+   system questions code cannot predict, needs the network and real keys, and
+   is therefore deliberately NOT in the list above. `refresh.sh` runs it as its
+   last step and exits non-zero on a problem, so systemd records a failure
+   rather than a success.
 
    One note on `selfcheck-reply`: its fixtures are mostly near-misses on
    purpose, because what it guards is ground truth. `jobs.stage = 'live'` is
