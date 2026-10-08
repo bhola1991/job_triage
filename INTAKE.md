@@ -272,11 +272,11 @@ only thing that justifies keeping the gates.
 
 | | Work | Needs |
 | --- | --- | --- |
-| 1 | Persist the five fields, defaults in `coerceProfile` | migration |
-| 2 | The intake step, skippable, every control defaulted | — |
-| 3a | `limits` gates, with the reason shown and a count on screen | — |
-| 3b | `intent` in `rankOf` and in what the queue leads with | — |
-| 3c | `strict` mapped onto the existing constants | — |
+| ~~1~~ | **Done** — five fields, defaults that mean "as before" | applied |
+| ~~2~~ | **Done** — a fourth onboarding step, every control defaulted | — |
+| ~~3a~~ | **Done** — `redLine()`, gated at read time, reason shown, count on screen | — |
+| ~~3b~~ | **Done** — `rankFor`/`freshWeight`; `rankOf` left pure for the eval slice and the map anchor | — |
+| ~~3c~~ | **Done** — `STRICT_SHIFT` over the four constants; display bands only, MIN_FIT untouched | — |
 | 3d | `exemplar` as one extra Jev Score | 3a–3c shipped |
 | 4 | Measure it | a domain, so `replied` has data |
 
