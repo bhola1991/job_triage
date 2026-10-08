@@ -9,12 +9,17 @@ create table if not exists public.credits (
   user_id    uuid        primary key references auth.users(id) on delete cascade,
   balance    integer     not null default 0 check (balance >= 0),
   -- Free tier: 5 job board searches, with AI scoring free while it lasts.
-  free_search integer    not null default 5 check (free_search >= 0),
+  -- 10 since 2026-10-08, for the beta. Raised WITH free_llm below, because a
+  -- search draws on both pots: ~65 postings arrive, scoring batches them by
+  -- 12 and judging by 50, so one free search costs ~8 LLM credits. At the
+  -- old 60 a tester ran dry around search seven and the last three returned
+  -- unscored jobs, which reads as broken rather than generous.
+  free_search integer    not null default 10 check (free_search >= 0),
   free_tier  boolean     not null default true,     -- off once a board search is attempted with none left
   -- ponytail: ceiling on free AI calls. Each search = up to 7 CV-check calls
   -- (one per source batch) + 2 scoring calls, so 5 searches = ~45; the rest is
   -- room for drafts. Without it, CSV imports would score free forever.
-  free_llm   integer     not null default 60 check (free_llm >= 0),
+  free_llm   integer     not null default 100 check (free_llm >= 0),   -- see free_search above
   updated_at timestamptz not null default now()
 );
 alter table public.credits enable row level security;

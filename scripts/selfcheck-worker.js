@@ -296,6 +296,25 @@ const post = (body, env = ENV) =>
           new RegExp(name, 'i').test(priv), name);
       });
 
+    /* The free-tier number is a promise on two public pages and a column
+       default in billing.sql, transcribed by hand into both. It went from 5 to
+       10 on 2026-10-08 and that is three places to change; this is the check
+       that stops the pages drifting from the database the way the LinkedIn
+       line did. */
+    const billing = fs.readFileSync(path.join(ROOT, 'billing.sql'), 'utf8');
+    const freeSearch = /free_search\s+integer[^\n]*default\s+(\d+)/.exec(billing);
+    ok('billing.sql declares a free_search default', !!freeSearch);
+    if (freeSearch) {
+      const n = freeSearch[1];
+      [['pricing.html', html], ['refund.html', fs.readFileSync(path.join(ROOT, 'refund.html'), 'utf8')]]
+        .forEach(([name, text]) => {
+          const claim = /(\d+)\s+free job board searches/.exec(text);
+          ok(`${name} states a free-search count`, !!claim, name);
+          if (claim) ok(`${name} says ${n} free searches, matching billing.sql`, claim[1] === n,
+            { page: claim[1], billing: n });
+        });
+    }
+
     /* Data residency is a compliance claim, so it is checked against the
        project, not remembered. ap-southeast-2 is SYDNEY; this check exists
        because the first draft of that sentence said Singapore. */
