@@ -13,10 +13,25 @@ const src=[
   // it again is a redeclaration in the same eval.
   // sysPrompt interpolates today(); record-deepseek.js grabs it the same way.
   grab(/const today = [^\n]*\n/),
+  /* ageOf and what it needs. freshWeight asks how old a posting is, and with
+     saneDate stubbed to d=>d it answered from a raw string -- so every
+     freshness assertion passed or failed for the wrong reason. */
+  grab(/function saneDate[\s\S]*?\n}\n/),
+  /* NOT ageOf: it is stubbed below as a lookup into the AGE map, which is how
+     boardFilter's age test is driven. Grabbing the real one shadows that and
+     breaks it. Freshness is tested through AGE for the same reason. */
+  grab(/const dayDiff = [^\n]*\n/),
   /* The whole intake block in one slice: redLine leans on limitsOf, which is
      declared above AVOID_PATTERNS, so starting at AVOID_PATTERNS compiled to
      a ReferenceError. Ends just before PROF_TEXT. */
   grab(/const INTENTS = \[[\s\S]*?\nconst PROF_TEXT/).replace(/\nconst PROF_TEXT$/,''),
+  // The bands and the freshness wrapper. CLOSING_DAYS comes with them.
+  grab(/const WORK_FIT=[\s\S]*?\nconst overBar[^\n]*\n/),
+  /* fitOf through rankFor in one slice: isStrong needs fitOf, rankFor needs
+     rankOf, and rankOf needs confWeight. All sit together, ahead of
+     MAX_AGE_DAYS, so this cannot overlap the grabs above. */
+  grab(/const fitOf   = [\s\S]*?\nconst rankFor[^\n]*\n/),
+  // CLOSING_DAYS arrives inside the WORK_FIT..isStrong slice above.
   grab(/function sysPrompt[\s\S]*?\n}\n/),
   /* scoreAndCut writes flags through these now. It also swallows anything a
      batch throws, by design -- so without them in the slice this file went on
@@ -46,9 +61,13 @@ const scoreBatch=async(batch)=>{ if(SCORES==='fail') throw new Error('boom'); co
 let CLOUD=false, JUDGED=async()=>[];
 const cloudNow=()=>CLOUD;
 const judgeMany=async(postings, cand)=>JUDGED(postings, cand);
-const rankOf=j=>+j.ai_score||0, saneDate=d=>d||'', esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
+/* rankOf is no longer stubbed here: the real one is sliced in above, with
+   confWeight and fitOf, because the freshness assertions need the actual
+   ranking rather than a stand-in. Keeping the stub made the eval fail with
+   "Identifier 'rankOf' has already been declared". */
+const esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt,redLine,statedPayMonthly};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt,redLine,statedPayMonthly,barsFor,freshWeight,isStrong,overBar,rankFor,rankOf};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -270,6 +289,69 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
    // apart from a row that was never found.
    const why = T.redLine(J({ location:'Mumbai, India' }), prof({ relocate:false }));
    ok(typeof why === 'string' && why.length > 10, 'a gate explains itself: ' + JSON.stringify(why));
+ }
+
+ /* ── intent and strict ───────────────────────────────────────────────────
+    Both are dials over data that is already on the row: nothing here re-scores,
+    re-fetches or discards, so every assertion is about the DEFAULT being
+    today's behaviour and the ends of the dial moving in the right direction. */
+ console.log('intent and strict');
+ {
+   /* Age is supplied through the AGE map, not a `posted` date: ageOf is stubbed
+      in this file as AGE[j.url], which is how boardFilter's own age test works.
+      Giving these jobs a date instead silently made every one of them undated,
+      so freshWeight returned 1 and three assertions passed for the wrong
+      reason until the url was added. */
+   let seq = 0;
+   const J = (fit, reach, age) => {
+     const url = 'https://fresh/' + (seq++);
+     AGE[url] = age;            // null = no stated date
+     return { url, ai_score:String(fit), ai_reachability:String(reach), ai_confidence:'high' };
+   };
+
+   // strict: absent must be the baseline the app was tuned at.
+   const base = T.barsFor(null);
+   ok(base.workFit===65 && base.workReach===45 && base.strongFit===75 && base.strongReach===55,
+     'no profile = the baseline bands, unchanged: ' + JSON.stringify(base));
+   ok(JSON.stringify(T.barsFor({strict:2}))===JSON.stringify(base), 'strict 2 IS the baseline');
+   const loose = T.barsFor({strict:1}), tight = T.barsFor({strict:3});
+   ok(loose.workFit===55 && loose.strongFit===65, 'strict 1 lowers the fit bands: ' + JSON.stringify(loose));
+   ok(tight.workFit===75 && tight.strongFit===85, 'strict 3 raises them: ' + JSON.stringify(tight));
+   ok(tight.strongReach-base.strongReach < tight.strongFit-base.strongFit,
+     'reach shifts LESS than fit, because reachability is the noisier axis');
+   /* 99 CLAMPS to 3 rather than falling back: selfcheck-rows already asserts
+      that, and a person who stored 99 meant "as strict as possible". A
+      non-numeric value is the one that falls back. */
+   ok(T.barsFor({strict:99}).workFit===75, 'an out-of-range strict clamps to the tightest band');
+   ok(T.barsFor({strict:'x'}).workFit===65, 'a non-numeric strict falls back to the baseline');
+
+   // The bands decide sections, so a row can move between them and nothing else.
+   const mid = J(70,50,3);
+   ok(!T.isStrong(mid) && T.overBar(mid), 'a fit-70 row is "worth a shot" at the baseline');
+   ok(T.isStrong(mid,{strict:1}), 'and becomes strong at strict 1');
+   ok(!T.overBar(mid,{strict:3}), 'and falls below the bar at strict 3');
+
+   // intent: freshness, and the row that must never be penalised for it.
+   ok(T.freshWeight(J(80,50,0), {intent:'browsing'})===1, 'browsing applies no freshness at all');
+   ok(T.freshWeight(J(80,50,30),{intent:'browsing'})===1, 'browsing: even a 30-day-old row is untouched');
+   ok(T.freshWeight(J(80,50,0), {intent:'now'})===1, 'now: a posting from today is unpenalised');
+   ok(T.freshWeight(J(80,50,30),{intent:'now'})<1,    'now: an old posting is penalised');
+   ok(T.freshWeight(J(80,50,30),{intent:'now'})<T.freshWeight(J(80,50,30),{intent:'soon'}),
+     'now penalises age harder than soon');
+   /* The rule that is already load-bearing elsewhere: ageOf returns null for a
+      posting with no date, and NOT KNOWING when something was posted is not
+      the same as it being old. */
+   ok(T.freshWeight(J(80,50,null),{intent:'now'})===1,
+     'an undated posting is never penalised for age');
+   // Flat after CLOSING_DAYS, or a very old row would sort below an unscored one.
+   ok(T.freshWeight(J(80,50,21),{intent:'now'})===T.freshWeight(J(80,50,200),{intent:'now'}),
+     'the penalty stops at CLOSING_DAYS instead of growing without bound');
+   // And the ordering it exists to change.
+   const fresh=J(72,50,1), stale=J(78,50,28);
+   ok(T.rankFor(stale,{intent:'browsing'})>T.rankFor(fresh,{intent:'browsing'}),
+     'browsing: the better score leads');
+   ok(T.rankFor(fresh,{intent:'now'})>T.rankFor(stale,{intent:'now'}),
+     'now: the fresher posting leads instead');
  }
 
  console.log(process.exitCode?'SOME FAILED':'ALL PASS');

@@ -3128,6 +3128,39 @@ function confWeight(j){
 function rankOf(j){
   return Math.pow(fitOf(j),0.65)*Math.pow(reachOf(j),0.35)*confWeight(j);
 }
+/* ── freshness, which rankOf has never had ────────────────────────────────
+   Deliberately NOT folded into rankOf. That function is sliced and asserted
+   by scripts/eval-matcher.js with a single argument, and pipeline-map anchors
+   a node on it by name, so it stays pure and one-argument. This is the wrapper
+   the app sorts by instead.
+
+   How much age matters is the one thing `intent` is for. Someone who needs
+   work now is better served by a good posting from today than a slightly
+   better one from three weeks ago, because the three-week-old one is probably
+   filled. Someone browsing wants the strongest thing regardless.
+
+   An UNKNOWN age never costs a row anything: ageOf returns null when no date
+   was stated, and null is not old. That rule is already load-bearing in
+   boardFilter and it holds here. */
+/* The profile the view is currently about. Several display rules need it and
+   none of them is handed it, so this is the single place that reaches for it --
+   repeating `P() && P().profile` at each site is how two of them end up
+   disagreeing about which band is in force. */
+const curProf = () => { const p = P(); return p ? p.profile : null; };
+const INTENT_FRESH = { now: 0.45, soon: 0.20, browsing: 0 };
+function freshWeight(j, prof){
+  const w = INTENT_FRESH[intentOf(prof)] || 0;
+  if(!w) return 1;
+  const a = ageOf(j);
+  if(a === null) return 1;
+  /* Linear to CLOSING_DAYS and flat after: by the time a posting is old enough
+     to be closing, the penalty has done its work, and continuing to divide
+     would rank a 90-day-old role below an unscored one. */
+  return 1 - w * Math.min(1, a / CLOSING_DAYS);
+}
+/* What the app sorts by. rankOf is the score; this is the score as the person
+   asked to see it. */
+const rankFor = (j, prof) => rankOf(j) * freshWeight(j, prof);
 const isOpen = j => stOf(j)!=='closed';
 
 /* ═══ trimming the list ═══
@@ -4936,24 +4969,60 @@ function byPosted(list){
     return (x-y) || (rankOf(b.j)-rankOf(a.j));
   });
 }
+/* "Best" sorts by rankFor, not rankOf, so `intent` reaches the one place it is
+   supposed to: the order of the list. The two explicit sorts above are
+   unchanged -- someone who has asked for "recently posted" has already said
+   what they want and does not need freshness applied twice. */
 const sortList = rows => SORT==='new' ? byNewest(rows) : SORT==='posted' ? byPosted(rows)
-  : [...rows].sort((a,b)=>rankOf(b.j)-rankOf(a.j));   // "Best" -- storage order is arrival order, not rank
+  : [...rows].sort((a,b)=>rankFor(b.j, curProf()) - rankFor(a.j, curProf()));
 
 /* ═══ the colour law, in code ═══
    Which of the four instructions a row carries. One at most, and the order
    below is the rule: a deadline beats an opportunity, the nearer deadline beats
    the further one, and a score on its own is never an instruction. */
 const WORK_FIT=65, WORK_REACH=45, STRONG_FIT=75, STRONG_REACH=55;
+/* ── how picky, by `strict` ────────────────────────────────────────────────
+   The four constants above are the BASELINE and stay exactly as they were:
+   strict 2 is what the app has always done, and they are declared once
+   because scripts/pipeline-map.js reads each by name and fails if a
+   declaration matches more than once.
+
+   A shift rather than three tables of numbers, so there is one place to argue
+   with and the relationship between the bands cannot drift. Reach moves less
+   than fit because reachability is the noisier axis -- it is composed from
+   four nouls rather than asked -- and shifting it as hard would make strict 3
+   a filter on confidence rather than on quality.
+
+   This moves the DISPLAY bands only. It deliberately does not touch MIN_FIT,
+   which is applied at intake by scoreAndCut: raising that would DISCARD rows
+   rather than hide them, and a strictness dial that permanently deletes work
+   is not a dial. Lowering it for strict 1 would be safe but costs scoring
+   credits on rows the person may never look at, so that is a separate
+   decision about spend and not part of this. */
+const STRICT_SHIFT = { 1: -10, 2: 0, 3: 10 };
+const clamp100 = n => Math.max(0, Math.min(100, Math.round(n)));
+function barsFor(prof){
+  const d = STRICT_SHIFT[strictOf(prof)] || 0;
+  return {
+    workFit:     clamp100(WORK_FIT     + d),
+    workReach:   clamp100(WORK_REACH   + d * 0.7),
+    strongFit:   clamp100(STRONG_FIT   + d),
+    strongReach: clamp100(STRONG_REACH + d * 0.7),
+  };
+}
 const CLOSING_DAYS=21, STALE_DAYS=60;
 const FLAGS_GOOD=['strong_fit','non_traditional_friendly','rare_combination_fit'];
-const isStrong = j => fitOf(j)>=STRONG_FIT && reachOf(j)>=STRONG_REACH;
-const overBar  = j => fitOf(j)>=WORK_FIT && reachOf(j)>=WORK_REACH;
+/* `prof` is optional throughout: omitted, strictOf returns its default of 2
+   and barsFor hands back the baseline, so every existing call site keeps its
+   exact behaviour and only the ones that pass a profile become adjustable. */
+const isStrong = (j, prof) => { const b=barsFor(prof); return fitOf(j)>=b.strongFit && reachOf(j)>=b.strongReach; };
+const overBar  = (j, prof) => { const b=barsFor(prof); return fitOf(j)>=b.workFit   && reachOf(j)>=b.workReach; };
 /* Old enough to be filled soon, not so old it probably already has been. Only
    for something worth doing -- a below-the-bar posting going stale asks nothing
    of anyone. */
 function isClosing(j){
   const n=ageOf(j);
-  return stOf(j)==='new' && isScored(j) && overBar(j) && n!==null && n>=CLOSING_DAYS && n<=STALE_DAYS;
+  return stOf(j)==='new' && isScored(j) && overBar(j, curProf()) && n!==null && n>=CLOSING_DAYS && n<=STALE_DAYS;
 }
 function accentOf(j){
   const st=stOf(j);
@@ -4962,7 +5031,7 @@ function accentOf(j){
   if(st==='live') return 'go';
   if(st==='sent') return 'awaiting';
   if(isClosing(j)) return 'closing';
-  if(isScored(j) && isStrong(j)) return 'go';
+  if(isScored(j) && isStrong(j, curProf())) return 'go';
   return '';
 }
 /* When a sent row falls due: the later of the date stored on it and one window
@@ -5006,7 +5075,7 @@ function jobDetail(j,i,acc){
     : acc==='closing'   ? `closing — posted ${age} days ago`
     : acc==='go'        ? 'do this first'
     : !scored           ? 'not scored yet'
-    : overBar(j)        ? 'worth a shot' : 'below the bar';
+    : overBar(j, curProf()) ? 'worth a shot' : 'below the bar';
 
   const all=P().jobs.filter(isScored).sort((a,b)=>rankOf(b)-rankOf(a));
   const pos=all.indexOf(j)+1;
@@ -5318,10 +5387,14 @@ function renderUnapplied(){
   const scored=mine.filter(x=>isScored(x.j));
   const unscored=mine.filter(x=>!isScored(x.j));
   // Closing wins over strong: the nearer deadline beats the better opportunity.
+  /* The bands the person asked for. `strict` shifts these and nothing else:
+     every row above is still in the list, so turning the dial down brings them
+     back into view rather than re-scoring or re-fetching anything. */
+  const bars=barsFor(p.profile);
   const closing=sortList(scored.filter(x=>isClosing(x.j)));
-  const strong =sortList(scored.filter(x=>!isClosing(x.j)&&isStrong(x.j)));
-  const worth  =sortList(scored.filter(x=>!isClosing(x.j)&&!isStrong(x.j)&&overBar(x.j)));
-  const below  =sortList(scored.filter(x=>!overBar(x.j)));
+  const strong =sortList(scored.filter(x=>!isClosing(x.j)&&isStrong(x.j,p.profile)));
+  const worth  =sortList(scored.filter(x=>!isClosing(x.j)&&!isStrong(x.j,p.profile)&&overBar(x.j,p.profile)));
+  const below  =sortList(scored.filter(x=>!overBar(x.j,p.profile)));
 
   return `<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
@@ -5336,12 +5409,12 @@ function renderUnapplied(){
         <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Recently added</button>
       </div>
     </div>
-    ${sect('go','Do these first',`Fit ${STRONG_FIT}+ and reachability ${STRONG_REACH}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
+    ${sect('go','Do these first',`Fit ${bars.strongFit}+ and reachability ${bars.strongReach}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
     ${sect('closing','Closing soon',`Worth doing, but posted ${CLOSING_DAYS}+ days ago. Old postings get filled, not withdrawn \u2014 apply today or let it go.`,closing)}
     ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
     ${(!strong.length&&!worth.length&&!closing.length)?`<div class="empty"><b>Nothing clears the bar</b>
-      ${scored.length?`${scored.length} scored here, none at fit ${WORK_FIT}+ and reachability ${WORK_REACH}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
-    ${foldSect('below','Below the bar',`Scored under fit ${WORK_FIT} or reachability ${WORK_REACH}. Kept, because a score is a judgement rather than a fact.`,below)}
+      ${scored.length?`${scored.length} scored here, none at fit ${bars.workFit}+ and reachability ${bars.workReach}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
+    ${foldSect('below','Below the bar',`Scored under fit ${bars.workFit} or reachability ${bars.workReach}. Kept, because a score is a judgement rather than a fact.`,below)}
     ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}`;
 }
 
