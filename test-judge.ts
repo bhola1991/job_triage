@@ -12,8 +12,12 @@ const posting = {
   location: "Remote",
   description: "Build and run Go services on Postgres. Own the full lifecycle. Fully remote; apply by Friday.",
 };
+/* No name, because candidateOf() in index.html no longer sends one -- the
+   fixture has to match what the app really posts or this smoke test proves
+   something nobody ships. Removed 2026-10-08, after reading DeepSeek's and
+   TypeSafe's retention terms: a name moves none of these judgements, so it
+   was crossing the wire on every judged posting for nothing. */
 const candidate = {
-  name: "Alex",
   location: "India",
   seniority: "Senior",
   strengths: ["Go", "Postgres", "distributed systems"],
