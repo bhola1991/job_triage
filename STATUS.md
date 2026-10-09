@@ -533,7 +533,7 @@ on PGlite, PG 18.3.
 
 ### Built end to end, and shipped dark
 
-Domain chosen: **`jobtriage.app`**, addresses `r.<token>@jobtriage.app`.
+Domain chosen: **`jobtriage.in`**, addresses `r.<token>@jobtriage.in`.
 
 - `src/index.js` gained the `email()` export. Mail to an address that is *not*
   a live token is **forwarded, never stored** — Email Routing has no wildcard
@@ -576,11 +576,17 @@ Domain chosen: **`jobtriage.app`**, addresses `r.<token>@jobtriage.app`.
   inbound mail starts landing on an unknown token — which looks like
   "forwarding stopped working" and has nothing to do with forwarding.
 
-### The one thing blocking it: the domain does not exist
+### The one thing blocking it: nobody has seen a mail go through
 
-`jobtriage.app` is **NXDOMAIN** — checked against both Cloudflare's and
-Google's resolvers, with the `.app` TLD authority answering. It is not
-registered. The app is served from `jobtriage.reachbhola.workers.dev`.
+`jobtriage.in` was registered at GoDaddy on 2026-10-08 (the `jobtriage.app`
+this section used to name was never bought) and went live on Cloudflare on
+2026-10-09: the zone is active, the `jobtriage` Worker answers on it as a
+custom domain, and the old `jobtriage.reachbhola.workers.dev` address shows a
+"moved" notice instead of redirecting (`MOVED` in `index.html`).
+
+The three steps below were all done the same day. What has NOT happened is a
+real mail arriving: neither the forward of a non-token address nor a reply to
+a token address has been observed end to end.
 
 So the feature is committed **off**. `INBOX_LIVE = false` in `index.html`, and
 the panel says plainly that the domain is not receiving mail rather than
@@ -589,15 +595,16 @@ Replies button is not even created while it is off. This matters because
 **pushes to `main` auto-deploy** — shipping it on would have published a dead
 address to real beta users.
 
-Three steps flip it, all outside this repo, in order:
+Three steps, all outside this repo, all done 2026-10-09:
 
-1. Register `jobtriage.app` and put it on Cloudflare.
+1. Clear the registrar hold on `jobtriage.in` and put it on Cloudflare
+   (add the zone, then point GoDaddy's nameservers at the pair Cloudflare gives).
 2. Enable Email Routing, catch-all → the `jobtriage` Worker. **Check for
    existing MX records first** — enabling it repoints the whole domain's mail.
 3. `wrangler secret put SUPABASE_URL` and `wrangler secret put
    SUPABASE_SERVICE_ROLE_KEY`, so the Worker can resolve a token to a profile.
 
-Then `INBOX_LIVE = true`, which is a one-line commit.
+Once a test mail has been seen arriving, `INBOX_LIVE = true` is a one-line commit.
 
 ---
 

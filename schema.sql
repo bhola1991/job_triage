@@ -870,8 +870,8 @@ create index if not exists feedback_time on public.feedback (created_at desc);
 -- user cannot forge a reply into their own ground truth.
 --
 -- The FEATURE is off. src/index.js has the email() handler, but
--- jobtriage.app is not registered and workers.dev is Cloudflare's own zone
--- with no MX records to add -- so nothing can be received yet, and
+-- jobtriage.in only started receiving mail on 2026-10-09 and no real mail has
+-- been seen going through it -- so until one has,
 -- INBOX_LIVE = false in index.html keeps the panel from handing out an address
 -- that would swallow mail.
 --

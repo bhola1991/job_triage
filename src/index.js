@@ -4,11 +4,11 @@ import { tokenFrom, decide } from './reply-match.mjs';
 const MAX_MESSAGE_LENGTH = 2000;
 // Resend's sandbox sender (onboarding@resend.dev) can only deliver to the
 // account's own address until a custom domain is verified at
-// resend.com/domains -- so this can't be banerjeesoumyadip1991@gmail.com
+// resend.com/domains -- so this can't be support@jobtriage.in
 // (the site's published contact address) without that verification step.
 const CONTACT_TO_EMAIL = 'reachbhola@gmail.com';
 
-// Where mail to jobtriage.app that is NOT a reply token goes. Email Routing's
+// Where mail to jobtriage.in that is NOT a reply token goes. Email Routing's
 // catch-all is the only way to receive a per-user address, since it has no
 // wildcard rule -- so this Worker sees every address on the domain and has to
 // hand back anything that is not ours rather than swallow it.
@@ -30,7 +30,7 @@ export default {
   },
 
   // Cloudflare Email Routing entry point. Registered by the catch-all rule on
-  // jobtriage.app; see handleEmail for what it will and will not write.
+  // jobtriage.in; see handleEmail for what it will and will not write.
   async email(message, env, ctx) {
     return handleEmail(message, env, ctx);
   },

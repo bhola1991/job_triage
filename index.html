@@ -1085,6 +1085,22 @@ async function get(k){
 }
 function syncNote(t){ const e=$('#syncInfo'); if(e){ e.textContent=t; e.style.display=t?'block':'none'; } }
 
+/* The app is moving from jobtriage.reachbhola.workers.dev to jobtriage.in.
+   The old address keeps working and is NOT redirected, on purpose: everything
+   above is keyed to the origin, so a redirect would strand anyone using this
+   without an account on a page that cannot see their jobs. Instead the old
+   address says where the app went and how to carry the data, with the backup
+   that already exists. Lives on <body>, outside #root, so render() cannot
+   wipe it. On since 2026-10-09, when jobtriage.in started serving the app. */
+const APP_HOME = 'https://jobtriage.in';
+const MOVED = true;
+if(MOVED && location.hostname.endsWith('.workers.dev')){
+  const b=document.createElement('div');
+  b.style.cssText='position:sticky;top:0;z-index:50;padding:8px 14px;background:var(--panel2);border-bottom:1px solid var(--line);color:var(--text);font-size:12.5px;text-align:center';
+  b.innerHTML=`Job Triage has moved to <a href="${APP_HOME}" style="color:inherit"><b>jobtriage.in</b></a>. With an account, just sign in there. Without one, your jobs live in this browser only: use <b>Backup &amp; transfer</b> here to download a backup, then restore it there.`;
+  document.body.prepend(b);
+}
+
 /* ═══ rows: profiles and jobs ═══
    The blob above is one text field holding everything a person has. Saving it
    is a full rewrite, so two tabs that both save lose whichever finished first,
@@ -4518,17 +4534,18 @@ function coldDialog(){
    address AND the capability, so rotating it revokes access with no server
    state to clean up. src/reply-match.mjs decides; an ATS auto-acknowledgement
    is deliberately NOT a reply. */
-const INBOX_DOMAIN = 'jobtriage.app';
+const INBOX_DOMAIN = 'jobtriage.in';
 /* Off until the receiving end exists, and the panel says so rather than
    handing out an address that silently swallows mail. Pushes to main
    auto-deploy, so shipping this on would have published a dead address.
-   Three things flip it, all outside this repo:
-     1. jobtriage.app registered and on Cloudflare (today: NXDOMAIN).
+   Three things it needed, all outside this repo, all done 2026-10-09 -- but
+   no real mail has been seen arriving yet, which is the last gate:
+     1. jobtriage.in on Cloudflare.
      2. Email Routing enabled, catch-all -> this Worker. Check for existing MX
         records FIRST: enabling it repoints the domain's mail.
      3. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets, so
         src/index.js can resolve a token to a profile.
-   Then this becomes true, which is a one-line commit. */
+   Once a test mail has been seen arriving, this becomes true. */
 const INBOX_LIVE = false;
 const inboxAddr = t => `r.${t}@${INBOX_DOMAIN}`;
 const newInboxToken = () =>

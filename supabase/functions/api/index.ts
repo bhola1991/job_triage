@@ -119,8 +119,14 @@ const asCaller = (token: string) =>
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+/* APP_ORIGIN is a comma-separated list, because the app answers on two
+   origins while it moves from workers.dev to jobtriage.in. The first is the
+   default; Deno.serve at the bottom swaps in the caller's own Origin when it
+   is on the list, per response -- never by mutating this object, which every
+   concurrent request shares. */
+const ORIGINS = (Deno.env.get("APP_ORIGIN") ?? "*").split(",").map((s) => s.trim()).filter(Boolean);
 const cors = {
-  "Access-Control-Allow-Origin": Deno.env.get("APP_ORIGIN") ?? "*",
+  "Access-Control-Allow-Origin": ORIGINS[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
@@ -871,7 +877,7 @@ async function mantiksFindJob(company: string, website: string, title: string): 
   return jobId ? { jobId: String(jobId), domain: bareDomain(hit?.company?.website || website) } : null;
 }
 
-Deno.serve(async (req) => {
+async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
@@ -1386,4 +1392,12 @@ Deno.serve(async (req) => {
     if (status === 500) console.error(e);
     return json({ error: status === 500 ? "Server error" : (e as Error).message }, status);
   }
+}
+
+Deno.serve(async (req) => {
+  const res = await handle(req);
+  const origin = req.headers.get("Origin") || "";
+  if (ORIGINS.includes(origin)) res.headers.set("Access-Control-Allow-Origin", origin);
+  res.headers.append("Vary", "Origin");
+  return res;
 });

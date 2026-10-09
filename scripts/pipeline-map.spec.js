@@ -589,7 +589,7 @@ module.exports = {
       'MAIN APP': 'a layout banner, not a stage',
       'the daily view': 'a view over jobs that already arrived',
       'Applied — review': 'after the application, past the pipeline this map covers',
-      'reply tracking: a forwarding address, not a mailbox': 'also after the application. The decision lives in src/reply-match.mjs and the write in the Email Worker, neither of which this map covers; this banner is only the panel that issues the address. Gated off by INBOX_LIVE until jobtriage.app exists.',
+      'reply tracking: a forwarding address, not a mailbox': 'also after the application. The decision lives in src/reply-match.mjs and the write in the Email Worker, neither of which this map covers; this banner is only the panel that issues the address. Gated off by INBOX_LIVE until jobtriage.in exists.',
       'Dashboard': 'a view over jobs that already arrived',
       'plot drag': 'a UI gesture',
       'the command surface': 'a second way to reach controls that are already on the map under the sidebar — it dispatches by clicking them, so nothing flows through it',
