@@ -869,10 +869,9 @@ create index if not exists feedback_time on public.feedback (created_at desc);
 -- own rows, another user sees none, and there is no insert policy at all, so a
 -- user cannot forge a reply into their own ground truth.
 --
--- The FEATURE is off. src/index.js has the email() handler, but
--- jobtriage.in only started receiving mail on 2026-10-09 and no real mail has
--- been seen going through it -- so until one has,
--- INBOX_LIVE = false in index.html keeps the panel from handing out an address
+-- The feature went on 2026-10-09 (INBOX_LIVE = true in index.html), once
+-- jobtriage.in was receiving mail and src/index.js's email() handler had its
+-- secrets. Before that the flag kept the panel from handing out an address
 -- that would swallow mail.
 --
 -- What this is for

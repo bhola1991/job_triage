@@ -576,7 +576,7 @@ Domain chosen: **`jobtriage.in`**, addresses `r.<token>@jobtriage.in`.
   inbound mail starts landing on an unknown token — which looks like
   "forwarding stopped working" and has nothing to do with forwarding.
 
-### The one thing blocking it: nobody has seen a mail go through
+### Switched on 2026-10-09; the token path is still unobserved
 
 `jobtriage.in` was registered at GoDaddy on 2026-10-08 (the `jobtriage.app`
 this section used to name was never bought) and went live on Cloudflare on
@@ -584,16 +584,16 @@ this section used to name was never bought) and went live on Cloudflare on
 custom domain, and the old `jobtriage.reachbhola.workers.dev` address shows a
 "moved" notice instead of redirecting (`MOVED` in `index.html`).
 
-The three steps below were all done the same day. What has NOT happened is a
-real mail arriving: neither the forward of a non-token address nor a reply to
-a token address has been observed end to end.
+The three steps below were all done the same day, and a test mail to a
+non-token address was reported arriving, which proves MX, the catch-all, the
+Worker and the forward. `INBOX_LIVE = true` followed. What has NOT been
+observed is the other half: a reply to a token address resolving to a profile
+and moving a job to `live`.
 
-So the feature is committed **off**. `INBOX_LIVE = false` in `index.html`, and
-the panel says plainly that the domain is not receiving mail rather than
-issuing an address that would silently swallow everything sent to it. The
-Replies button is not even created while it is off. This matters because
-**pushes to `main` auto-deploy** — shipping it on would have published a dead
-address to real beta users.
+It was committed **off** until then, because **pushes to `main` auto-deploy**
+and shipping it on early would have published a dead address to real beta
+users. If mail to the domain ever stops arriving, set it back to `false`: the
+panel then says so plainly and the Replies button is not created.
 
 Three steps, all outside this repo, all done 2026-10-09:
 
@@ -604,7 +604,6 @@ Three steps, all outside this repo, all done 2026-10-09:
 3. `wrangler secret put SUPABASE_URL` and `wrangler secret put
    SUPABASE_SERVICE_ROLE_KEY`, so the Worker can resolve a token to a profile.
 
-Once a test mail has been seen arriving, `INBOX_LIVE = true` is a one-line commit.
 
 ---
 

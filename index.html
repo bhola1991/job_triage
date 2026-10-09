@@ -4535,18 +4535,19 @@ function coldDialog(){
    state to clean up. src/reply-match.mjs decides; an ATS auto-acknowledgement
    is deliberately NOT a reply. */
 const INBOX_DOMAIN = 'jobtriage.in';
-/* Off until the receiving end exists, and the panel says so rather than
-   handing out an address that silently swallows mail. Pushes to main
-   auto-deploy, so shipping this on would have published a dead address.
-   Three things it needed, all outside this repo, all done 2026-10-09 -- but
-   no real mail has been seen arriving yet, which is the last gate:
+/* On since 2026-10-09. It was off until the receiving end existed, so the
+   panel never handed out an address that silently swallows mail; set it back
+   to false if mail to the domain ever stops arriving. Three things it needed,
+   all outside this repo, plus a test mail to a non-token address seen
+   arriving (a reply to a TOKEN address had not been observed when this went
+   on):
      1. jobtriage.in on Cloudflare.
      2. Email Routing enabled, catch-all -> this Worker. Check for existing MX
         records FIRST: enabling it repoints the domain's mail.
      3. SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY as Worker secrets, so
         src/index.js can resolve a token to a profile.
-   Once a test mail has been seen arriving, this becomes true. */
-const INBOX_LIVE = false;
+*/
+const INBOX_LIVE = true;
 const inboxAddr = t => `r.${t}@${INBOX_DOMAIN}`;
 const newInboxToken = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
