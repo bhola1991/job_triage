@@ -4586,6 +4586,10 @@ async function replyInboxDialog(){
        otherwise be unreadable. Surfaced first, because without it the setup
        instructions dead-end. */
     const code=mail.map(m=>m.decision&&m.decision.code).find(Boolean);
+    /* Gmail may send a link to click instead of a code. Newest first, so a
+       re-sent confirmation wins; checked again here so nothing but Google's
+       own confirm page is ever rendered as a link. */
+    const link=mail.map(m=>m.decision&&m.decision.link).find(l=>/^https:\/\/mail(-settings)?\.google\.com\/mail\/vf-/.test(l||''));
     const rows=mail.filter(m=>m.decision&&m.decision.action!=='show-code');
     body.innerHTML = !token
       ? `<p style="margin:0 0 12px">Nothing is forwarded until you turn this on, and you can turn it off again by rotating the address.</p>
@@ -4597,10 +4601,13 @@ async function replyInboxDialog(){
          <p style="margin:2px 0 12px;font-size:11px">Secret. Anyone holding it can post into your pipeline — treat it like a password.</p>
          ${code?`<div class="callout" style="margin-bottom:12px"><b>Gmail wants this code:</b>
            <span style="font-family:var(--mono)">${esc(code)}</span><br>
-           <span style="font-size:11px">Paste it back into Gmail's forwarding settings to finish.</span></div>`:''}
+           <span style="font-size:11px">Paste it back into Gmail's forwarding settings to finish.</span></div>`
+          :link?`<div class="callout" style="margin-bottom:12px"><b>Gmail wants you to confirm:</b>
+           <a href="${esc(link)}" target="_blank" rel="noopener" style="color:inherit">open Gmail's confirmation page</a><br>
+           <span style="font-size:11px">Open it while signed in to the Gmail account you are forwarding from, and confirm.</span></div>`:''}
          <label class="lab">Set it up in Gmail</label>
          <ol style="margin:4px 0 12px;padding-left:18px;line-height:1.7">
-           <li>Settings → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → paste the address above. Gmail mails a code here; reopen this panel to read it.</li>
+           <li>Settings → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → paste the address above. Gmail mails a code or a confirmation link here; reopen this panel to get it.</li>
            <li>Settings → <b>Filters</b> → <b>Create a new filter</b>. In <i>Has the words</i> put the ATS senders you hear from, e.g.<br>
              <span style="font-family:var(--mono);font-size:11px">from:(greenhouse.io OR lever.co OR ashbyhq.com OR workable.com OR smartrecruiters.com OR recruitee.com)</span></li>
            <li>Tick <b>Forward it to</b> and pick the address. Add a second filter for any company you applied to directly.</li>

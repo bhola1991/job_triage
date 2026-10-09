@@ -177,12 +177,28 @@ export function parseMail(raw) {
    is a code someone is going to paste somewhere. */
 const GMAIL_CONFIRM_FROM = /(^|[@.])google\.com$/i;
 
-export function gmailConfirmCode(mail) {
+const gmailConfirmHay = (mail) => {
   const from = String(mail.from || '').toLowerCase();
   const dom = (from.match(/<([^>]+)>/)?.[1] || from).split('@')[1] || '';
   if (!GMAIL_CONFIRM_FROM.test(dom)) return null;
   const hay = `${mail.subject || ''}\n${mail.text || ''}`;
-  if (!/forward/i.test(hay)) return null;
+  return /forward/i.test(hay) ? hay : null;
+};
+
+export function gmailConfirmCode(mail) {
+  const hay = gmailConfirmHay(mail);
+  if (!hay) return null;
   const m = /confirmation code[^0-9]{0,40}(\d{6,12})/i.exec(hay) || /\b(\d{9})\b/.exec(hay);
   return m ? m[1] : null;
+}
+
+/* The mail Gmail actually sent on 2026-10-09 carried NO code, in the subject
+   or the body: only a link to click. So the link is surfaced too. Pinned to
+   Google's own two hosts and to the confirm path (vf-) -- the same mail also
+   carries a cancel link (uf-), which must never be the one offered. */
+export function gmailConfirmLink(mail) {
+  const hay = gmailConfirmHay(mail);
+  if (!hay) return null;
+  const m = /https:\/\/mail(?:-settings)?\.google\.com\/mail\/vf-[A-Za-z0-9%_.~-]+/.exec(hay);
+  return m ? m[0] : null;
 }

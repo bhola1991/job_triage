@@ -280,6 +280,27 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
   ok('not a reply', classify(conf).kind !== 'human', classify(conf));
   const spoof = P.parseMail(['From: attacker@evil.com', 'Subject: Gmail Forwarding Confirmation', '', 'Confirmation code: 999999999'].join('\r\n'));
   ok('spoofed confirmation refused', P.gmailConfirmCode(spoof) === null, P.gmailConfirmCode(spoof));
+  // What Gmail really sent on 2026-10-09: no code anywhere, a confirm link
+  // (vf-) and a cancel link (uf-) in the body.
+  const confLink = P.parseMail([
+    'From: forwarding-noreply@google.com',
+    'Subject: (Gmail Forwarding Confirmation - Receive Mail from you@gmail.com', '',
+    'you@gmail.com has requested to automatically forward mail to your email address.',
+    'please click the link below to confirm the request:',
+    'https://mail-settings.google.com/mail/vf-%5BANGjdJ_9jOO%5D-QS1pzNn',
+    'click this link to cancel this verification:',
+    'https://mail.google.com/mail/uf-%5BANGjdJ8sq%5D-QS1pzNn',
+    'http://support.google.com/mail/bin/answer.py?answer=184973.',
+  ].join('\r\n'));
+  ok('no code in a link-only confirmation', P.gmailConfirmCode(confLink) === null, P.gmailConfirmCode(confLink));
+  ok('confirm link found, not the cancel link',
+    P.gmailConfirmLink(confLink) === 'https://mail-settings.google.com/mail/vf-%5BANGjdJ_9jOO%5D-QS1pzNn', P.gmailConfirmLink(confLink));
+  const spoofLink = P.parseMail(['From: attacker@evil.com', 'Subject: Gmail Forwarding Confirmation', '', 'https://mail.google.com/mail/vf-abc'].join('\r\n'));
+  ok('spoofed confirm link refused', P.gmailConfirmLink(spoofLink) === null, P.gmailConfirmLink(spoofLink));
+  const offHost = P.parseMail(['From: forwarding-noreply@google.com', 'Subject: Gmail Forwarding Confirmation', '', 'https://mail.google.com.evil.com/mail/vf-abc https://evil.com/mail/vf-abc'].join('\r\n'));
+  ok('link on another host refused', P.gmailConfirmLink(offHost) === null, P.gmailConfirmLink(offHost));
+  const cancelOnly = P.parseMail(['From: forwarding-noreply@google.com', 'Subject: Gmail Forwarding Confirmation', '', 'https://mail.google.com/mail/uf-abc'].join('\r\n'));
+  ok('cancel link alone is not offered', P.gmailConfirmLink(cancelOnly) === null, P.gmailConfirmLink(cancelOnly));
   const notconf = P.parseMail(['From: noreply@google.com', 'Subject: Security alert', '', 'New sign-in 123456789'].join('\r\n'));
   ok('unrelated google mail is not a code', P.gmailConfirmCode(notconf) === null, P.gmailConfirmCode(notconf));
 

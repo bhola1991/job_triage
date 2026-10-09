@@ -1,4 +1,4 @@
-import { parseMail, readRaw, gmailConfirmCode } from './mime-lite.mjs';
+import { parseMail, readRaw, gmailConfirmCode, gmailConfirmLink } from './mime-lite.mjs';
 import { tokenFrom, decide } from './reply-match.mjs';
 
 const MAX_MESSAGE_LENGTH = 2000;
@@ -111,8 +111,9 @@ async function routeToProfile(env, token, mail, providerId) {
   // back, and it mails that code here, where the person cannot see it. Surface
   // it and stop: it is not a reply and must not be classified as one.
   const code = gmailConfirmCode(mail);
-  if (code) {
-    await store(env, profile, mail, providerId, { kind: 'setup', why: 'gmail forwarding confirmation', action: 'show-code', code });
+  const link = code ? null : gmailConfirmLink(mail);
+  if (code || link) {
+    await store(env, profile, mail, providerId, { kind: 'setup', why: 'gmail forwarding confirmation', action: 'show-code', code, link });
     return;
   }
 
