@@ -468,6 +468,7 @@ scripts/selfcheck-rows.js           Job/profile <-> typed row round trip.
 scripts/selfcheck-sync.js           Save/load/migrate cycle against a PostgREST stand-in.
 scripts/selfcheck-boards.js         Board-source check.
 scripts/selfcheck-reply.js          Inbound-mail decision check. Offline, no model.
+scripts/selfcheck-feedback.js       When the app asks for feedback: the gap, the back-off, the failure floor.
 scripts/read-feedback.js            Reads public.feedback with the service role. The ONLY reader; RLS gives the app no view of it.
 scripts/heartbeat.js                Is the LIVE system working? Corpus freshness, DeepSeek balance, Mantiks credits, whether the
                                     refresh unit is stuck. NOT part of §8: it needs the network and real keys. refresh.sh runs it last.
@@ -547,6 +548,7 @@ that skill with it rather than every machine being set up by hand.
    node scripts/selfcheck-sync.js       # save/load/migrate cycle, two-tab cases
    node scripts/selfcheck-boards.js     # board search pipeline
    node scripts/selfcheck-reply.js      # inbound-mail decisions; offline, no model
+   node scripts/selfcheck-feedback.js   # when the app asks for feedback
    node scripts/selfcheck-worker.js     # the Worker's public write routes
    node scripts/selfcheck-tokens.js     # token drift across the four consumers
    node scripts/eval-matcher.js         # matcher metrics vs the committed baseline

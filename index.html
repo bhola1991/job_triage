@@ -697,6 +697,32 @@
     word-break:break-word;line-height:1.4}
   @media(prefers-reduced-motion:no-preference){.task{animation:rise .3s cubic-bezier(.16,1,.3,1) backwards}}
 
+  /* Feedback: a button that never leaves the corner, the form it opens and the
+     question it sometimes asks. It takes the corner #tasks had and carries
+     #tasks inside it, so a toast and a question stack instead of colliding.
+     Same layer as the detail sheet and later in the DOM, so it stays reachable
+     over an open job; the palette and dialogs still cover it.
+     The column itself ignores the pointer -- only what is drawn in it does not,
+     or its empty width would swallow clicks meant for the row underneath. */
+  #fb #tasks{position:static;width:100%}
+  #fb{position:fixed;right:16px;bottom:16px;z-index:47;display:flex;
+    flex-direction:column;align-items:flex-end;gap:8px;
+    width:min(320px,calc(100vw - 32px));pointer-events:none}
+  #fb>*{pointer-events:auto}
+  #fbFab{border-radius:999px;padding:8px 14px;background:var(--panel);box-shadow:var(--shadow-md)}
+  .fbcard{width:100%;background:var(--panel);border:1px solid var(--line);
+    border-radius:6px;padding:12px 13px;box-shadow:var(--shadow-lg)}
+  .fbkinds{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}
+  .fbkinds button[aria-pressed=true]{border-color:var(--go);color:var(--go);background:var(--go-tint)}
+  @media(prefers-reduced-motion:no-preference){.fbcard{animation:rise .3s cubic-bezier(.16,1,.3,1) backwards}}
+  @media(max-width:900px){
+    /* Clear of the bottom toolbar, and out of the way of the tools sheet,
+       whose own controls reach this corner. */
+    #fb{bottom:calc(76px + env(safe-area-inset-bottom))}
+    #fb button{min-height:44px}
+    #app:has(.side.open) #fb{display:none}
+  }
+
   .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
   .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
   .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
@@ -705,7 +731,7 @@
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 
-<div id="app"><div id="root"></div><div id="tasks"></div><div id="palette"></div></div>
+<div id="app"><div id="root"></div><div id="fb"><div id="tasks"></div></div><div id="palette"></div></div>
 
 <script>
 (function(){
@@ -3921,6 +3947,7 @@ async function runScoring(all, auto){
   busy=false;
   setInfo(failed?`Scored ${total-failed}. ${failed} failed — run again to retry them.`:`Scored ${total}.`);
   await save(); render();
+  fbMoment(failed?'error':'score');
 }
 /* ═══ auto-scoring ═══
    An unscored job is invisible to everything that matters here — it is not on
@@ -4256,6 +4283,7 @@ async function finishSearch(trk, live, failed, paid){
   setSearchInfo(found + (why?` Skipped: ${why}.`:'')
     + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:'')
     + (paid?'':' The live boards are a separate search, and a paid one.'));
+  fbMoment('search');
 }
 
 /* Phase one, and free.
@@ -4314,7 +4342,7 @@ async function runBoards(trk, where){
   }catch(e){
     busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
-    setSearchInfo(e.message);
+    setSearchInfo(e.message); fbMoment('error');
   }
 }
 
@@ -4360,7 +4388,7 @@ async function runPaidBoards(trk, where, since_days){
   }catch(e){
     busy=false; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runPaidBoards(trk,where,since_days)); return; }
-    setSearchInfo(e.message);
+    setSearchInfo(e.message); fbMoment('error');
   }
 }
 
@@ -4405,7 +4433,7 @@ async function runAts(lines){
       + (misses.length?` \u00b7 not found: ${misses.slice(0,4).join(', ')}`:''));
     if(added) await autoScore();
   }catch(e){
-    busy=false; render(); setSearchInfo(e.message);
+    busy=false; render(); setSearchInfo(e.message); fbMoment('error');
   }
 }
 
@@ -4416,81 +4444,196 @@ async function runAts(lines){
 
    A form that only carries prose gets "search was slow" and nobody can tell
    which search, on what model, with how many rows. So `context` records what is
-   already in memory at the moment they click: the open track, the counts, which
-   model last scored, and whether the last scoring run failed. None of it is
-   typed by the user and none of it is a secret -- no keys, no CV text, no
-   posting bodies, just the shape of the session.
+   already in memory at the moment they send: the open track and tab, the
+   counts, which model last scored, the two status lines, and what prompted the
+   report if the app asked for it. None of it is typed by the user and none of
+   it is a secret -- no keys, no CV text, no posting bodies, just the shape of
+   the session.
+
+   It is a corner button and a small card rather than a dialog, because a dialog
+   covers the thing being reported and closes after one report. This stays open
+   beside the work, keeps a half-written draft when shut, and clears itself
+   after a send so the next one costs nothing to start.
 
    One credit is not charged and nothing is metered: this is the only write in
    the app that exists for us rather than for them. */
-function feedbackDialog(){
-  const p=P();
-  const kinds=[['bug','Something broke'],['confusing','I could not tell what to do'],
-               ['idea','It should do this instead'],['other','Something else']];
-  const d=modal(`<div class="eyebrow">Beta feedback</div>
-    <h2 style="margin:6px 0 6px">What happened?</h2>
-    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">Blunt is useful. This sends what the app was doing at the time, so you do not have to describe it.</p>
-    <label class="lab">Kind</label>
-    <select id="fbKind">${kinds.map(([v,l])=>`<option value="${v}">${esc(l)}</option>`).join('')}</select>
-    <label class="lab" style="margin-top:10px">In your words</label>
-    <textarea id="fbMsg" rows="6" placeholder="What you expected, what happened instead."></textarea>
-    <div id="fbAnon" style="display:none">
-      <label class="lab" style="margin-top:10px">Email, if you want an answer</label>
-      <input type="text" id="fbReply" placeholder="Optional — leave blank to stay anonymous">
-      <input type="text" id="fbHP" tabindex="-1" autocomplete="off"
-             style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
-    </div>
-    <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" id="fbSend">Send</button>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>
-    <div id="fbErr" class="err" style="display:none;margin-top:10px"></div>`);
-  d.querySelector('#fbSend').onclick=async()=>{
-    const msg=d.querySelector('#fbMsg').value.trim();
-    const err=d.querySelector('#fbErr');
-    if(!msg){ err.textContent='Say something first.'; err.style.display='block'; return; }
-    /* No account is the COMMON case here, not an error: the README promises
-       "no signup". Signed-in reports go straight to the table under RLS with a
-       real auth.uid(); anonymous ones go through the Worker, which inserts
-       with the service role because an anon-key insert policy would let anyone
-       holding the public key fill the table. Two doors, one table. */
-    const anon = !CLOUD || !USER;
-    const ctx={
-      track: p&&p.track ? String(p.track).slice(0,80) : null,
-      jobs: p&&p.jobs ? p.jobs.length : 0,
-      scored: p&&p.jobs ? p.jobs.filter(isScored).length : 0,
-      model: globalThis.LAST_MODEL||null,
-      theme: THEME, busy: !!busy,
-      agent: String(navigator.userAgent||'').slice(0,160),
-      at: new Date().toISOString(),
-    };
-    const kind=d.querySelector('#fbKind').value;
-    const btn=d.querySelector('#fbSend'); btn.disabled=true; btn.textContent='Sending…';
-    try{
-      if(anon){
-        const r=await fetch('/api/feedback',{ method:'POST', headers:{'content-type':'application/json'},
-          body: JSON.stringify({ kind, message: msg.slice(0,4000), context: ctx,
-            reply_to: d.querySelector('#fbReply').value.trim()||null,
-            website: d.querySelector('#fbHP').value }) });
-        const j=await r.json().catch(()=>({}));
-        if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
-      }else{
-        const { error }=await SB.from('feedback').insert({
-          user_id: USER.id, kind, message: msg.slice(0,4000), context: ctx, via:'app' });
-        if(error) throw new Error(error.message);
-      }
-      d.remove(); setInfo('Thanks — that landed.');
-    }catch(e){
-      btn.disabled=false; btn.textContent='Send';
-      err.textContent='Could not send: '+e.message; err.style.display='block';
-    }
-  };
-  if(!CLOUD||!USER){
-    d.querySelector('#fbAnon').style.display='';
-    const note=document.createElement('p');
-    note.style.cssText='color:var(--muted);font-size:11px;margin:8px 0 0';
-    note.textContent='You are not signed in, which is fine — this still sends. Your CV and job list stay in this browser; only what you typed above and the counts shown go with it.';
-    d.querySelector('#fbAnon').appendChild(note);
+const FB_KINDS=[['bug','Broke','What you expected, and what happened instead.'],
+                ['confusing','Confusing','What were you trying to do?'],
+                ['idea','Idea','What should it do instead?'],
+                ['other','Other','Go on.']];
+/* Asked about the thing that just finished, never about the app in general: a
+   question with an obvious subject gets answered, "any feedback?" does not. */
+const FB_ASKS={
+  search:'Were those results what you were looking for?',
+  score:'Do these scores look right to you?',
+  applied:'Was that easy to do from here?',
+  contacts:'Were those contacts any use?',
+  error:'That did not work. What were you trying to do?',
+};
+const FB_TAPS=[['Yes','other'],['Not really','confusing'],['Something broke','bug']];
+
+/* When to ask. A moment, not a timer: the app only speaks when something the
+   person can have an opinion on has just finished, and then only if enough
+   time has passed since it last spoke. An ask that is waved away or left to
+   expire doubles the wait, up to FB_MAX; any report at all, prompted or not,
+   puts it back to FB_BASE. A failure is the exception -- it is the one moment
+   that looks exactly like disuse from our side -- so it only ever waits
+   FB_ERR, however far the rest has backed off.
+   These four numbers are guesses. Tune them against what read-feedback.js
+   shows: `context.trigger` says which ask produced a row, `context.tap` says
+   it took one tap. */
+const FB_BASE=8*6e4, FB_MAX=120*6e4, FB_ERR=2*6e4, FB_LINGER=25e3;
+function fbDue(s, trigger, now){
+  return now-s.last >= (trigger==='error' ? Math.min(s.gap,FB_ERR) : s.gap);
+}
+function fbNext(s, outcome, now){   // 'asked' | 'ignored' | 'gave'
+  if(outcome==='ignored') return { last:s.last, gap:Math.min(s.gap*2,FB_MAX) };
+  return { last:now, gap: outcome==='asked' ? s.gap : FB_BASE };
+}
+let FB_STATE={ last:0, gap:FB_BASE }, FB_KIND='bug', FB_TRIG=null, FB_TIMER=0, FB_SENT=0;
+try{
+  const s=JSON.parse(localStorage.getItem('triage:fb')||'null');
+  if(s && s.last>=0 && s.gap>=FB_BASE) FB_STATE={ last:s.last, gap:s.gap };
+}catch(e){}
+function fbMark(outcome){
+  FB_STATE=fbNext(FB_STATE,outcome,Date.now());
+  try{ localStorage.setItem('triage:fb',JSON.stringify(FB_STATE)); }catch(e){}
+}
+
+async function fbSend(kind, message, extra){
+  const p=P(), line=id=>{ const e=$(id); return e ? String(e.textContent||'').slice(0,200) : null; };
+  const ctx=Object.assign({
+    track: p&&p.track ? String(p.track).slice(0,80) : null,
+    jobs: p&&p.jobs ? p.jobs.length : 0,
+    scored: p&&p.jobs ? p.jobs.filter(isScored).length : 0,
+    model: globalThis.LAST_MODEL||null,
+    view: VIEW==='app' ? TAB : VIEW,
+    search: line('#searchInfo'), score: line('#scoreInfo'),
+    theme: THEME, busy: !!busy,
+    agent: String(navigator.userAgent||'').slice(0,160),
+    at: new Date().toISOString(),
+  }, extra);
+  /* No account is the COMMON case here, not an error: the README promises
+     "no signup". Signed-in reports go straight to the table under RLS with a
+     real auth.uid(); anonymous ones go through the Worker, which inserts
+     with the service role because an anon-key insert policy would let anyone
+     holding the public key fill the table. Two doors, one table. */
+  if(!CLOUD || !USER){
+    const r=await fetch('/api/feedback',{ method:'POST', headers:{'content-type':'application/json'},
+      body: JSON.stringify({ kind, message: message.slice(0,4000), context: ctx,
+        reply_to: $('#fbReply').value.trim()||null, website: $('#fbHP').value }) });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok||!j.ok) throw new Error(j.error||('HTTP '+r.status));
+  }else{
+    const { error }=await SB.from('feedback').insert({
+      user_id: USER.id, kind, message: message.slice(0,4000), context: ctx, via:'app' });
+    if(error) throw new Error(error.message);
   }
-  d.querySelector('#fbMsg').focus();
+  FB_SENT++; fbMark('gave');
+}
+
+function fbPick(kind){
+  FB_KIND=kind;
+  document.querySelectorAll('#fbKinds button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.kind===kind)));
+  $('#fbMsg').placeholder=FB_KINDS.find(k=>k[0]===kind)[2];
+}
+function fbOpen(kind, note){
+  fbAskHide();
+  $('#fbAnon').hidden=!!(CLOUD&&USER);
+  if(kind) fbPick(kind);
+  $('#fbNote').textContent=note||'';
+  $('#fbForm').hidden=false; $('#fbFab').setAttribute('aria-expanded','true');
+  $('#fbMsg').focus();
+}
+function fbClose(){
+  $('#fbForm').hidden=true; $('#fbFab').setAttribute('aria-expanded','false');
+  FB_TRIG=null; $('#fbFab').focus();
+}
+function fbAskHide(outcome){
+  clearTimeout(FB_TIMER);
+  const a=$('#fbAsk'); if(a.hidden) return;
+  a.hidden=true; if(outcome) fbMark(outcome);
+}
+/* Called where something finishes. Says nothing if it is too soon, if a card
+   is already up, or if the person is mid-sentence somewhere -- and in that last
+   case tries once more, because the moment is still fresh a few seconds on. */
+function fbMoment(trigger, retried){
+  const ask=$('#fbAsk');
+  if(!ask || !ask.hidden || !$('#fbForm').hidden) return;
+  if(!fbDue(FB_STATE,trigger,Date.now())) return;
+  const a=document.activeElement;
+  if($('.modal') || PAL || (a && a.closest && a.closest('input,textarea,select,[contenteditable]'))){
+    if(!retried) setTimeout(()=>fbMoment(trigger,true),15e3);
+    return;
+  }
+  FB_TRIG=trigger; fbMark('asked');
+  $('#fbQ').textContent=FB_ASKS[trigger];
+  const taps = trigger==='error' ? [['Tell you','bug']] : FB_TAPS;
+  $('#fbTaps').innerHTML=taps.map(([l],i)=>`<button class="btn-sm" data-tap="${i}">${esc(l)}</button>`).join('');
+  $('#fbTaps').querySelectorAll('button').forEach(b=>b.onclick=()=>{
+    const i=+b.dataset.tap, [label,kind]=taps[i];
+    fbAskHide();
+    // Nothing to record yet for a failure: the tap only says they will say.
+    if(trigger==='error') return fbOpen('bug');
+    /* The tap is the report. It is sent now, with its context, whether or not
+       anything is typed after it -- most people stop here. */
+    fbSend(kind, `${FB_ASKS[trigger]} — ${label}`, { trigger, tap:true })
+      .catch(e=>console.warn('feedback tap not sent:', e.message));
+    if(i){ fbOpen(kind,'Noted. Say more if you can.'); return; }
+    FB_TRIG=null;
+    const f=$('#fbFab'); f.textContent='Thanks'; setTimeout(()=>{ f.textContent='Feedback'; },1600);
+  });
+  ask.hidden=false;
+  FB_TIMER=setTimeout(()=>{ fbAskHide('ignored'); FB_TRIG=null; },FB_LINGER);
+}
+/* Built once into #fb, which sits outside #root and holds #tasks too: render()
+   replaces #root on every state change, and a draft that vanished mid-word
+   would teach people not to start one. */
+function fbMount(){
+  const el=$('#fb'); if(!el) return;
+  el.insertAdjacentHTML('beforeend',`<div class="fbcard" id="fbAsk" role="status" hidden>
+      <div style="display:flex;gap:8px;align-items:flex-start">
+        <div id="fbQ" style="flex:1;font-size:13px"></div>
+        <button class="btn-sm" id="fbNo" title="Not now" aria-label="Not now">×</button></div>
+      <div class="fbkinds" id="fbTaps" style="margin-bottom:0"></div>
+    </div>
+    <div class="fbcard" id="fbForm" role="dialog" aria-label="Send feedback" hidden>
+      <div class="eyebrow">Beta feedback</div>
+      <div class="fbkinds" id="fbKinds">${FB_KINDS.map(([v,l])=>
+        `<button class="btn-sm" data-kind="${v}">${esc(l)}</button>`).join('')}</div>
+      <textarea id="fbMsg" rows="4" aria-label="Your feedback"></textarea>
+      <div id="fbAnon">
+        <input type="email" id="fbReply" style="margin-top:8px" aria-label="Email, optional"
+               placeholder="Email, only if you want an answer">
+        <input type="text" id="fbHP" tabindex="-1" autocomplete="off"
+               style="position:absolute;left:-9999px;width:1px;height:1px" aria-hidden="true">
+      </div>
+      <div class="btn-row" style="margin-top:10px">
+        <button class="btn-go btn-sm" id="fbSend" title="Ctrl+Enter">Send</button>
+        <span id="fbNote" role="status" style="flex:1;font-size:11px;color:var(--muted)"></span></div>
+      <div class="hint">Blunt is useful. Only what you type, the status line and the counts on screen are sent — never your CV or the postings.</div>
+    </div>
+    <button id="fbFab" title="Tell us what broke, or what should be different"
+            aria-expanded="false" aria-controls="fbForm">Feedback</button>`);
+  $('#fbFab').onclick=()=>$('#fbForm').hidden ? fbOpen() : fbClose();
+  $('#fbNo').onclick=()=>{ fbAskHide('ignored'); FB_TRIG=null; };
+  document.querySelectorAll('#fbKinds button').forEach(b=>b.onclick=()=>{ fbPick(b.dataset.kind); $('#fbMsg').focus(); });
+  $('#fbSend').onclick=async()=>{
+    const m=$('#fbMsg'), note=$('#fbNote'), btn=$('#fbSend'), msg=m.value.trim();
+    if(!msg){ note.textContent='Say something first.'; m.focus(); return; }
+    btn.disabled=true; note.textContent='Sending…';
+    try{
+      await fbSend(FB_KIND, msg, FB_TRIG ? { trigger:FB_TRIG } : {});
+      m.value=''; note.textContent=`Got it — ${FB_SENT} sent. Anything else?`;
+    }catch(e){ note.textContent='Could not send: '+e.message; }
+    btn.disabled=false; m.focus();
+  };
+  $('#fbMsg').onkeydown=e=>{
+    if(e.key==='Enter'&&(e.metaKey||e.ctrlKey)) $('#fbSend').click();
+    if(e.key==='Escape') fbClose();
+  };
+  $('#fbMsg').oninput=()=>{ $('#fbNote').textContent=''; };
+  fbPick(FB_KIND);
 }
 
 function coldDialog(){
@@ -5653,7 +5796,6 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
-    <button class="btn-sm" id="btnFeedback" title="Tell us what broke">Feedback</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -5920,15 +6062,14 @@ function renderApp(){
      panel is reachable before then for anyone who calls it directly, and says
      plainly that it is off. */
   if(INBOX_LIVE){
-    const bar=$('#btnFeedback');
+    const bar=$('#btnPal');
     if(bar && !$('#btnReplies')){
       const b=document.createElement('button');
       b.className='btn-sm'; b.id='btnReplies'; b.title='Let replies mark themselves';
       b.textContent='Replies'; b.onclick=replyInboxDialog;
-      bar.parentNode.insertBefore(b, bar);
+      bar.after(b);
     }
   }
-  { const b=$('#btnFeedback'); if(b) b.onclick=feedbackDialog; }
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
@@ -6352,7 +6493,7 @@ function commands(){
     ['Data','Trim to top '+KEEP_TOP,'#btnTrim'],
     ['Data','Clear jobs','#btnClear'],
     ['View','Theme','#btnTheme'],
-    ['View','Send feedback','#btnFeedback']
+    ['View','Send feedback','#fbFab']
   ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
   // The four views are state rather than controls, so these set it directly.
   [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
@@ -6512,12 +6653,12 @@ function startHrSearch(i, ctx){
   findHrContacts(j.company, ctx, s=>{ t.status=s; renderTasks(); })
     .then(res=>{ t.state='done'; t.result=res.list;
       t.status=res.list.length+' worth looking at';
-      renderTasks(); })
+      renderTasks(); fbMoment('contacts'); })
     .catch(e=>{
       if(e.message==='NEEDAPIFY'){ dropTask(t.id); keyDialog(()=>startHrSearch(i,ctx)); return; }
       // A failed run is still worth a couple of cents of context, so say what
       // went wrong rather than silently dropping the toast.
-      t.state='error'; t.status=e.message; renderTasks();
+      t.state='error'; t.status=e.message; renderTasks(); fbMoment('error');
     });
 }
 
@@ -6747,6 +6888,7 @@ document.addEventListener('click',async e=>{
     setStage(j,to);
     logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
     undoToast(j, undo, stageToast(j,to));
+    if(to==='sent') fbMoment('applied');
   }
   await save(); render();
 });
@@ -7192,6 +7334,7 @@ async function boot(){
     }
   }
 }
+fbMount();
 boot();
 })();
 </script>
