@@ -1945,6 +1945,7 @@ function showCredits(w){
   if(typeof w.free_tier==='boolean') FREE_TIER=w.free_tier;
   if(typeof w.unlimited==='boolean') UNLIMITED=w.unlimited;
   const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
+  fbGate();
 }
 async function loadCredits(){
   if(!cloudNow()) return;
@@ -4490,6 +4491,17 @@ function fbNext(s, outcome, now){   // 'asked' | 'ignored' | 'gave'
   if(outcome==='ignored') return { last:s.last, gap:Math.min(s.gap*2,FB_MAX) };
   return { last:now, gap: outcome==='asked' ? s.gap : FB_BASE };
 }
+/* The corner button and the questions are a beta, shown on the live site only
+   to accounts marked as testers -- the same `unlimited` flag that stops their
+   searches being charged. Everyone else keeps a Feedback button in the top bar,
+   which opens the same card and is never prompted. The flag arrives with the
+   wallet, after the first paint, so fbGate runs again when it lands. */
+const fbBeta=()=>!!(CLOUD && USER && UNLIMITED);
+function fbGate(){
+  const f=$('#fbFab'), b=$('#btnFeedback');
+  if(f) f.hidden=!fbBeta();
+  if(b) b.hidden=fbBeta();
+}
 let FB_STATE={ last:0, gap:FB_BASE }, FB_KIND='bug', FB_TRIG=null, FB_TIMER=0, FB_SENT=0;
 try{
   const s=JSON.parse(localStorage.getItem('triage:fb')||'null');
@@ -4547,7 +4559,7 @@ function fbOpen(kind, note){
 }
 function fbClose(){
   $('#fbForm').hidden=true; $('#fbFab').setAttribute('aria-expanded','false');
-  FB_TRIG=null; $('#fbFab').focus();
+  FB_TRIG=null; (fbBeta() ? $('#fbFab') : $('#btnFeedback')||$('#fbFab')).focus();
 }
 function fbAskHide(outcome){
   clearTimeout(FB_TIMER);
@@ -4559,7 +4571,7 @@ function fbAskHide(outcome){
    case tries once more, because the moment is still fresh a few seconds on. */
 function fbMoment(trigger, retried){
   const ask=$('#fbAsk');
-  if(!ask || !ask.hidden || !$('#fbForm').hidden) return;
+  if(!fbBeta() || !ask || !ask.hidden || !$('#fbForm').hidden) return;
   if(!fbDue(FB_STATE,trigger,Date.now())) return;
   const a=document.activeElement;
   if($('.modal') || PAL || (a && a.closest && a.closest('input,textarea,select,[contenteditable]'))){
@@ -4633,7 +4645,7 @@ function fbMount(){
     if(e.key==='Escape') fbClose();
   };
   $('#fbMsg').oninput=()=>{ $('#fbNote').textContent=''; };
-  fbPick(FB_KIND);
+  fbPick(FB_KIND); fbGate();
 }
 
 function coldDialog(){
@@ -5796,6 +5808,7 @@ function renderApp(){
         : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
     }</button>
     <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
+    <button class="btn-sm" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>Feedback</button>
     ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
     <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
   </div>
@@ -6058,6 +6071,7 @@ function renderApp(){
   $('#btnKey').onclick=()=>keyDialog(()=>render());
   $('#btnData').onclick=dataDialog;
   $('#btnCold').onclick=coldDialog;
+  $('#btnFeedback').onclick=()=>$('#fbForm').hidden ? fbOpen() : fbClose();
   /* Shown only once inbound mail can actually arrive; see INBOX_LIVE. The
      panel is reachable before then for anyone who calls it directly, and says
      plainly that it is off. */
@@ -7197,6 +7211,7 @@ function renderRecover(){
 }
 
 function render(){
+  fbGate();
   if(CLOUD && RECOVER && USER) return renderRecover();
   if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
