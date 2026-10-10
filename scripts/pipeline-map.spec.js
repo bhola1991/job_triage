@@ -567,6 +567,9 @@ module.exports = {
       'public.feedback': 'beta feedback from the person using the app, not a job arriving',
       'public.inbound_mail': 'after the application, like the Applied review banner below. It will need a real node the day it writes jobs.stage for anyone: src/reply-match.mjs decides, nothing deployed applies the decision yet, and until something does there is no edge to draw.',
     },
+    'billing.sql objects': {
+      'public.set_tester': 'marks an account as a beta tester from the SQL editor; decides what the app shows, never what a job does',
+    },
     'index.html section banners': {
       'colour': 'CSS tokens — see CLAUDE.md, not this map',
       'the queue': 'CSS',

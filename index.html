@@ -928,7 +928,7 @@ let SHOW_GATED = false;
 let AUTO  = true;        // score whatever a pull brings in, without being asked
 let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
-  error:'', assessing:false, assessed:null, assessErr:'', wantText:'' });
+  error:'', assessing:false, assessed:null, assessErr:'', wantText:'', editing:null });
 let ONB = blankOnb();
 let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
@@ -1934,7 +1934,7 @@ async function apifyRun(actor, payload, o){
 const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
   [['pricing','Pricing'],['terms','Terms'],['refund','Refunds'],['privacy','Privacy'],['contact','Contact']]
     .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
-let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true, UNLIMITED = false;
+let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true, UNLIMITED = false, TESTER = false;
 let SEARCH_ID = null;   // the board search in progress, set by runBoards; null otherwise
 const FREE_SEARCH_START = 10;   // must match free_search's default in billing.sql; selfcheck-worker.js asserts it
 const creditsLabel = () => UNLIMITED ? 'Unlimited' : CREDITS==null ? '… credits'
@@ -1944,6 +1944,7 @@ function showCredits(w){
   if(typeof w.free_search==='number') FREE_SEARCH=w.free_search;
   if(typeof w.free_tier==='boolean') FREE_TIER=w.free_tier;
   if(typeof w.unlimited==='boolean') UNLIMITED=w.unlimited;
+  if(typeof w.tester==='boolean') TESTER=w.tester;
   const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
   fbGate();
 }
@@ -1951,7 +1952,7 @@ async function loadCredits(){
   if(!cloudNow()) return;
   try{ const {data}=await SB.from('credits').select('*').eq('user_id',USER.id).maybeSingle();
        // No row yet = a new account with the whole free tier still ahead of it.
-       showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true}); }catch(e){}
+       showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true, tester:false}); }catch(e){}
 }
 async function hosted(action, body){
   const {data,error}=await SB.functions.invoke('api',{body:{action,...body}});
@@ -4492,11 +4493,11 @@ function fbNext(s, outcome, now){   // 'asked' | 'ignored' | 'gave'
   return { last:now, gap: outcome==='asked' ? s.gap : FB_BASE };
 }
 /* The corner button and the questions are a beta, shown on the live site only
-   to accounts marked as testers -- the same `unlimited` flag that stops their
-   searches being charged. Everyone else keeps a Feedback button in the top bar,
+   to accounts marked as testers: `credits.tester`, which changes nothing about
+   what they are charged. Everyone else keeps a Feedback button in the top bar,
    which opens the same card and is never prompted. The flag arrives with the
    wallet, after the first paint, so fbGate runs again when it lands. */
-const fbBeta=()=>!!(CLOUD && USER && UNLIMITED);
+const fbBeta=()=>!!(CLOUD && USER && TESTER);
 function fbGate(){
   const f=$('#fbFab'), b=$('#btnFeedback');
   if(f) f.hidden=!fbBeta();
@@ -4909,7 +4910,7 @@ function renderOnb(){
     const card=(name,val,cur,head,sub)=>`<label class="trk ${val===cur?'sel':''}" style="display:block;cursor:pointer">
       <input type="radio" name="${name}" value="${esc(val)}" ${val===cur?'checked':''} style="margin-right:8px">
       <b>${esc(head)}</b><div class="say" style="margin:2px 0 0">${esc(sub)}</div></label>`;
-    body=`<p class="lede">Last thing. The CV told us what you <em>can</em> do &mdash; this is what you <em>want</em>.</p>
+    body=`<p class="lede">${ONB.editing?'One new thing since you were last here.':'Last thing.'} The CV told us what you <em>can</em> do &mdash; this is what you <em>want</em>.</p>
       <p class="say">Skip it if you like; the defaults are what the app did before we started asking.</p>
 
       <div class="eyebrow" style="margin-top:22px">How soon</div>
@@ -4955,8 +4956,8 @@ function renderOnb(){
       </details>
 
       <div class="btn-row" style="margin-top:20px">
-        <button class="btn-go" id="onbDone">Start finding jobs</button>
-        <button id="onbBack3">Back</button></div>`;
+        <button class="btn-go" id="onbDone">${ONB.editing?'Save and go to my jobs':'Start finding jobs'}</button>
+        <button id="onbBack3">${ONB.editing?'Skip':'Back'}</button></div>`;
   }
 
   $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
@@ -5059,7 +5060,7 @@ function renderOnb(){
     document.querySelectorAll('[data-mode],[data-avoid],#limRelocate,#limOnsite').forEach(el=>el.onchange=commit);
     $('#limPay').onblur=commit;
     if($('#onbExemplar')) $('#onbExemplar').onblur=commit;
-    $('#onbBack3').onclick=()=>{ commit(); ONB.step=2; render(); };
+    $('#onbBack3').onclick=()=>{ if(ONB.editing) return finishOnb(); commit(); ONB.step=2; render(); };
     $('#onbDone').onclick=()=>{ commit(); finishOnb(); };
   }
 }
@@ -5093,7 +5094,33 @@ function pasteProfileDialog(){
     d.remove(); onProfileFile(v,'pasted profile');
   };
 }
+/* The step-3 questions, asked of a profile that already exists. They arrived
+   after most accounts were made, so those people were never asked and are on
+   the defaults without having chosen them. ONB.parsed IS the stored profile
+   here, so the screen's own commit() writes straight onto it.
+   ponytail: "never asked" is not stored anywhere -- it is read as "every answer
+   is still the default, and this browser has not shown the screen for this
+   profile". So somebody who truly wants the defaults is asked once per device.
+   A profiles.asked_at column is the upgrade if that ever grates. */
+const wantsKey=()=>'triage:wants:'+DB.current;
+function wantsDue(){
+  const p=P(); if(!p) return false;
+  try{ if(localStorage.getItem(wantsKey())) return false; }catch(e){ return false; }
+  const f=p.profile, L=limitsOf(f);
+  return intentOf(f)==='browsing' && strictOf(f)===STRICT_DEFAULT && !f.exemplar
+      && L.relocate && L.onsite_ok && !L.min_pay && !L.avoid.length;
+}
+function askWants(){
+  const p=P(); if(!p) return;
+  ONB=Object.assign(blankOnb(), { step:3, parsed:p.profile, track:p.track, editing:DB.current });
+  VIEW='onb'; render();
+}
 async function finishOnb(){
+  if(ONB.editing){
+    try{ localStorage.setItem(wantsKey(),'1'); }catch(e){}
+    VIEW='app'; ONB=blankOnb();
+    await save(); render(); return;
+  }
   const id = 'p_'+Date.now().toString(36);
   DB.profiles[id]={ profile:ONB.parsed, raw:ONB.raw, track:ONB.track, jobs:[], created:today() };
   DB.current=id; VIEW='app';
@@ -6512,6 +6539,7 @@ function commands(){
   // The four views are state rather than controls, so these set it directly.
   [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
     .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  list.push({ g:'Profile', label:'What I want', run:askWants });
   if(CLOUD&&USER){
     list.push({ g:'Account', label:'Credits', el:'#btnCredits' });
     list.push({ g:'Account', label:'Sign out', el:'#btnSignOut' });
@@ -7212,6 +7240,7 @@ function renderRecover(){
 
 function render(){
   fbGate();
+  if(VIEW==='app' && !ONB.editing && wantsDue()) return askWants();
   if(CLOUD && RECOVER && USER) return renderRecover();
   if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
