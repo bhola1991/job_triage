@@ -157,6 +157,29 @@ function unitStateAgeH(unit) {
   return NaN;
 }
 
+/* Hours the machine spent SUSPENDED since `sinceMs`. The age above is wall
+   clock, and this is a laptop: on 2026-10-10 a run started, the lid closed
+   thirty seconds later, and six hours on this check called a healthy crawl
+   STUCK. Sleep is not running time. Read from the kernel's own entry/exit
+   lines; if the journal cannot be read this returns 0 and the check falls back
+   to wall clock, which errs toward the alarm. */
+function sleptHSince(sinceMs) {
+  let out = '';
+  try {
+    out = require('child_process').execSync(
+      `journalctl -k -o short-unix --no-pager --since @${Math.floor(sinceMs / 1000)} --grep 'PM: suspend (entry|exit)' 2>/dev/null`,
+      { encoding: 'utf8' });
+  } catch { return 0; }
+  let slept = 0, entry = null;
+  for (const line of out.split('\n')) {
+    const t = parseFloat(line);
+    if (!isFinite(t)) continue;
+    if (/suspend entry/.test(line)) entry = t;
+    else if (/suspend exit/.test(line) && entry !== null) { slept += t - entry; entry = null; }
+  }
+  return slept / 3600;
+}
+
 function refreshUnit() {
   const UNIT = 'jobtriage-refresh.service';
   if (IN_REFRESH) {
@@ -174,7 +197,8 @@ function refreshUnit() {
   }
   if (state !== 'activating') return note(`refresh unit: ${state}`);
 
-  const ageH = unitStateAgeH(UNIT);
+  const wallH = unitStateAgeH(UNIT);
+  const ageH = wallH - (isFinite(wallH) ? sleptHSince(Date.now() - wallH * 36e5) : 0);
   /* An unreadable timestamp on an `activating` unit FAILS rather than passes.
      Not knowing how long it has been running is not evidence that it is fine,
      and treating it as fine is the bug this comment exists to prevent. */
@@ -183,7 +207,7 @@ function refreshUnit() {
       `cannot tell a running pass from the 17-hour hang. Check: systemctl --user status ${UNIT}`);
   }
   if (ageH > STUCK_AFTER_H) {
-    fail(`refresh unit: STUCK — activating for ${ageH.toFixed(1)}h. While it stays active the timer schedules ` +
+    fail(`refresh unit: STUCK — activating for ${ageH.toFixed(1)}h awake. While it stays active the timer schedules ` +
          `no further run, so every following night is silently cancelled. ` +
          `Fix: systemctl --user stop ${UNIT} (Persistent=true then catches the missed night)`);
   } else {

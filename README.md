@@ -2,7 +2,7 @@
 
 A single-file web app that reads a CV, works out which career directions are realistically open to that person, then finds and ranks jobs against them.
 
-**[Try it →](https://jobtriage.in/)** · no signup, nothing leaves your browser
+**[Try it →](https://jobtriage.in/)** · free account, 10 free searches
 ---
 
 ## The problem
