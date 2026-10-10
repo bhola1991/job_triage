@@ -1,0 +1,13 @@
+{
+  // A second, separate Worker whose only job is the www redirect. It is NOT
+  // deployed by pushes to main -- those build the root wrangler.jsonc. Deploy
+  // it by hand, from the repo root, on the rare day it changes:
+  //   npx wrangler deploy -c www-redirect/wrangler.jsonc
+  // It is its own Worker because the main one only runs for /api/*; every
+  // other path is served as a static asset before any code sees the hostname.
+  "name": "jobtriage-www",
+  "main": "index.js",
+  "compatibility_date": "2026-09-18",
+  "workers_dev": false,
+  "routes": [{ "pattern": "www.jobtriage.in", "custom_domain": true }]
+}
