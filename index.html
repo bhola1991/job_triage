@@ -1910,7 +1910,7 @@ const LEGAL_LINKS = `<p class="say" style="margin-top:10px;font-size:12.5px">${
     .map(([f,t])=>`<a class="lnk" href="${f}.html" target="_blank" rel="noopener">${t}</a>`).join(' · ')}</p>`;
 let CREDITS = null, FREE_SEARCH = null, FREE_TIER = true, UNLIMITED = false;
 let SEARCH_ID = null;   // the board search in progress, set by runBoards; null otherwise
-const FREE_SEARCH_START = 5;    // must match free_search's default in billing.sql
+const FREE_SEARCH_START = 10;   // must match free_search's default in billing.sql; selfcheck-worker.js asserts it
 const creditsLabel = () => UNLIMITED ? 'Unlimited' : CREDITS==null ? '… credits'
   : (FREE_SEARCH>0 ? `${FREE_SEARCH} free searches · ` : '') + CREDITS + ' credits';
 function showCredits(w){

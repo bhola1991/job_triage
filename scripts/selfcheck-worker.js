@@ -313,6 +313,11 @@ const post = (body, env = ENV) =>
           if (claim) ok(`${name} says ${n} free searches, matching billing.sql`, claim[1] === n,
             { page: claim[1], billing: n });
         });
+      /* The app prints the number too, on the sign-in screen and in the credits
+         dialog. It was left at 5 when the other three moved to 10, so a new
+         tester read "10 free" on the pricing page and "5 free" a click later. */
+      const app = /const FREE_SEARCH_START = (\d+)/.exec(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8'));
+      ok(`index.html says ${n} free searches, matching billing.sql`, !!app && app[1] === n, { app: app && app[1], billing: n });
     }
 
     /* Data residency is a compliance claim, so it is checked against the
