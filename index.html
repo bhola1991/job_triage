@@ -4537,10 +4537,9 @@ function coldDialog(){
 const INBOX_DOMAIN = 'jobtriage.in';
 /* On since 2026-10-09. It was off until the receiving end existed, so the
    panel never handed out an address that silently swallows mail; set it back
-   to false if mail to the domain ever stops arriving. Three things it needed,
-   all outside this repo, plus a test mail to a non-token address seen
-   arriving (a reply to a TOKEN address had not been observed when this went
-   on):
+   to false if mail to the domain ever stops arriving. Seen working end to end
+   on 2026-10-10: a reply to a token address moved its job to live. Three
+   things it needed, all outside this repo:
      1. jobtriage.in on Cloudflare.
      2. Email Routing enabled, catch-all -> this Worker. Check for existing MX
         records FIRST: enabling it repoints the domain's mail.

@@ -576,7 +576,7 @@ Domain chosen: **`jobtriage.in`**, addresses `r.<token>@jobtriage.in`.
   inbound mail starts landing on an unknown token — which looks like
   "forwarding stopped working" and has nothing to do with forwarding.
 
-### Switched on 2026-10-09; the token path is still unobserved
+### Switched on 2026-10-09; seen working end to end 2026-10-10
 
 `jobtriage.in` was registered at GoDaddy on 2026-10-08 (the `jobtriage.app`
 this section used to name was never bought) and went live on Cloudflare on
@@ -586,9 +586,20 @@ custom domain, and the old `jobtriage.reachbhola.workers.dev` address shows a
 
 The three steps below were all done the same day, and a test mail to a
 non-token address was reported arriving, which proves MX, the catch-all, the
-Worker and the forward. `INBOX_LIVE = true` followed. What has NOT been
-observed is the other half: a reply to a token address resolving to a profile
-and moving a job to `live`.
+Worker and the forward. `INBOX_LIVE = true` followed.
+
+The other half was observed on 2026-10-10, against production: a mail to a
+token address resolved to its profile, was classified `human` on "schedule a
+call", matched its job by company-in-text, and moved that job from `sent` to
+`live`. A mail naming no company was stored `unclear` and moved nothing, and a
+second reply to the already-`live` job was `note-only`. A Gmail filter
+forwarding to the address was set up the same day.
+
+One thing the first real use broke: Gmail's forwarding confirmation carried
+**no code**, in the subject or the body, only a link to click. It was stored as
+an unclear reply and the panel dead-ended. `gmailConfirmLink` now surfaces the
+confirm link, pinned to Google's two mail hosts and the `vf-` path so the
+cancel link in the same mail is never offered.
 
 It was committed **off** until then, because **pushes to `main` auto-deploy**
 and shipping it on early would have published a dead address to real beta
