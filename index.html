@@ -1222,7 +1222,7 @@ const AVOID_PATTERNS = {
   'agency or consultancy': /\b(recruit(ment|ing)? agency|staffing|consultanc|manpower|rpo)\b/,
   'night shift':           /\b(night shift|graveyard shift|us shift|overnight shift)\b/,
   'commission-only':       /\b(commission[\s-]?only|purely commission|no fixed salary)\b/,
-  'unpaid or equity-only': /\b(unpaid|equity[\s-]?only|no salary|for exposure)\b/,
+  'unpaid or equity-only': /\b(unpaid|volunteer|pro bono|equity[\s-]?only|no salary|for exposure)\b/,
 };
 
 /* Only a clearly stated figure, normalised to rupees PER MONTH. Anything
@@ -1248,6 +1248,7 @@ function statedPayMonthly(text){
   return lo <= 25000 ? lo : null;
 }
 
+const FOREIGN_REMOTE = /united states|\busa?\b|canada|united kingdom|\buk\b|europe|emea|latam|latin america|africa|australia|germany|france|netherlands|ireland|north america/;
 function redLine(j, prof){
   const L = limitsOf(prof);
   const loc = String((j && j.location) || '').toLowerCase();
@@ -1261,6 +1262,18 @@ function redLine(j, prof){
     const mine = String((prof && prof.location) || '').split(',')[0].trim().toLowerCase();
     if(mine && loc && !loc.includes(mine)){
       return `you said you would not move, and this is in ${String(j.location).split(',')[0].trim()}`;
+    }
+  }
+  /* "(remote)" with named places is not "anywhere": a role open only to the US
+     or Africa is not remote for someone in India. Only when they said they
+     would not relocate, and only when the place list names no country of
+     theirs -- an unreadable list stays in. */
+  if(!L.relocate){
+    const m = /^(.*)\(remote\)\s*$/i.exec(String((j&&j.location)||'').trim());
+    const where = m ? m[1].trim().toLowerCase() : '';
+    const home = String((prof&&(prof.country||String(prof.location||'').split(',').pop()))||'').trim().toLowerCase();
+    if(where && home && FOREIGN_REMOTE.test(where) && !where.includes(home)){
+      return `remote, but only open to ${m[1].trim()}`;
     }
   }
   if(L.min_pay > 0){
@@ -2827,6 +2840,7 @@ function addCatalogueBoards(t, prof){
             prof&&prof.country_code==='in'?INDIA_BOARDS:[]);
   // The model's own picks stay first: the server reads only the first twelve.
   t.boards=[...new Set([...(t.boards||[]),...add])].filter(b=>!PORTALS.includes(b));
+  t.catalogued=1;
   return t;
 }
 async function extractProfile(raw){
@@ -4350,6 +4364,8 @@ async function runBoards(trk, where){
   // Only the portals that suit this track's mode are queried; PORTALS stays the
   // full set below, because "is this a portal" is what decides whether a query
   // gets the location term, and that is true of all six however this track searches.
+  // A profile extracted before the board catalogue existed picks it up here, on its first search.
+  if(!trk.catalogued) addCatalogueBoards(trk, p.profile);
   const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
@@ -4401,6 +4417,8 @@ async function runBoards(trk, where){
    own results. One charge for the lot. */
 async function runPaidBoards(trk, where, since_days, pre){
   const p=P(); if(!p||(busy&&!pre)) return;
+  // A profile extracted before the board catalogue existed picks it up here, on its first search.
+  if(!trk.catalogued) addCatalogueBoards(trk, p.profile);
   const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }

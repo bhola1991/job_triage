@@ -278,6 +278,9 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
    // Relocation, and remote as the escape hatch.
    kept('same city',               J({ location:'Delhi, India' }),              { relocate:false });
    kept('other city but remote',   J({ location:'Mumbai (remote)' }),           { relocate:false });
+   gated('remote, but only open to the US', J({ location:'United States (remote)' }),  { relocate:false });
+   kept('remote, open anywhere',   J({ location:'Anywhere (remote)' }),         { relocate:false });
+   gated('volunteer role under an unpaid red line', J({ title:'Manager (Volunteer)' }), { avoid:['unpaid or equity-only'] });
    kept('other city, will move',   J({ location:'Mumbai, India' }),             { relocate:true });
    gated('other city, will not move', J({ location:'Mumbai, India' }),          { relocate:false });
 

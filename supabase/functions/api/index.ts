@@ -162,6 +162,7 @@ const ACTOR = "apify~google-search-scraper";
 const MAX_QUERIES = 16;
 // How long after a search its yield report is still accepted.
 const REPORT_WINDOW_MS = 15 * 60_000;
+const FREE_REGISTRY_QUERIES = 6;   // the same run for a free search, at half the size
 const MAX_REGISTRY_QUERIES = 12;  // the specialist boards a board search adds to the Google run
 
 /* How many of a track's titles one search fans out over, for the sources that
@@ -343,6 +344,7 @@ const remoteok = () => cachedFeed("remoteok", async () =>
    email it was issued to. Field names are from each site's public docs and were
    NOT run against the live service from here -- check source_errors after the
    first search and fix the mapping of whichever one comes back empty. */
+const EU_CC = /^(de|at|ch|nl|be|fr|es|it|pl|lu|dk|se|cz|ie)$/i;
 const arbeitnow = () => cachedFeed("arbeitnow", async () =>
   ((await getJson("https://www.arbeitnow.com/api/job-board-api")).data || []).map((x: Any): Job => ({ title: plain(x.title),
     company: x.company_name || "", url: x.url || "", location: x.location || "", description: cut(plain(x.description), 4000),
@@ -770,7 +772,8 @@ async function searchAll(titles: string[], where: string, country: string, since
     ...titles.map((t) => ["workable", workable(t, where)] as [string, Promise<Job[] | null>]),
     ["remotive", remotive().then((j) => titleMatches(j, titles))],
     ["remoteok", remoteok().then((j) => titleMatches(j, titles))],
-    ["arbeitnow", arbeitnow().then((j) => titleMatches(j, titles))],
+    // German/EU board: noise for anyone searching elsewhere (0 of 58 kept for a Kolkata user).
+    ...(!country || EU_CC.test(country) ? [["arbeitnow", arbeitnow().then((j) => titleMatches(j, titles))] as [string, Promise<Job[] | null>]] : []),
     ["workingnomads", workingnomads().then((j) => titleMatches(j, titles))],
     ["jobicy", jobicy().then((j) => titleMatches(j, titles))],
     ...titles.map((t) => ["reliefweb", reliefweb(t)] as [string, Promise<Job[] | null>]),
@@ -985,7 +988,10 @@ async function handle(req: Request): Promise<Response> {
             ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
 
           // Free searches skip the Google run entirely (specialist boards and fallback): it costs per query.
-          const queries = free ? [] : [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
+          // A free search used to skip this run, which is the only thing that reaches a niche's own
+          // registries. It now runs them (capped, no portal fallback): about 6 queries, ~INR 2.
+          const queries = free ? lines(b.queries).slice(0, FREE_REGISTRY_QUERIES)
+            : [...(jobs.length ? [] : lines(b.fallback)), ...lines(b.queries).slice(0, MAX_REGISTRY_QUERIES)].slice(0, MAX_QUERIES);
           const run = queries.length
             ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
                 method: "POST",
