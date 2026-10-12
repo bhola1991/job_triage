@@ -2787,6 +2787,48 @@ Rules generally: use ONLY what is in the profile below. Do not invent experience
 PROFILE:
 ${String(raw).slice(0,16000)}`;
 
+/* Specialist boards added at onboarding, on top of the ones the model names:
+   the model forgets, and a niche track lives or dies on these. Matched against
+   the track's own words, so a video editor gets production boards and a
+   fundraiser gets NGO boards. Every track also gets the ATS hosts, which reach
+   thousands of company career pages at once. Wrong or dead domains cost one
+   Google query and return nothing, so keep entries to boards known to exist.
+   ponytail: regex over the track text, not a classifier; add a row per field. */
+const BOARD_CATALOGUE = [
+  [/./,                                        ['job-boards.greenhouse.io','jobs.lever.co','jobs.ashbyhq.com']],
+  [/ngo|nonprofit|non-profit|social impact|development|humanitarian|fundrais|philanthrop|charity|csr|sustainab|policy|advocacy/i,
+                                               ['reliefweb.int','devex.com','idealist.org','devnetjobs.org','impactpool.org','unjobs.org','ngobox.org','csrbox.org','charityjob.co.uk']],
+  [/video|film|edit|motion|animat|produc|creative|photo|content|media|journalis/i,
+                                               ['mandy.com','productionhub.com','behance.net','workingnotworking.com','creativepool.com','mediabistro.com']],
+  [/design|ux|ui\b|product|brand|illustrat/i, ['dribbble.com','workingnotworking.com','welcometothejungle.com','workatastartup.com']],
+  [/engineer|developer|software|data|machine learning|\bai\b|devops|cloud|security|qa\b|analytics|tech/i,
+                                               ['workatastartup.com','news.ycombinator.com','builtin.com','dice.com','hirist.tech','welcometothejungle.com']],
+  [/financ|account|audit|invest|bank|tax|treasury|actuar/i,
+                                               ['efinancialcareers.com']],
+  [/legal|law|counsel|compliance|attorney/i,   ['legalcheek.com','law.com']],
+  [/research|academ|professor|lecturer|phd|scientist|postdoc|scholar/i,
+                                               ['higheredjobs.com','jobs.ac.uk','academicpositions.com','academicjobsonline.org','euraxess.ec.europa.eu','careers.nature.com','timeshighereducation.com']],
+  [/health|medic|nurs|clinic|pharma|doctor|hospital|therap/i,
+                                               ['healthecareers.com','jobs.nhs.uk','hospitalcareers.com']],
+  [/government|public sector|civil serv|public admin|municipal/i,
+                                               ['usajobs.gov','governmentjobs.com','ncs.gov.in','civilservicejobs.service.gov.uk']],
+  [/teach|educat|tutor|curriculum|school|instruction/i,
+                                               ['tes.com','teachaway.com']],
+  [/market|communicat|\bpr\b|public relations|copywrit|social media|seo|growth/i,
+                                               ['mediabistro.com','prweek.com']],
+];
+const REMOTE_BOARDS = ['weworkremotely.com','workingnomads.com','remoteok.com','himalayas.app','jobicy.com'];
+const FREELANCE_BOARDS = ['contra.com','toptal.com','freelancer.com','peopleperhour.com'];
+const INDIA_BOARDS = ['shine.com','timesjobs.com','foundit.in','internshala.com'];
+function addCatalogueBoards(t, prof){
+  const text=[t.label,t.why,...(t.titles||[]),...((prof&&prof.domains)||[])].join(' ');
+  const add=BOARD_CATALOGUE.filter(([re])=>re.test(text)).flatMap(([,b])=>b)
+    .concat(t.mode==='freelance'||t.mode==='gig'?FREELANCE_BOARDS:[], REMOTE_BOARDS,
+            prof&&prof.country_code==='in'?INDIA_BOARDS:[]);
+  // The model's own picks stay first: the server reads only the first twelve.
+  t.boards=[...new Set([...(t.boards||[]),...add])].filter(b=>!PORTALS.includes(b));
+  return t;
+}
 async function extractProfile(raw){
   // Redacted, not raw: see redactCV. The CV is still stored unredacted in
   // the person's own account -- this is about what leaves for a vendor.
@@ -2809,6 +2851,7 @@ async function extractProfile(raw){
     // Strip protocol/path if the model returned a URL rather than a bare domain.
     t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim())
                        .filter(Boolean);
+    addCatalogueBoards(t, p);
   });
   return p;
 }
@@ -3017,6 +3060,7 @@ Use ONLY what is in the profile. Do not invent experience.`, TOK_CAP);
   ['transfers','missing','titles','boards'].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; });
   t.mode = PORTALS_BY_MODE[t.mode] ? t.mode : '';
   t.boards = t.boards.map(b=>String(b).replace(/^https?:\/\//,'').replace(/\/.*$/,'').trim()).filter(Boolean);
+  addCatalogueBoards(t, P()&&P().profile);
   t.custom = true;
   return t;
 }
@@ -4250,7 +4294,6 @@ let PAID_OFFER = null;
 /* Whether the first click reads the free corpus rather than the paid boards.
    renderApp words the button from this and the command palette words its entry
    from it, so the two cannot drift apart. */
-const freeFirstNow = () => !ownApify() && cloudNow();
 /* What the live-board search costs, for the button that offers it. The server
    is the authority (COST.boardSearch) and hands the real figure over with the
    packs; this is the same number written down so the button can be drawn before
@@ -4331,12 +4374,13 @@ async function runBoards(trk, where){
         const rows=(ix&&ix.jobs)||[];
         if(rows.length) await live.add(rows.map(jsearchRow));
       }catch(e){ console.warn('index search skipped:', e.message); }
-      /* The same titles, the same window and the same place, carried rather than
-         recomputed: a second click must search what the first one searched, or
-         the free pass was not a preview of anything. Set BEFORE finishSearch,
-         because that is what redraws the panel the offer appears in. */
+      /* One click searches everything: the index just read, then every live
+         board, scored together. If the live half cannot run (out of credits,
+         sources down) runPaidBoards finishes with the index alone and leaves
+         the offer below so the person can retry it. */
       PAID_OFFER={trackId:trk.id, where, since_days};
-      await finishSearch(trk, live, failed, false);
+      await runPaidBoards(trk, where, since_days, {live, failed});
+      return;
     } else {
       await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
       await finishSearch(trk, live, failed, true);
@@ -4355,22 +4399,32 @@ async function runBoards(trk, where){
    scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later. Each
    batch is CV-checked the moment it arrives. One source failing loses only its
    own results. One charge for the lot. */
-async function runPaidBoards(trk, where, since_days){
-  const p=P(); if(!p||busy) return;
+async function runPaidBoards(trk, where, since_days, pre){
+  const p=P(); if(!p||(busy&&!pre)) return;
   const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   busy=true; PAID_OFFER=null; render();
   try{
     const cc=p.profile.country_code||"";
-    const live=liveBoard(trk, p.profile, p.track), failed=[];
+    const live=pre?pre.live:liveBoard(trk, p.profile, p.track), failed=pre?pre.failed:[];
     const registries=boards.filter(b=>!PORTALS.includes(b));
     const rq=registries.length ? buildBoardQueries(titles,registries,where) : [];
     setSearchInfo('searching the live boards…');
     // fallback: portal queries the server runs on Google if every API source comes back empty.
-    const r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-      where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
-      fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+    let r;
+    try{
+      r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
+        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+    }catch(e){
+      if(!pre||e.message==='NEEDAPIFY') throw e;
+      PAID_OFFER={trackId:trk.id, where, since_days};
+      await finishSearch(trk, live, failed, false);
+      setSearchInfo(`Showing the index only. Live boards: ${e.message}`);
+      return;
+    }
+    PAID_OFFER=null;
     SEARCH_ID=r.searchId||null;
     failed.push(...(r.sourceErrors||[]));
     let left=(r.scrapers||[]).length+(r.runId?1:0);
@@ -5794,7 +5848,6 @@ function renderApp(){
   /* On our keys the first click reads the free corpus and the paid boards are a
      second, separate one. With an own Apify token there is no credit of ours to
      save, so that path keeps its single button and its old wording. */
-  const freeFirst=freeFirstNow();
   /* Scoped to THIS track. An offer left behind by another track would spend the
      board-search charge on titles nobody is looking at. */
   const offer=!!(PAID_OFFER && PAID_OFFER.trackId===trk.id);
@@ -5869,17 +5922,15 @@ function renderApp(){
           value="${esc(WHERE!==null?WHERE:String(prof.location||'').split(',')[0].trim())}">
         <p class="hint">Narrows the big portals to this place, and to anything remote. Blank searches worldwide. This field's own registries are always read in full.</p>
         <button class="btn-go btn-sm" id="btnBoards" style="width:100%;margin-top:7px" ${busy?'disabled':''}>
-          ${busy?'<span class="spin"></span> Searching…':(freeFirst?'Search the free index':'Search the job boards')}</button>
-        ${freeFirst
-          ? `<p class="hint">Hundreds of thousands of postings already collected and shared, read free and answered at once. The live boards are the paid search below.</p>`
-          : (trk.boards||[]).length
+          ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
+        ${(trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
-             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
+             <p class="hint">The shared index, LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork, job APIs, plus these specialist boards. New postings only, every job scored.</p>`
           : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
         ${offer
           ? `<button class="btn-sm" id="btnPaidBoards" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
-               Search live boards — ${BOARD_COST} credits</button>
+               Retry live boards — ${BOARD_COST} credits</button>
              ${(trk.boards||[]).length
                ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>` : ''}
              <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
@@ -6511,10 +6562,7 @@ let PAL = null;   // null closed, else { q, sel }
 
 function commands(){
   const list=[
-    /* Worded from freeFirstNow() for the same reason renderApp is: after the
-       free-corpus split this button says one of two things, and a palette entry
-       that said the other would be describing a button that is not there. */
-    ['Find work', freeFirstNow()?'Search the free index':'Search the job boards','#btnBoards'],
+    ['Find work', 'Search the job boards','#btnBoards'],
     /* Only exists while an offer is live, so most of the time this resolves to
        nothing -- which runCommand already answers honestly rather than failing
        silently, because a click on an absent control is the one case it checks. */

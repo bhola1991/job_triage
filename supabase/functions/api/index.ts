@@ -159,10 +159,10 @@ const APIFY = "https://api.apify.com/v2";
 // The only actor the app uses. Anything else would let a user run arbitrary
 // (and arbitrarily expensive) actors on your Apify account.
 const ACTOR = "apify~google-search-scraper";
-const MAX_QUERIES = 14;
+const MAX_QUERIES = 16;
 // How long after a search its yield report is still accepted.
 const REPORT_WINDOW_MS = 15 * 60_000;
-const MAX_REGISTRY_QUERIES = 8;   // the specialist boards a board search adds to the Google run
+const MAX_REGISTRY_QUERIES = 12;  // the specialist boards a board search adds to the Google run
 
 /* How many of a track's titles one search fans out over, for the sources that
    take one query per title (JSearch, Adzuna, Jooble, Careerjet) and for the
@@ -336,6 +336,44 @@ const remoteok = () => cachedFeed("remoteok", async () =>
     .filter((x) => x && x.position).map((x: Any): Job => ({ title: plain(x.position), company: x.company || "",
       url: x.url || "", location: `${x.location || "Anywhere"} (remote)`, description: cut(plain(x.description), 4000),
       posted: isoDay(x.date), publisher: "Remote OK" })));
+
+/* More free remote/regional feeds, same shape and same cache as the two above.
+   Keyless: arbeitnow, workingnomads, jobicy. Keyed (skipped, not failed, until
+   the secret is set): reliefweb needs an approved appname, usajobs a key + the
+   email it was issued to. Field names are from each site's public docs and were
+   NOT run against the live service from here -- check source_errors after the
+   first search and fix the mapping of whichever one comes back empty. */
+const arbeitnow = () => cachedFeed("arbeitnow", async () =>
+  ((await getJson("https://www.arbeitnow.com/api/job-board-api")).data || []).map((x: Any): Job => ({ title: plain(x.title),
+    company: x.company_name || "", url: x.url || "", location: x.location || "", description: cut(plain(x.description), 4000),
+    posted: isoDay(x.created_at), publisher: "Arbeitnow" })));
+const workingnomads = () => cachedFeed("workingnomads", async () =>
+  ((await getJson("https://www.workingnomads.com/api/exposed_jobs/")) as Any[]).map((x: Any): Job => ({ title: plain(x.title),
+    company: x.company_name || "", url: x.url || "", location: `${x.location || "Anywhere"} (remote)`,
+    description: cut(plain(x.description), 4000), posted: isoDay(x.pub_date), publisher: "Working Nomads" })));
+const jobicy = () => cachedFeed("jobicy", async () =>
+  ((await getJson("https://jobicy.com/api/v2/remote-jobs?count=100")).jobs || []).map((x: Any): Job => ({ title: plain(x.jobTitle),
+    company: x.companyName || "", url: x.url || "", location: `${x.jobGeo || "Anywhere"} (remote)`,
+    description: cut(plain(x.jobDescription), 4000), posted: isoDay(x.pubDate), publisher: "Jobicy" })));
+async function reliefweb(title: string): Promise<Job[] | null> {
+  const app = env("RELIEFWEB_APPNAME"); if (!app) return null;
+  const q = new URLSearchParams({ appname: app, limit: "50", "query[value]": title, "query[operator]": "OR", "sort[]": "date.created:desc" });
+  for (const f of ["title", "url", "source.name", "country.name", "date.created", "body"]) q.append("fields[include][]", f);
+  const d = await getJson(`https://api.reliefweb.int/v2/jobs?${q}`);
+  return (d.data || []).map((r: Any): Job => { const x = r.fields || {}; return { title: plain(x.title), company: x.source?.[0]?.name || "",
+    url: x.url || "", location: (x.country || []).map((c: Any) => c.name).join(", "), description: cut(plain(x.body), 4000),
+    posted: isoDay(x.date?.created), publisher: "ReliefWeb" }; });
+}
+async function usajobs(title: string, country: string): Promise<Job[] | null> {
+  const key = env("USAJOBS_KEY"), email = env("USAJOBS_EMAIL");
+  if (!key || !email || (country && !/^us$/i.test(country))) return null;
+  const d = await getJson(`https://data.usajobs.gov/api/search?${new URLSearchParams({ Keyword: title, ResultsPerPage: "50", SortField: "opendate", SortDirection: "desc" })}`,
+    { headers: { Host: "data.usajobs.gov", "User-Agent": email, "Authorization-Key": key } });
+  return (d.SearchResult?.SearchResultItems || []).map((r: Any): Job => { const x = r.MatchedObjectDescriptor || {}; return {
+    title: plain(x.PositionTitle), company: x.OrganizationName || "", url: x.PositionURI || "", location: x.PositionLocationDisplay || "",
+    description: cut(plain(x.UserArea?.Details?.JobSummary || x.QualificationSummary), 4000),
+    posted: isoDay(x.PublicationStartDate), publisher: "USAJobs" }; });
+}
 /* Workable's OWN aggregated board -- every customer of theirs at once, keyless,
    searchable. Measured 2026-10-03: 170,321 postings, with descriptions averaging
    ~4,200 characters, which is the judgeable kind the corpus is short of (it held
@@ -550,7 +588,7 @@ const PRICE_USD: Record<string, number> = {
   google: 0.0035,          // per Google query page (Apify google-search-scraper)
   linkedin: 0.005,         // per row; bebity doesn't publish a price, so this is a cautious guess
   indeed: 0.003, naukri: 0.001, indiatech: 0.004, upwork: 0.00014,   // per row, Apify Store
-  adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0, workable: 0,
+  adzuna: 0, jooble: 0, careerjet: 0, remotive: 0, remoteok: 0, workable: 0, arbeitnow: 0, workingnomads: 0, jobicy: 0, reliefweb: 0, usajobs: 0,
   // The shared corpus. Zero because the row was acquired once by a crawl
   // nobody paid per-search for -- but it is listed rather than omitted so
   // search_report accepts it and source_yield can rank the index against the
@@ -732,6 +770,11 @@ async function searchAll(titles: string[], where: string, country: string, since
     ...titles.map((t) => ["workable", workable(t, where)] as [string, Promise<Job[] | null>]),
     ["remotive", remotive().then((j) => titleMatches(j, titles))],
     ["remoteok", remoteok().then((j) => titleMatches(j, titles))],
+    ["arbeitnow", arbeitnow().then((j) => titleMatches(j, titles))],
+    ["workingnomads", workingnomads().then((j) => titleMatches(j, titles))],
+    ["jobicy", jobicy().then((j) => titleMatches(j, titles))],
+    ...titles.map((t) => ["reliefweb", reliefweb(t)] as [string, Promise<Job[] | null>]),
+    ...titles.map((t) => ["usajobs", usajobs(t, country)] as [string, Promise<Job[] | null>]),
   ];
   const settled = await Promise.allSettled(named.map(([, p]) => p));
   const seen = new Set<string>(), jobs: Job[] = [], errors = new Map<string, string>(), requests: Record<string, number> = {};
@@ -1343,6 +1386,21 @@ async function handle(req: Request): Promise<Response> {
           await depositIndex(jobs);
           return json({ items: jobs });
         }
+        /* The Google run (specialist registries + portal fallback) comes back raw
+           and the browser parses it, so none of it ever reached the corpus. Thin
+           rows only (a snippet, no description) -- depositIndex inserts those
+           only when the key is absent. Shallow URLs are category/listing pages,
+           not postings, and are skipped.
+           ponytail: the title/employer split mirrors apifyBoardSearch in
+           index.html; if one changes, change the other. */
+        await depositIndex((items as Any[]).flatMap((it) => it?.organicResults || []).flatMap((res: Any): Job[] => {
+          const u = String(res?.url || "");
+          let path: string[]; try { path = new URL(u).pathname.split("/").filter(Boolean); } catch { return []; }
+          if (path.length < 2) return [];
+          const raw = String(res.title || "").trim(), bits = raw.split(/\s+[\u2013\u2014|-]\s+/);
+          return [{ title: (bits[0] || raw).slice(0, 180), company: bits.length > 1 ? bits[1].slice(0, 120) : "", url: u,
+            location: "", description: String(res.description || "").slice(0, 900), posted: "", publisher: new URL(u).hostname.replace(/^www\./, "") }];
+        }));
         return json({ items });
       }
 
