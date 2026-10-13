@@ -3,7 +3,8 @@
 Guidance for working on this codebase, and for importing Figma designs through the
 Figma MCP server. Every claim below was checked against the files on
 2026-09-15, §§1, 2, 7 and 8 again on 2026-09-18, §§7 and 8 again on
-2026-09-24, and the counts in §§3, 6 and 7 on 2026-10-08; file:line
+2026-09-24, the counts in §§3, 6 and 7 on 2026-10-08, and the `index.html`
+line references, breakpoints and §6's layout rules on 2026-10-13; file:line
 references are the authority, not this summary.
 
 Two of those counts had gone stale by a wide margin and are worth knowing as a
@@ -40,7 +41,7 @@ answering "what colour is X".
 
 ### The v1 names are live aliases, not dead code
 
-`index.html:42-61` keeps the v1 names defined, pointed at v2 values:
+`index.html:47-64` keeps the v1 names defined, pointed at v2 values:
 
 ```css
 --go:#56C88A;      /* v2 */
@@ -207,7 +208,7 @@ Three rules a Figma import must not violate:
 
 1. **A row carries at most one accent.** Both closing and overdue → nearer deadline wins, the other becomes plain text.
 2. **A score is never an accent.** Colour says what to do; the number says how good it is. Reachability stays grey — a second axis, not a verdict.
-3. **Both themes tint the cell; dark states the edge as well.** Light washes the row at full weight (`--go-row: #E9F4ED`); dark washes it at roughly a quarter of that (`--go-row: rgba(86,200,138,.075)`, `index.html:39`), because the same tint reads far louder on a near-black ground than on paper. Dark additionally carries the accent as a 5px edge. Until 2026-09-15 dark set every `--*-row` to `transparent` and relied on the edge alone; if you see that in an older artboard, the artboard is out of date, not the code.
+3. **Both themes tint the cell; dark states the edge as well.** Light washes the row at full weight (`--go-row: #E9F4ED`); dark washes it at roughly a quarter of that (`--go-row: rgba(86,200,138,.075)`, `index.html:43`), because the same tint reads far louder on a near-black ground than on paper. Dark additionally carries the accent as a 5px edge. Until 2026-09-15 dark set every `--*-row` to `transparent` and relied on the edge alone; if you see that in an older artboard, the artboard is out of date, not the code.
 
 If a Figma frame colours a score, or stacks two accents on one row, **flag it
 rather than implementing it.**
@@ -310,7 +311,7 @@ This repo contains **three separate runtimes**. Do not carry conventions across 
 
 ### The app has no build step
 
-`index.html` is ~6,750 lines: markup, CSS and application JS in one file. `README.md`
+`index.html` is ~7,450 lines: markup, CSS and application JS in one file. `README.md`
 states it plainly: *"Open `index.html`. That's the whole install."* No bundler, no
 transpiler, no `package.json` at the root, no framework.
 
@@ -326,7 +327,7 @@ pinned to an exact version. Keep both pinned.
 ```
 
 ```js
-// index.html:3923 — lazy: fetched only the first time someone picks a PDF CV
+// index.html:6436 — lazy: fetched only the first time someone picks a PDF CV
 const PDFJS = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 await loadScript(PDFJS + 'pdf.min.js');
 lib.GlobalWorkerOptions.workerSrc = PDFJS + 'pdf.worker.min.js';
@@ -366,12 +367,12 @@ There is **no icon library, no sprite sheet, and no naming convention** — beca
 there are almost no icons.
 
 - `icon.svg` — the PWA app icon (a fit × reachability scatter plot). On the v2 palette, using the same colours as the plot it depicts: ground `--ink`, axes `--line`, an open role `--go`, a cold target `--cold`, an unopened one `--dim`. Values are hard-coded because an icon loads outside the document, so `var()` never resolves there — **so it is a fourth place a token change must reach.** `node scripts/selfcheck-icon.js` now checks that it did.
-  One of those five is not in the source of truth: **`--cold` is defined only in `index.html`'s two `:root` blocks** (`index.html:53` dark, `:98` light) and appears in neither `design/jobtriage.tokens.json` nor `ui-kit/src/v2/tokens.css` nor §1's token vocabulary. A change to it has nothing upstream to drive it, so `selfcheck-icon.js` reads it from the app and says so. `--plot-fade` (`index.html:2944`) is in the same position. Promoting both is the real fix.
+  One of those five is not in the source of truth: **`--cold` is defined only in `index.html`'s two `:root` blocks** (`index.html:53` dark, `:98` light) and appears in neither `design/jobtriage.tokens.json` nor `ui-kit/src/v2/tokens.css` nor §1's token vocabulary. A change to it has nothing upstream to drive it, so `selfcheck-icon.js` reads it from the app and says so. `--plot-fade` (defined at `index.html:65` and `:109`, read at `:5211`) is in the same position. Promoting both is the real fix.
   Its comment must not contain a `--` sequence: XML forbids a double hyphen inside a comment, and it silently makes the whole file an unparseable broken image. Write token names without their leading dashes there.
   Two constraints on its geometry, both easy to undo by accident:
   - **The rim is load-bearing.** The ground is 1.27:1 against a black home screen and 1.03:1 against iOS dark, so without a `--line` rim the tile has no edge and dissolves into the wallpaper. Do not remove it. Inverting to a light ground is not the fix — it fails on a white background in exactly the same way.
   - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off. Measured: the scaled axes reach **203.7 against the 204.8 limit — a margin of 1.1px in 512**. Treat that as a floor, not as headroom; `selfcheck-icon.js` flags it even while passing.
-- Four inline `<svg>` in `index.html`: three 13×13 theme-toggle glyphs (`index.html:3451-3454`) and one `viewBox="0 0 640 420"` data plot (`index.html:3587`).
+- Four inline `<svg>` in `index.html`: three 13×13 theme-toggle glyphs (`index.html:5903-5906`) and one `viewBox="0 0 640 420"` data plot (`index.html:6047`).
 
 The convention for the glyphs, if you add one:
 
@@ -425,21 +426,46 @@ Dark is the default (`color-scheme: dark`). Light is an explicit
 ### Responsive
 
 Plain media queries, mobile-last (`max-width`). Breakpoints in use:
-**1240px, 1080px, 900px, 640px (×2), 480px**. Plus `@media (hover:hover)` for
-hover-only affordances and `prefers-reduced-motion` for animation.
+**1240px, 1199px (×2), 1080px, 900px (×2), 640px (×3), 480px**. Plus
+`@media (hover:hover)` for hover-only affordances and `prefers-reduced-motion`
+for animation.
 
 No CSS framework grid. Layout is flex and `grid-template-columns`.
+
+### Layout and surfaces — the other half of the law
+
+The colour law (§1) says what a row means. Where things go is a second set of
+rules, stated in full in `design/README.md` under "The layout — apply-first".
+The ones generated code must not break:
+
+1. **A row has at most one filled button, and it is the next real move** —
+   `Apply ↗`, `Write the DM`, `Write the chase`, `Log a note`. Bookkeeping goes
+   behind the row's `⋯` menu. A row where nothing is the person's move has no
+   filled button at all.
+2. **One job is read in the pane, never by expanding its row.** `jobDetail` has
+   exactly one call site, in `renderApp`. Rows must not change height.
+3. **Controls for getting more jobs live in the drawer (`.side`), not on the
+   page.** They stay in the DOM when it is shut: the command palette
+   (`commands()`) dispatches by clicking them by id, so removing or duplicating
+   an id breaks a command silently.
+4. **A new verb gets a palette entry** that points at its real control.
+5. **A fold hides rows, never controls. A modal opens only when asked for.**
+   Confirmation of a row change is a toast with Undo (`snapRow` / `undoToast`).
+6. **New class names are checked against the file first.** One stylesheet and
+   one script share a namespace here; a two-letter name already taken (`.pl` is
+   the flag pill) restyles the new element silently, and no script renders a
+   page to notice. `grep -n '\.name\b' index.html` before adding one.
 
 ---
 
 ## 7. Project structure
 
 ```
-index.html              The entire app — markup, CSS, JS. ~6,750 lines, no build.
+index.html              The entire app — markup, CSS, JS. ~7,450 lines, no build.
 config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
 STATUS.md               Where this stands: what is live, what drifted, what is measured. The gap-tracking document.
-INTAKE.md               Build brief: asking the person what they WANT (intent, strictness, red lines). Specified, not built.
+INTAKE.md               Build brief: asking the person what they WANT (intent, strictness, red lines). Steps 1–3d built (a fourth onboarding step); step 4, measuring it, is open.
 PLAN.md  AUDIT.md       Dated records of earlier briefs and findings. NOT rewritten as the project moves; read as of their own date.
 src/index.js            Cloudflare Worker: POST /api/contact, else env.ASSETS.fetch().
 src/reply-match.mjs     Inbound-mail decision logic. One copy, two consumers.
