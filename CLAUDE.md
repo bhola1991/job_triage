@@ -402,6 +402,14 @@ background, the lined ground is the floor, and signing in is a sign planted in i
   ever on this screen, which is the only reason they are allowed here.
 - **It is always paper**, in both themes, because it is marker on a white page.
 - **Text on the green button is ink, not white.** White on `--au-gr` is 3.2:1.
+- **Onboarding is on the same paper** (`.ob-paper`, with the drawing as a strip
+  across the top). It is done by re-pointing the app's tokens inside that
+  wrapper — `--ink`, `--panel`, `--line`, `--signal`, the shadows — not by
+  restyling components, so anything added to onboarding follows without work.
+  Its greens and reds are darker than the marker inks because they are text on
+  paper and must clear AA. Do not copy that wrapper onto any screen with rows.
+- Dialogs opened from these screens are appended to `<body>`, outside the
+  wrapper, so they still render in the app's dark tokens.
 - Inside the app, the same drawing may appear only as **line art in the neutral
   tokens** (`--line`, `--muted`, `--text`) — for empty states, never on a row.
 
