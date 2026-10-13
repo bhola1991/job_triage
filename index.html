@@ -281,6 +281,9 @@
   .au-fields .pw .rev{color:var(--au-ink)}
   .au-fields .hint,.au-sign .au-fine .say{color:var(--au-ink);opacity:.78;margin:0}
   .au-row{display:flex;gap:9px;flex-wrap:wrap;align-items:center;margin-top:8px}
+  /* On reset, claim and recover the fields are the screen, not an option under
+     a bigger button, so they stand a little clear of the sentence above them. */
+  .au-fields.au-solo{margin-top:16px}
   .au-sign .lnk{color:var(--au-ink);border-bottom:1.5px solid var(--au-ink);font-family:var(--disp);font-weight:600}
   /* The page has the browser's default 8px body margin, which nothing in this
      file resets. Around the dark app it is invisible; around a paper scene it
@@ -7461,22 +7464,16 @@ const AU_PEOPLE = `<svg class="au-people" viewBox="0 62 720 288" role="img"
       </g>
     </svg>`;
 
-function renderAuth(){
-  if(AUTH.mode==='reset') return renderReset();
-  const up = AUTH.mode==='up';
-  // A stranger's first screen must say what this is. "Welcome back" is only true for someone who has signed in here before.
-  let returning=false; try{ returning=!!localStorage.getItem('triage:returning'); }catch(e){}
-  /* Open if they opened it, or if there is anything in it they would lose
-     sight of: a half-typed name, a sign-up in progress, a "check your email". */
-  const mailOpen = up || AUTH.open || !!AUTH.user || !!AUTH.pass || !!AUTH.msg;
-  $('#root').innerHTML=`
-  <div class="au-scene">
+/* The sky and the ground: three bands of wavy line, one of straight, and the
+   filter that gives every stroke a marker's wobble. Static. */
+const AU_BACK = `
     <svg class="au-defs" width="0" height="0" aria-hidden="true"><defs>
       <filter id="auWob" x="-2%" y="-2%" width="104%" height="104%">
         <feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="7" result="n"/>
         <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>
-      ${[['auW1','s1'],['auW2','s2'],['auW3','s3']].map(([id,c])=>
-        `<pattern id="${id}" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-${c})" stroke-width="2.6"/></pattern>`).join('')}
+      <pattern id="auW1" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s1)" stroke-width="2.6"/></pattern>
+      <pattern id="auW2" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s2)" stroke-width="2.6"/></pattern>
+      <pattern id="auW3" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s3)" stroke-width="2.6"/></pattern>
       <pattern id="auGd" width="40" height="10" patternUnits="userSpaceOnUse"><path d="M0 5 H40" fill="none" style="stroke:var(--au-gd)" stroke-width="2.6"/></pattern>
     </defs></svg>
     <svg class="au-sky" aria-hidden="true"><g filter="url(#auWob)">
@@ -7486,8 +7483,31 @@ function renderAuth(){
     <svg class="au-gnd" aria-hidden="true">
       <rect width="100%" height="100%" style="fill:var(--au-paper)"/>
       <rect width="100%" height="100%" fill="url(#auGd)" filter="url(#auWob)"/></svg>
+`;
+
+/* The frame every signed-out screen stands in: the drawing, with one sign in
+   it. Signing in, resetting a password, claiming a username and setting a new
+   password are the same place, so they are drawn as the same place -- a person
+   who clicks "Forgot your password?" should not land somewhere that looks like
+   a different product. */
+const auScene = sign => `
+  <div class="au-scene">${AU_BACK}
     <div class="au-sign">
       <div class="au-name">Job Triage</div>
+${sign}
+    </div>
+    ${AU_PEOPLE}
+  </div>`;
+
+function renderAuth(){
+  if(AUTH.mode==='reset') return renderReset();
+  const up = AUTH.mode==='up';
+  // A stranger's first screen must say what this is. "Welcome back" is only true for someone who has signed in here before.
+  let returning=false; try{ returning=!!localStorage.getItem('triage:returning'); }catch(e){}
+  /* Open if they opened it, or if there is anything in it they would lose
+     sight of: a half-typed name, a sign-up in progress, a "check your email". */
+  const mailOpen = up || AUTH.open || !!AUTH.user || !!AUTH.pass || !!AUTH.msg;
+  $('#root').innerHTML=auScene(`
       <h2>${returning?'Welcome back.':'Stop applying to jobs that won\u2019t write back.'}</h2>
       ${returning?'':`<p class="au-pitch">We score every job twice \u2014 <b>can you do it</b>, and <b>will they reply</b> \u2014 then show you which to apply to first.</p>`}
       <button class="au-b au-go" id="authGoogle" ${AUTH.busy?'disabled':''}>
@@ -7518,10 +7538,7 @@ function renderAuth(){
           </div>
         </div>
       </details>
-      <div class="au-fine">${LEGAL_LINKS}</div>
-    </div>
-    ${AU_PEOPLE}
-  </div>`;
+      <div class="au-fine">${LEGAL_LINKS}</div>`);
 
   // Swapping mode or hitting an error re-renders the form, which would throw
   // away what was typed. Read it back into state before anything re-renders.
@@ -7617,24 +7634,20 @@ function renderAuth(){
    contexts (installed PWA, some in-app browsers), which made this
    unreachable rather than merely ugly. */
 function renderReset(){
-  $('#root').innerHTML=`
-  <div class="onb">
-    <div class="eyebrow">Job Triage</div>
-    <p class="lede">Reset your password</p>
-    <p class="say">Enter the email on your account and we will send a link to set a new password.</p>
-    <div class="card">
-      <label class="lab">Email</label>
-      <input id="rsEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
-      ${AUTH.err?`<p class="err">${esc(AUTH.err)}</p>`:''}
-      ${AUTH.msg?`<p class="say" style="margin:10px 0 0;color:var(--good);font-size:13px">${esc(AUTH.msg)}</p>`:''}
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn-go" id="rsGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'…':'Send reset link'}</button>
-        <button class="btn-sm" id="rsBack">Back to sign in</button>
+  $('#root').innerHTML=auScene(`
+      <h2>Reset your password</h2>
+      <p class="au-pitch">Enter the email on your account and we will send a link to set a new one.</p>
+      <div class="au-fields au-solo">
+        <label class="lab" for="rsEmail">Email</label>
+        <input id="rsEmail" type="email" autocomplete="email" placeholder="you@example.com" value="${esc(AUTH.email)}">
+        ${AUTH.err?`<p class="au-note au-bad">${esc(AUTH.err)}</p>`:''}
+        ${AUTH.msg?`<p class="au-note">${esc(AUTH.msg)}</p>`:''}
+        <div class="au-row">
+          <button class="au-b au-sm au-go" id="rsGo" ${AUTH.busy?'disabled':''}>${AUTH.busy?'\u2026':'Send reset link'}</button>
+          <button class="au-b au-sm" id="rsBack">Back to sign in</button>
+        </div>
       </div>
-    </div>
-    <p class="say" style="margin-top:22px;font-size:12.5px">What is stored, and how to erase it, is set out in the <a class="lnk" href="privacy.html" target="_blank" rel="noopener">privacy policy</a>. Your own API keys are never uploaded — they stay in this browser.</p>
-    ${LEGAL_LINKS}
-  </div>`;
+      <div class="au-fine">${LEGAL_LINKS}</div>`);
 
   const go=async ()=>{
     const email=($('#rsEmail').value||'').trim();
@@ -7669,23 +7682,20 @@ function renderReset(){
    an account that already has jobs in it should not be sent back through it. */
 let CLAIM = {user:'', err:'', busy:false};
 function renderClaim(){
-  $('#root').innerHTML=`
-  <div class="onb">
-    <div class="eyebrow">Job Triage</div>
-    <p class="lede">Pick a username</p>
-    <p class="say">Sign-in moved to usernames. Your account and everything in it is unchanged \u2014 this is the name you will type from now on instead of ${esc(USER&&USER.email||'your email')}.</p>
-    <div class="card">
-      <label class="lab">Username</label>
-      <input id="clUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"
-             placeholder="3-20 characters: a-z, 0-9, underscore" value="${esc(CLAIM.user)}">
-      <p class="hint">Lowercase letters, numbers and underscores. You cannot change it later, so pick one you will recognise.</p>
-      ${CLAIM.err?`<p class="err">${esc(CLAIM.err)}</p>`:''}
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn-go" id="clGo" ${CLAIM.busy?'disabled':''}>${CLAIM.busy?'\u2026':'Use this name'}</button>
-        <button class="btn-sm" id="clOut">Sign out</button>
-      </div>
-    </div>
-  </div>`;
+  $('#root').innerHTML=auScene(`
+      <h2>Pick a username</h2>
+      <p class="au-pitch">Sign-in moved to usernames. Your account and everything in it is unchanged \u2014 this is the name you will type from now on instead of ${esc(USER&&USER.email||'your email')}.</p>
+      <div class="au-fields au-solo">
+        <label class="lab" for="clUser">Username</label>
+        <input id="clUser" type="text" autocomplete="username" autocapitalize="none" spellcheck="false"
+               placeholder="3-20 characters: a-z, 0-9, underscore" value="${esc(CLAIM.user)}">
+        <p class="hint">Lowercase letters, numbers and underscores. You cannot change it later, so pick one you will recognise.</p>
+        ${CLAIM.err?`<p class="au-note au-bad">${esc(CLAIM.err)}</p>`:''}
+        <div class="au-row">
+          <button class="au-b au-sm au-go" id="clGo" ${CLAIM.busy?'disabled':''}>${CLAIM.busy?'\u2026':'Use this name'}</button>
+          <button class="au-b au-sm" id="clOut">Sign out</button>
+        </div>
+      </div>`);
   const fail=m=>{ CLAIM.busy=false; CLAIM.err=m; renderClaim(); };
   const go=async()=>{
     CLAIM.user=($('#clUser').value||'').trim().toLowerCase();
@@ -7733,22 +7743,19 @@ function splash(msg, sub){
    them the app, with no way to actually change anything. */
 let RECOVER = false;
 function renderRecover(){
-  $('#root').innerHTML=`
-  <div class="onb">
-    <div class="eyebrow">Job Triage</div>
-    <p class="lede">Set a new password</p>
-    <p class="say">You followed a reset link${USER&&USER.email?` for ${esc(USER.email)}`:''}. Pick something you will remember.</p>
-    <div class="card">
-      <label class="lab">New password</label>
-      ${pwField('rcA','new-password','At least 8 characters')}
-      <label class="lab" style="margin-top:12px">Type it again</label>
-      ${pwField('rcB','new-password')}
-      <p class="err" id="rcErr" style="display:none"></p>
-      <div class="btn-row" style="margin-top:14px">
-        <button class="btn-go" id="rcGo">Save it</button>
-      </div>
-    </div>
-  </div>`;
+  $('#root').innerHTML=auScene(`
+      <h2>Set a new password</h2>
+      <p class="au-pitch">You followed a reset link${USER&&USER.email?` for ${esc(USER.email)}`:''}. Pick something you will remember.</p>
+      <div class="au-fields au-solo">
+        <label class="lab" for="rcA">New password</label>
+        ${pwField('rcA','new-password','At least 8 characters')}
+        <label class="lab" for="rcB">Type it again</label>
+        ${pwField('rcB','new-password')}
+        <p class="au-note au-bad" id="rcErr" style="display:none"></p>
+        <div class="au-row">
+          <button class="au-b au-sm au-go" id="rcGo">Save it</button>
+        </div>
+      </div>`);
   const fail=m=>{ const e=$('#rcErr'); e.textContent=m; e.style.display='block'; $('#rcGo').disabled=false; };
   const go=async()=>{
     const a=$('#rcA').value, b=$('#rcB').value;
