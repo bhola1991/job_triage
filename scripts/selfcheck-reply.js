@@ -170,6 +170,53 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
   }), JOBS);
   ok('no cue is unclear', d.kind === 'unclear' && d.action === 'note-only', d);
 
+  /* ── applied outside the app ──────────────────────────────────────────── */
+  console.log('applied outside the app');
+
+  // A receipt for the 'new' Quarry row: proof they applied on the company's site.
+  d = decide(mail({
+    from: 'Quarry Talent <no-reply@ashbyhq.com>',
+    subject: 'Thank you for applying to Quarry',
+    text: 'We have received your application.',
+    headers: { 'auto-submitted': 'auto-generated' },
+  }), JOBS);
+  ok('receipt for an unmarked job marks it applied', d.action === 'mark-applied' && d.matched === 'u:untouched', d);
+  ok('mark-applied carries the date', d.date_applied === '2026-10-05', d.date_applied);
+
+  // Two 'new' rows at the same company: a receipt cannot say which one.
+  const twoNew = JOBS.concat([{ job_key: 'u:quarry-2', company: 'Quarry', url: 'https://quarry.io/jobs/8', stage: 'new' }]);
+  d = decide(mail({
+    from: 'no-reply@ashbyhq.com', subject: 'Thank you for applying to Quarry', text: 'Application received.',
+  }), twoNew);
+  ok('two unmarked rows at one company refuse', d.action === 'store-unmatched' && d.matched === null, d);
+
+  // A receipt is the ONLY mail allowed to touch a 'new' row.
+  d = decide(mail({
+    from: 'hr@quarry.io', subject: 'Your application to Quarry',
+    text: 'After review we have decided to move forward with other candidates.',
+  }), JOBS);
+  ok('a rejection does not touch an unmarked row', d.matched === null && d.action === 'store-unmatched', d);
+
+  // Open rows were ambiguous: that refusal is not overruled by a 'new' row.
+  const acmeNew = JOBS.concat([{ job_key: 'u:acme-new', company: 'Acme', url: 'https://acme.example/j', stage: 'new' }]);
+  d = decide(mail({
+    from: 'no-reply@us.greenhouse-mail.io', subject: 'Thank you for applying to Acme', text: 'Application received.',
+  }), acmeNew);
+  ok('ambiguous open rows are not overruled by a new row', d.action === 'store-unmatched' && d.matched === null, d);
+
+  // A closed row is the person's decision; a late receipt must not reopen it.
+  const closedRow = JOBS.concat([{ job_key: 'u:shut', company: 'Halcyon', url: 'https://halcyon.example/j', stage: 'closed' }]);
+  d = decide(mail({
+    from: 'no-reply@ashbyhq.com', subject: 'Thank you for applying to Halcyon', text: 'Application received.',
+  }), closedRow);
+  ok('a receipt does not reopen a closed row', d.action === 'store-unmatched' && d.matched === null, d);
+
+  // A marked job still wins over an unmarked one at another company.
+  d = decide(mail({
+    from: 'no-reply@us.greenhouse-mail.io', subject: 'Thank you for applying to Zephyr Systems', text: 'Application received.',
+  }), JOBS);
+  ok('a marked job is still confirmed, not re-marked', d.action === 'confirm-applied' && d.matched === 'u:zephyr', d);
+
   /* ── ordering ─────────────────────────────────────────────────────────── */
   console.log('ordering');
 
@@ -322,6 +369,79 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
   // The same mail, with a bulk header bolted on, must write nothing.
   const bulked = P.parseMail(raw.replace('Subject:', 'List-Id: <news>\r\nSubject:'));
   ok('bulk header survives to the veto', decide(bulked, JOBS).action === 'note-only', decide(bulked, JOBS));
+
+  /* ── the app side: telling the person ─────────────────────────────────── */
+  /* index.html's mail block, run for real against stubs: the same trick as
+     selfcheck-boards.js. One Function body, so every slice sees every stub. */
+  console.log('app: alerts, filing, asking');
+  {
+    const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
+    const grab = (re) => { const m = re.exec(src); if (!m) throw new Error('slice missing: ' + re); return m[0]; };
+    const block = grab(/let MAIL=\[\], MAIL_TOKEN=null[\s\S]*?\n(?=document\.addEventListener\('visibilitychange')/);
+    const env = { toasts: [], saves: 0, store: new Map(), rows: [], token: null };
+    const mk = new Function('env', `
+      const INBOX_LIVE=true, USER={id:'u'}, DB={current:'p1'}, PROFILE_IDS={p1:'pid'};
+      const cloudNow=()=>true, keyOf=j=>j.k, stOf=j=>j.stage, setStage=(j,st)=>{ j.stage=st; };
+      const listOf=(j,k)=>{ try{ const v=JSON.parse(j[k]||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } };
+      const setList=(j,k,v)=>{ j[k]=JSON.stringify(v); };
+      const P=()=>env.p, save=async()=>{ env.saves++; }, render=()=>{}, showJob=()=>{}, replyInboxDialog=()=>{}, modal=()=>null;
+      const askToast=(label,status,acts)=>env.toasts.push({label,status,acts:(acts||[]).map(a=>a.label)});
+      const stageChange=(j,to)=>{ j.stage=to; };
+      const localStorage={ getItem:k=>env.store.has(k)?env.store.get(k):null, setItem:(k,v)=>env.store.set(k,String(v)) };
+      const q={ select(){return q;}, eq(){return q;}, order(){return q;}, limit(){ return Promise.resolve({data:env.rows}); },
+                single(){ return Promise.resolve({data:{inbox_token:env.token}}); } };
+      const SB={ from:()=>q };
+      ${block}
+      return { checkMail, mailJobKey, remindApplied, askApplied, inboxNudge,
+               setAskAt:(t)=>{ if(ASK_APPLIED) ASK_APPLIED.at=t; } };`);
+    const A = mk(env);
+    const J = (k, company, stage, events) => ({ k, title: 'Engineer', company, stage, events: JSON.stringify(events || []) });
+    env.p = { jobs: [J('u:a', 'Acme', 'new'), J('u:b', 'Beta', 'live'), J('u:c', 'Cobalt', 'sent', [{ on: '2026-10-01', kind: 'mail', mail: 'm-filed' }])] };
+    const row = (id, at, kind, extra) => ({ id, created_at: at, subject: 's-' + id, from_addr: 'x@y.com',
+      decision: { kind, action: 'store-unmatched', ...(extra && extra.decision) }, ...extra });
+
+    env.rows = [row('m0', '2026-10-01T00:00:00+00:00', 'ack')];
+    await A.checkMail(true);
+    ok('first look replays nothing as news', env.toasts.length === 0, env.toasts);
+    ok('first look starts the clock', env.store.get('triage:mailseen:pid') === '2026-10-01T00:00:00+00:00', [...env.store]);
+
+    env.rows = [
+      row('m4', '2026-10-05T00:00:00+00:00', 'noise'),
+      row('m3', '2026-10-04T00:00:00+00:00', 'human'),
+      row('m2', '2026-10-03T00:00:00+00:00', 'ack', { applied_to: 'u:b', applied_stage: 'sent' }),
+      row('m1', '2026-10-02T00:00:00+00:00', 'ack', { applied_to: 'u:a', applied_stage: 'sent' }),
+      row('m0', '2026-10-01T00:00:00+00:00', 'ack'),
+    ];
+    await A.checkMail(true);
+    ok('a stage the Worker set is made here too', env.p.jobs[0].stage === 'sent' && env.saves === 1, env.p.jobs[0]);
+    ok('forward only: a live job is not walked back to sent', env.p.jobs[1].stage === 'live', env.p.jobs[1]);
+    ok('three new mails, noise left out', env.toasts.length === 3, env.toasts.map(t => t.label));
+    ok('unplaced mail asks which job', env.toasts.some(t => t.acts.includes('Which job?') && /Couldn't tell/.test(t.status)), env.toasts);
+    ok('placed mail says what moved', env.toasts.some(t => /Acme/.test(t.status) && /marked applied/.test(t.status) && t.acts.includes('Open job')), env.toasts);
+    env.toasts = [];
+    await A.checkMail(true);
+    ok('seen mail is not announced twice', env.toasts.length === 0, env.toasts);
+
+    ok('a filed mail belongs to the job that filed it', A.mailJobKey({ id: 'm-filed', decision: { action: 'store-unmatched' } }, env.p.jobs) === 'u:c');
+    ok('an ambiguous match belongs to no job', A.mailJobKey({ id: 'zz', decision: { matched: 'u:a', action: 'store-unmatched' } }, env.p.jobs) === null);
+
+    // Opening a posting, then coming back.
+    env.toasts = []; env.p.jobs[0].stage = 'new';
+    A.remindApplied(env.p.jobs[0]); A.askApplied();
+    ok('back within seconds is a glance, not asked', env.toasts.length === 0, env.toasts);
+    A.setAskAt(Date.now() - 60e3); A.askApplied();
+    ok('back after a while asks if they applied', env.toasts.length === 1 && env.toasts[0].label === 'Did you apply?', env.toasts);
+    env.toasts = []; A.remindApplied(env.p.jobs[1]); A.setAskAt(0); A.askApplied();
+    ok('a job already past new is not asked about', env.toasts.length === 0, env.toasts);
+
+    // The forwarding nudge: only without an address, and not again for days.
+    env.toasts = []; A.inboxNudge();
+    ok('no address: nudged to set it up', env.toasts.length === 1 && env.toasts[0].acts.includes('Set it up'), env.toasts);
+    A.inboxNudge();
+    ok('declined: not nudged again straight away', env.toasts.length === 1, env.toasts);
+    env.store.delete('triage:inboxnudge'); env.token = 'abc'; await A.checkMail(true); env.toasts = []; A.inboxNudge();
+    ok('has an address: never nudged', env.toasts.length === 0, env.toasts);
+  }
 
   console.log(fail ? `\n${fail} FAILED` : '\nALL PASS');
   process.exitCode = fail ? 1 : 0;

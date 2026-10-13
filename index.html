@@ -4846,7 +4846,7 @@ async function replyInboxDialog(){
     const { data, error }=await SB.from('profiles').select('inbox_token').eq('id',pid).single();
     if(error) throw new Error(error.message);
     token=data&&data.inbox_token||null;
-    const r=await SB.from('inbound_mail').select('subject,from_addr,decision,applied_to,applied_stage,created_at')
+    const r=await SB.from('inbound_mail').select('id,subject,from_addr,decision,applied_to,applied_stage,created_at')
       .eq('profile_id',pid).order('created_at',{ascending:false}).limit(12);
     if(!r.error) mail=r.data||[];
   }catch(e){ body.innerHTML='<span class="err">Could not read your settings: '+esc(e.message)+'</span>'; return; }
@@ -4883,7 +4883,7 @@ async function replyInboxDialog(){
              <span style="font-family:var(--mono);font-size:11px">from:(greenhouse.io OR lever.co OR ashbyhq.com OR workable.com OR smartrecruiters.com OR recruitee.com)</span></li>
            <li>Tick <b>Forward it to</b> and pick the address. Add a second filter for any company you applied to directly.</li>
          </ol>
-         <p style="margin:0 0 12px;font-size:11px">Only mail your filter sends is ever seen. A receipt (&ldquo;thank you for applying&rdquo;) confirms the applied date and changes nothing else — only a message from a person moves a job to <b>In conversation</b>.</p>
+         <p style="margin:0 0 12px;font-size:11px">Only mail your filter sends is ever seen. A receipt (&ldquo;thank you for applying&rdquo;) marks the job applied if you had not — useful when you applied on the company&rsquo;s site — and only a message from a person moves a job to <b>In conversation</b>. Each mail shows up in its job&rsquo;s history.</p>
          ${rows.length?`<label class="lab">What it has concluded</label>
            <div style="margin-top:4px">${rows.map(m=>{
              const k=m.decision.kind||'?';
@@ -4891,12 +4891,15 @@ async function replyInboxDialog(){
              return `<div class="contact-row" style="font-size:11px">
                <span class="pill2 ${tone}">${esc(k)}</span>
                <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.subject||'(no subject)')}</span>
-               <span style="font-family:var(--mono);color:var(--dim)">${esc(m.applied_to||m.decision.how||'—')}</span></div>`;
+               ${!m.applied_to && m.decision.action==='store-unmatched' && MAIL.some(x=>x.id===m.id)
+                 ? `<button class="btn-sm" data-ri-file="${esc(m.id)}">Which job?</button>`
+                 : `<span style="font-family:var(--mono);color:var(--dim)">${esc(m.applied_to||m.decision.how||'—')}</span>`}</div>`;
            }).join('')}</div>
            <p style="margin:8px 0 12px;font-size:11px">Got one wrong? Change the stage on the job — nothing here overrides you, and a row only ever moves out of <b>Applied</b>.</p>`
           :'<p style="margin:0 0 12px;font-size:11px">Nothing has arrived yet.</p>'}
          <div class="btn-row"><button class="btn-sm" id="riRot">Rotate address</button></div>`;
 
+    d.querySelectorAll('[data-ri-file]').forEach(b=>b.onclick=()=>{ d.remove(); fileMail(b.dataset.riFile); });
     const on=d.querySelector('#riOn');
     if(on) on.onclick=async()=>{ on.disabled=true; await setToken(newInboxToken()); };
     const cp=d.querySelector('#riCopy');
@@ -4920,6 +4923,167 @@ async function replyInboxDialog(){
   }
   draw();
 }
+
+/* Mail that arrived, said out loud. The Worker files what it can and moves
+   stages by itself, and that used to happen in silence: a job turned into
+   "In conversation" and nothing said why, and a mail it could not place sat
+   in a table nobody opened. So the app reads inbound_mail when it opens and
+   whenever the tab comes back, says what is new, shows every mail in its
+   job's history, and asks about the ones the Worker could not place.
+
+   It only READS inbound_mail -- owner-read, service-role-write, so nobody can
+   forge a reply into their own record. Filing a mail by hand is written on the
+   JOB instead, as an event carrying the mail's id, through the ordinary save:
+   that syncs to every device and stays the person's own edit. */
+let MAIL=[], MAIL_TOKEN=null, MAIL_AT=0;
+const KIND_SAYS = { human:'they replied', reject:'a rejection', ack:'an application receipt',
+                    unclear:'a mail it could not read', noise:'an automated mail' };
+const mailAcc = k => k==='human' ? 'go' : k==='reject' ? 'due' : k==='ack' ? 'awaiting' : '';
+const mailSeenKey = pid => 'triage:mailseen:'+pid;
+/* Which job a mail belongs to: what the Worker matched, else what the person
+   filed it under. Unmatched and ambiguous mail has no job until someone says. */
+function mailJobKey(m, jobs){
+  if(m.applied_to) return m.applied_to;
+  const d=m.decision||{};
+  if(d.matched && d.action!=='store-unmatched') return d.matched;
+  const j=(jobs||[]).find(x=>listOf(x,'events').some(e=>e.mail===m.id));
+  return j ? keyOf(j) : null;
+}
+const mailDay = m => String(m.received_at||m.created_at||'').slice(0,10);
+
+async function checkMail(force){
+  if(!INBOX_LIVE || !cloudNow() || !USER) return;
+  const p=P(), pid=PROFILE_IDS[DB.current]; if(!p||!pid) return;
+  if(!force && Date.now()-MAIL_AT<60e3) return;
+  MAIL_AT=Date.now();
+  try{
+    const [pr, r]=await Promise.all([
+      SB.from('profiles').select('inbox_token').eq('id',pid).single(),
+      SB.from('inbound_mail').select('id,subject,from_addr,excerpt,decision,applied_to,applied_stage,received_at,created_at')
+        .eq('profile_id',pid).order('created_at',{ascending:false}).limit(60)]);
+    if(r.error) throw new Error(r.error.message);
+    MAIL_TOKEN=(pr.data && pr.data.inbox_token) || null;
+    MAIL=(r.data||[]).filter(m=>m.decision && m.decision.action!=='show-code');
+  }catch(e){ MAIL_AT=0; console.warn('mail check:', e && e.message); return; }
+  if(PROFILE_IDS[DB.current]!==pid) return;          // switched profile mid-flight
+
+  let seen=null; try{ seen=localStorage.getItem(mailSeenKey(pid)); }catch(e){}
+  // Nothing yet still starts the clock, or the first mail ever would be history.
+  const newest=MAIL.length ? MAIL[0].created_at : new Date().toISOString();
+  try{ if(seen===null || newest>seen) localStorage.setItem(mailSeenKey(pid), newest); }catch(e){}
+  /* First look from this browser: the history is shown in each job, but it is
+     not replayed as news -- ten "new mail" toasts for last month is noise. */
+  if(seen===null){ render(); return; }
+  const fresh=MAIL.filter(m=>m.created_at>seen && m.decision.kind!=='noise');
+
+  /* The Worker already changed these rows on the server. This copy of the job
+     is older, and the next save would put the old stage back -- so the same
+     change is made here first. Forward only: a stage the person moved since
+     is theirs, and it wins. */
+  const order={new:0, sent:1, live:2, closed:3};
+  let moved=false;
+  fresh.forEach(m=>{
+    if(!m.applied_to || !m.applied_stage) return;
+    const j=p.jobs.find(x=>keyOf(x)===m.applied_to);
+    if(j && (order[stOf(j)]??0) < (order[m.applied_stage]??0)){ setStage(j,m.applied_stage); moved=true; }
+  });
+  if(moved) await save();
+  render();
+
+  fresh.slice(0,3).forEach(m=>{
+    const key=mailJobKey(m,p.jobs), i=key ? p.jobs.findIndex(x=>keyOf(x)===key) : -1, j=p.jobs[i];
+    const said=KIND_SAYS[m.decision.kind]||'a mail';
+    const what = m.applied_to && m.applied_stage==='sent' ? 'marked applied'
+               : m.applied_stage==='live' ? 'moved to In conversation'
+               : m.applied_stage==='closed' ? 'closed' : '';
+    if(j) askToast(`New mail: ${said}`,
+      [j.title,j.company].filter(Boolean).join(' · ')+(what?` — ${what}`:'')+(m.subject?` · “${m.subject}”`:''),
+      [{label:'Open job', go:true, run:()=>showJob(i)}]);
+    else askToast(`New mail: ${said}`,
+      `Couldn't tell which job this is about.`+(m.subject?` · “${m.subject}”`:''),
+      [{label:'Which job?', go:true, run:()=>fileMail(m.id)}]);
+  });
+  if(fresh.length>3) askToast(`${fresh.length-3} more new mails`, 'Each one is in its job’s history.',
+    [{label:'See them all', run:()=>replyInboxDialog()}]);
+}
+
+/* The Worker could not place it -- no match, or two jobs equally likely.
+   The person says which, and the job moves the way the mail says. */
+function fileMail(id){
+  const m=MAIL.find(x=>x.id===id), p=P(); if(!m||!p) return;
+  const k=(m.decision&&m.decision.kind)||'unclear';
+  const host=String(m.from_addr||'').replace(/^.*@/,'').replace(/>.*$/,'').split('.').slice(-2,-1)[0]||'';
+  const d=modal(`<div class="eyebrow">Which job is this about?</div>
+    <h2 style="margin:6px 0 4px;font-size:16px">${esc(m.subject||'(no subject)')}</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 8px">${esc(m.from_addr||'')} · ${esc(KIND_SAYS[k]||k)}</p>
+    ${m.excerpt?`<div class="qd-quote" style="max-height:120px;overflow:auto;margin-bottom:10px">${esc(m.excerpt)}</div>`:''}
+    <input type="text" id="fmQ" placeholder="Search your jobs by company or title" value="${esc(host)}">
+    <div id="fmList" style="margin-top:8px;max-height:260px;overflow:auto"></div>
+    <div class="btn-row" style="margin-top:10px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  const q=d.querySelector('#fmQ'), list=d.querySelector('#fmList');
+  const draw=()=>{
+    const t=q.value.trim().toLowerCase();
+    const hits=p.jobs.map((j,i)=>({j,i})).filter(({j})=>!j.deleted &&
+      (!t || `${j.company} ${j.title}`.toLowerCase().includes(t))).slice(0,40);
+    list.innerHTML=hits.length ? hits.map(({j,i})=>`<div class="contact-row" style="cursor:pointer" data-fm="${i}">
+        <span style="flex:1;min-width:0">${esc(j.title||'')} <span style="color:var(--dim)">· ${esc(j.company||'')}</span></span>
+        <span class="pill2">${esc(j.status||stOf(j))}</span></div>`).join('')
+      : `<p style="color:var(--muted);font-size:12px">No job matches. Clear the search to see them all.</p>`;
+    list.querySelectorAll('[data-fm]').forEach(r=>r.onclick=async()=>{
+      const j=p.jobs[+r.dataset.fm], st=stOf(j);
+      /* The same rules the Worker plays by: a person replying is the only
+         thing that reaches In conversation, a rejection closes, a receipt
+         marks an untouched job applied, and anything else just logs. */
+      const to = k==='human' && st!=='live' && st!=='closed' ? 'live'
+               : k==='reject' && st!=='closed' ? 'closed'
+               : k==='ack' && st==='new' ? 'sent' : '';
+      if(to) stageChange(j,to,{mail:m.id});
+      else{ logEvent(j,'mail',`filed: ${m.subject||'a mail'}`); const ev=listOf(j,'events'); ev[0].mail=m.id; setList(j,'events',ev); }
+      d.remove(); await save(); showJob(+r.dataset.fm);
+    });
+  };
+  q.oninput=draw; draw(); q.focus();
+}
+
+/* People open the posting from here and apply on the company's site, and then
+   nothing marks the job applied -- and a 'new' job is not something a reply
+   can be matched to. The Apply button marks it as it opens; every other way
+   out to a posting (the link in a job's detail, a dot on the plot) is
+   remembered, and coming back to the tab asks. */
+let ASK_APPLIED=null;
+function remindApplied(j){ if(j && stOf(j)==='new') ASK_APPLIED={ key:keyOf(j), at:Date.now() }; }
+function askApplied(){
+  const a=ASK_APPLIED; if(!a) return;
+  // Back within seconds is a glance, not an application.
+  if(Date.now()-a.at < 20e3) return;
+  ASK_APPLIED=null;
+  const p=P(), i=p ? p.jobs.findIndex(x=>keyOf(x)===a.key) : -1, j=i>=0 && p.jobs[i];
+  if(!j || stOf(j)!=='new') return;
+  askToast('Did you apply?', [j.title,j.company].filter(Boolean).join(' · '),
+    [{label:'Yes, mark applied', go:true, run:async()=>{ stageChange(j,'sent'); await save(); render(); }}],
+    'Not yet');
+}
+
+/* Reply tracking only works for people who set up the forward, and nothing
+   asked them to. Asked at the moment it pays off -- right after marking a job
+   applied -- and at most every four days, so declining it is respected. */
+function inboxNudge(){
+  if(!INBOX_LIVE || !cloudNow() || !MAIL_AT || MAIL_TOKEN) return;
+  const k='triage:inboxnudge';
+  try{ if(Date.now()-(+localStorage.getItem(k)||0) < 4*864e5) return; localStorage.setItem(k, String(Date.now())); }catch(e){ return; }
+  askToast('Let replies file themselves',
+    'Forward recruiter mail here once, and replies, rejections and receipts land on the right job on their own.',
+    [{label:'Set it up', go:true, run:()=>replyInboxDialog()}], 'Later');
+}
+
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible') return;
+  askApplied(); checkMail();
+});
+document.addEventListener('click',e=>{
+  const a=e.target.closest && e.target.closest('a[data-applyask]'); if(!a) return;
+  const p=P(); remindApplied(p && p.jobs[+a.dataset.applyask]);
+});
 
 /* ═══════════════ ONBOARDING ═══════════════ */
 function renderOnb(){
@@ -5460,6 +5624,18 @@ function jobDetail(j,i,acc){
 
   // Who did what, coloured by the same law: a reply is your move, a send is theirs.
   const kindAcc = k => k==='reply' ? 'go' : k==='sent' ? 'awaiting' : k==='chase' ? 'due' : '';
+  /* Mail about this job sits in its history beside what was logged, newest
+     first. An event that filed a mail is shown as the mail, not twice. */
+  const jk=keyOf(j), jobsNow=(P()||{}).jobs||[];
+  const hist=MAIL.filter(m=>mailJobKey(m,jobsNow)===jk).map(m=>({ on:mailDay(m),
+      html:`<div class="qh ${mailAcc(m.decision.kind)}"><i></i><span class="when">${esc(mailDay(m))}</span>
+        <span class="what"><b>mail</b> · ${esc(KIND_SAYS[m.decision.kind]||'a mail')} · ${esc(m.from_addr||'')}
+        <details><summary>${esc(m.subject||'(no subject)')}</summary>
+          ${m.excerpt?`<div class="qd-quote">${esc(m.excerpt)}</div>`:''}</details></span></div>` }))
+    .concat(ev.filter(e=>!e.mail).map(e=>({ on:e.on,
+      html:`<div class="qh ${kindAcc(e.kind)}"><i></i><span class="when">${esc(e.on)}</span>
+        <span class="what"><b>${esc(e.kind)}</b>${e.text?' · '+esc(e.text):''}</span></div>` })))
+    .sort((a,b)=>String(b.on).localeCompare(String(a.on)));
 
   const advice =
       due              ? ['due', `Sent ${silent} days ago with no reply. One short nudge is worth sending; a second rarely is.`]
@@ -5498,9 +5674,8 @@ function jobDetail(j,i,acc){
         <div class="qd-quote">${esc(j.description)}</div>`:''}
 
       <div class="qd-h">History</div>
-      ${ev.length
-        ? ev.map(e=>`<div class="qh ${kindAcc(e.kind)}"><i></i><span class="when">${esc(e.on)}</span>
-            <span class="what"><b>${esc(e.kind)}</b>${e.text?' · '+esc(e.text):''}</span></div>`).join('')
+      ${hist.length
+        ? hist.map(h=>h.html).join('')
         : `<div class="qd-none">Nothing logged yet.</div>`}
       <div class="btn-row" style="margin-top:10px">${btn('logadd','Log something')}</div>
     </div>
@@ -5508,7 +5683,7 @@ function jobDetail(j,i,acc){
     <div class="qd-rail">
       ${advice?`<div class="qd-callout ${advice[0]}">${esc(advice[1])}</div>`:''}
       ${url
-        ? `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener">open the original posting ↗</a>`
+        ? `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener" data-applyask="${i}">open the original posting ↗</a>`
         : `<a class="lnk" href="https://www.google.com/search?q=${encodeURIComponent([j.title,j.company,j.location,'job'].filter(Boolean).join(' '))}" target="_blank" rel="noopener">no link saved — search Google for it ↗</a>`}
 
       <div><div class="qd-h">The record</div>
@@ -6327,7 +6502,7 @@ function bindPlot(){
   svg.addEventListener('click',ev=>{
     if(!ev.target.classList.contains('dot')) return;
     const idx=parseInt(ev.target.dataset.idx,10), j=P().jobs[idx];
-    if(j && httpUrl(j.url)) window.open(j.url,'_blank','noopener');
+    if(j && httpUrl(j.url)){ remindApplied(j); window.open(j.url,'_blank','noopener'); }
     else showJob(idx);
   });
 }
@@ -6598,8 +6773,9 @@ function renderTasks(){
     <div class="ts">${esc(t.status||'')}</div>
     ${t.state==='running'?'':`<div class="btn-row" style="margin-top:9px">
       ${t.state==='done'&&(t.result||[]).length?`<button class="btn-go btn-sm" data-task-open="${t.id}">Review</button>`:''}
+      ${(t.acts||[]).map((a,k)=>`<button class="btn-sm ${a.go?'btn-go':''}" data-task-act="${t.id}:${k}">${esc(a.label)}</button>`).join('')}
       ${t.undo?`<button class="btn-sm" data-task-undo="${t.id}">Undo</button>`:''}
-      <button class="btn-sm" data-task-drop="${t.id}">Dismiss</button></div>`}
+      <button class="btn-sm" data-task-drop="${t.id}">${esc(t.dropLabel||'Dismiss')}</button></div>`}
   </div>`).join('');
   el.querySelectorAll('[data-task-open]').forEach(b=>b.onclick=()=>{
     const t=TASKS.find(x=>x.id===b.dataset.taskOpen); if(!t) return;
@@ -6610,6 +6786,16 @@ function renderTasks(){
     dropTask(t.id); await t.undo();
   });
   el.querySelectorAll('[data-task-drop]').forEach(b=>b.onclick=()=>dropTask(b.dataset.taskDrop));
+  el.querySelectorAll('[data-task-act]').forEach(b=>b.onclick=async()=>{
+    const [id,k]=b.dataset.taskAct.split(':'), t=TASKS.find(x=>x.id===id);
+    const a=t && (t.acts||[])[+k]; if(!a) return;
+    dropTask(id); await a.run();
+  });
+}
+/* A toast that stays until it is answered: news, or a question. */
+function askToast(label, status, acts, dropLabel){
+  TASKS.push({ id:'t'+(++TASKSEQ), state:'done', label, status, acts, dropLabel });
+  renderTasks();
 }
 function dropTask(id){ TASKS=TASKS.filter(t=>t.id!==id); renderTasks(); }
 
@@ -7031,19 +7217,22 @@ document.addEventListener('click',async e=>{
   const to = a==='stage' ? b.dataset.to
            : (a==='sent'||a==='apply') ? 'sent' : a==='live' ? 'live'
            : a==='close' ? 'closed' : a==='reopen' ? 'new' : '';
-  if(to && STAGES.includes(to)){
-    /* Snapshotted before the change, and every stage change gets one -- not
-       just the optimistic apply. Reopening a row rewrites its follow-up clock
-       and closing one takes it out of the queue, and neither is obvious to
-       put back by hand once the row has moved tab. */
-    const undo = snapRow(j);
-    setStage(j,to);
-    logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
-    undoToast(j, undo, stageToast(j,to));
-    if(to==='sent') fbMoment('applied');
-  }
+  if(to && STAGES.includes(to)) stageChange(j,to);
   await save(); render();
 });
+/* Snapshotted before the change, and every stage change gets one -- not just
+   the optimistic apply. Reopening a row rewrites its follow-up clock and
+   closing one takes it out of the queue, and neither is obvious to put back by
+   hand once the row has moved tab. Does not save: every caller does. */
+function stageChange(j,to,extra){
+  const undo = snapRow(j);
+  setStage(j,to);
+  logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
+  // extra rides on the event just logged: {mail:id} files a mail under this job.
+  if(extra){ const ev=listOf(j,'events'); Object.assign(ev[0],extra); setList(j,'events',ev); }
+  undoToast(j, undo, stageToast(j,to));
+  if(to==='sent'){ fbMoment('applied'); inboxNudge(); }
+}
 
 /* ═══ sign in ═══
    Only ever reached when config.js is filled in. The copy is deliberate about
@@ -7401,6 +7590,7 @@ async function afterAuth(){
   CREDITS=null; loadCredits();          // not awaited: a slow balance mustn't hold up the app
   try{
     await afterAuthInner();
+    checkMail(true);                    // not awaited: news must not hold up the app
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.

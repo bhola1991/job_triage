@@ -474,6 +474,31 @@ evidence that anybody got a job.
 for a column to automate will not find one — the automation writes
 `jobs.stage`.
 
+### 2026-10-13: the mail is now SAID, and applying elsewhere is caught
+
+Until today the Worker filed mail and moved stages in silence, and production
+showed the cost: of seven mails received, three sat unmatched (one a real
+person's reply) and only **one of five profiles** had set up forwarding.
+
+- **Alerts.** `checkMail()` reads `inbound_mail` on sign-in and when the tab
+  returns, toasts what is new, and makes the Worker's stage change in the
+  in-memory job too -- otherwise the next save would write the stale stage back.
+- **In the job's thread.** `jobDetail` merges that job's mail into History, with
+  the excerpt. Read at render; the Worker still never writes `events`.
+- **Unplaced mail** gets a "Which job?" picker (`fileMail`). The filing is an
+  event on the JOB carrying the mail's id, so it syncs and stays the person's
+  own edit; `inbound_mail` is still owner-read only.
+- **Applied outside the app.** A receipt -- and only a receipt -- may now match
+  a `new` row and mark it applied (`mark-applied` in `reply-match.mjs`). And
+  opening a posting by any route other than Apply asks "Did you apply?" on
+  return (`askApplied`).
+- **Setup nudge** after marking applied, when there is no forwarding address.
+
+`selfcheck-reply.js` covers all of it, including the app side run out of
+`index.html` against stubs, and was mutation-tested. **Not yet seen against a
+real mailbox**: the alert, the History entry and the picker have only run
+against stubs, because they need a signed-in cloud session with mail in it.
+
 ### Why forwarding and not a mailbox
 
 The obvious build is Gmail's API with `gmail.readonly`, a cron job, and a

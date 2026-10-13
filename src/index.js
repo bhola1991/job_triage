@@ -118,7 +118,7 @@ async function routeToProfile(env, token, mail, providerId) {
   }
 
   const jr = await rest(env, `jobs?select=job_key,company,url,stage,deleted,sent_message_id` +
-    `&profile_id=eq.${profile.id}&stage=in.(sent,live)&deleted=is.false&limit=500`);
+    `&profile_id=eq.${profile.id}&stage=in.(new,sent,live)&deleted=is.false&limit=5000`);
   if (!jr.ok) throw new Error(`jobs lookup ${jr.status}`);
   const jobs = await jr.json();
 
@@ -140,6 +140,19 @@ async function routeToProfile(env, token, mail, providerId) {
     if (!up.ok) throw new Error(`stage patch ${up.status}`);
     const rows = await up.json();
     if (rows.length) { appliedTo = d.matched; appliedStage = d.stage; }
+  } else if (d.action === 'mark-applied') {
+    // A receipt for a job they never marked: they applied outside the app.
+    // Guarded on 'new', so a row the person has since moved is left alone.
+    const today = new Date().toISOString().slice(0, 10);
+    const up = await rest(env, `jobs?profile_id=eq.${profile.id}` +
+      `&job_key=eq.${encodeURIComponent(d.matched)}&stage=eq.new`, {
+      method: 'PATCH',
+      headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({ stage: 'sent', status: 'Applied',
+        date_applied: d.date_applied || today, last_touch: today }),
+    });
+    if (!up.ok) throw new Error(`mark-applied patch ${up.status}`);
+    if ((await up.json()).length) { appliedTo = d.matched; appliedStage = 'sent'; }
   } else if (d.action === 'confirm-applied' && d.date_applied) {
     // An acknowledgement is evidence of WHEN, not of a reply. Written only
     // where the app has no date at all, so a receipt arriving late can never

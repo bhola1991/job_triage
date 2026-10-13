@@ -122,9 +122,11 @@ export function tokenFrom(to) {
    applied to is far more likely a newsletter than a reply, and treating it as
    one would invent an application that never happened. */
 const OPEN_STAGES = new Set(['sent', 'live']);
+/* The one exception, and only for a receipt -- see decide(). */
+const UNSENT_STAGES = new Set(['new']);
 
-export function matchJob(mail, jobs) {
-  const open = (jobs || []).filter((j) => OPEN_STAGES.has(j.stage) && !j.deleted);
+export function matchJob(mail, jobs, stages = OPEN_STAGES) {
+  const open = (jobs || []).filter((j) => stages.has(j.stage) && !j.deleted);
   if (!open.length) return { job: null, how: 'no-open-jobs', confident: false };
 
   /* 1. The thread. Strongest signal there is: the mail quotes a Message-ID we
@@ -251,6 +253,23 @@ export function decide(mail, jobs) {
   const c = classify(mail);
   const base = { matched: m.job ? m.job.job_key : null, how: m.how, kind: c.kind, why: c.why };
 
+  /* People apply on the company's site and forget to mark it here, and then
+     every later mail about that job lands unmatched, because a 'new' row is
+     not a candidate. A receipt is the one mail that PROVES an application
+     happened, so a receipt -- and only a receipt -- may match a 'new' row and
+     mark it applied. Not a reply: 'human' about an unmarked job stays
+     unmatched (recruiter outreach looks the same), and nothing here can reach
+     'live' from 'new'. Never when the open rows were ambiguous: that is a
+     refusal, not an absence, and falling through would overrule it. */
+  if (!m.job && !m.how.startsWith('ambiguous') && c.kind === 'ack') {
+    const u = matchJob(mail, jobs, UNSENT_STAGES);
+    if (u.job && u.confident) {
+      return { ...base, matched: u.job.job_key, how: `unmarked:${u.how}`,
+        action: 'mark-applied', date_applied: dateOnly(mail.date) };
+    }
+    if (u.how.startsWith('ambiguous')) return { ...base, how: `unmarked:${u.how}`, action: 'store-unmatched' };
+  }
+
   if (!m.job || !m.confident) return { ...base, action: 'store-unmatched' };
   if (c.kind === 'human') {
     return m.job.stage === 'live'
@@ -269,4 +288,4 @@ function dateOnly(d) {
   return isNaN(+t) ? null : t.toISOString().slice(0, 10);
 }
 
-export const _internals = { ATS_SENDERS, NO_REPLY, BULK_HEADERS, OPEN_STAGES };
+export const _internals = { ATS_SENDERS, NO_REPLY, BULK_HEADERS, OPEN_STAGES, UNSENT_STAGES };
