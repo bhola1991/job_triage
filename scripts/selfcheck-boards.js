@@ -366,5 +366,35 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
      'now: the fresher posting leads instead');
  }
 
+ /* Rejection memory. Everything above ran with no DB and no localStorage, so
+    it remembered nothing -- which is also the assertion that a browser with
+    storage blocked still searches. From here both exist. */
+ {
+   const LS=new Map();
+   globalThis.localStorage={getItem:k=>LS.has(k)?LS.get(k):null, setItem:(k,v)=>LS.set(k,String(v))};
+   globalThis.DB={current:'p1'};
+   let calls=0;
+   SCORES=j=>{ calls++; return ({'https://r/1':90,'https://r/2':30})[j.url]; };
+   DBJOBS=[]; AGE={}; FEEDS={};
+   const day1=[J('https://r/1','Data Engineer','Acme','A'),J('https://r/2','Data Janitor','Beta','A')];
+   const r1=liveBoard({titles:['Data Engineer']},{},'t'); await r1.add(day1.map(j=>({...j})));
+   ok(calls===2 && r1.st.below===1,'first search scores both, rejects one');
+   // The next day: same two postings, plus the rejected role syndicated under a new link.
+   DBJOBS=r1.st.kept; calls=0;
+   const r2=liveBoard({titles:['Data Engineer']},{},'t');
+   await r2.add(day1.map(j=>({...j})).concat([J('https://other/9','Data Janitor','Beta','B')]));
+   ok(calls===0 && r2.st.dropped.dupe===3,'a rejected posting is not scored again '+calls+' '+JSON.stringify(r2.st.dropped));
+   ok(!seenKeys({jobs:[],track:'other'}).has('u:https://r/2') && seenKeys({jobs:[]}).has(keyOf({url:'https://r/2'})),'a rejection belongs to one track');
+   // An unscored row was never judged, so it must come back.
+   SCORES='fail'; DBJOBS=[];
+   const r3=liveBoard({titles:['Data Engineer']},{},'t'); await r3.add([J('https://r/3','Data Engineer','Zeta','A')]);
+   ok(!seenKeys({jobs:[]}).has(keyOf({url:'https://r/3'})),'an unscored posting is not remembered as rejected');
+   // Expiry: an entry as old as MAX_AGE_DAYS is forgotten.
+   const k='triage:rejected:p1:', m=JSON.parse(LS.get(k)); for(const x in m) m[x]-=30; LS.set(k,JSON.stringify(m));
+   ok(!seenKeys({jobs:[]}).has(keyOf({url:'https://r/2'})),'a rejection expires at MAX_AGE_DAYS');
+   LS.set(k,'not json'); ok(seenKeys({jobs:[]}).size===0,'corrupt storage remembers nothing rather than throwing');
+   delete globalThis.localStorage; delete globalThis.DB;
+ }
+
  console.log(process.exitCode?'SOME FAILED':'ALL PASS');
 })();

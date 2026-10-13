@@ -177,7 +177,7 @@ module.exports = {
       note: 'Unwraps the edge-function error body. NEEDCREDITS is the one case that opens a dialog rather than throwing a message.' },
 
     'bd.filter':   { diagram: 'board', group: 'free triage — before anything is paid for', kind: 'sync', label: 'boardFilter',
-      anchor: { file: 'index.html', fn: 'boardFilter' }, section: "board search: every source's results, scored, 50+ kept", body: '22a82d',
+      anchor: { file: 'index.html', fn: 'boardFilter' }, section: "board search: every source's results, scored, 50+ kept", body: '35e648',
       note: 'Three counters, nothing else. There is deliberately no title-word filter -- it threw away half of real searches, and every job is scored against the CV anyway. Dedupes on keyOf plus tcKey(), the shared title+company identity: an empty or placeholder company yields NO second key, because "tc:<title>|" would match every unattributed posting sharing a title.' },
     'bd.url':      { diagram: 'board', group: 'free triage — before anything is paid for', kind: 'branch', label: 'isPostingUrl',
       anchor: { file: 'index.html', fn: 'isPostingUrl' }, section: "board search: every source's results, scored, 50+ kept",
@@ -258,7 +258,7 @@ module.exports = {
 
     /* ── scoring ────────────────────────────────────────────────────────── */
     'sc.cut':     { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreAndCut — batches of {SCORE_BATCH}',
-      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: '6179f6',
+      anchor: { file: 'index.html', fn: 'scoreAndCut' }, section: "board search: every source's results, scored, 50+ kept", body: 'b298db',
       note: 'Batches of {SCORE_BATCH} rather than the {AUTO_MAX}-guarded 6 used for rescoring, because a search can return hundreds. Both scoring paths are on {DS_MODELS.flash} as of 2026-10-04 -- this one always was, for volume, and the rescore button moved after both tiers were measured through this prompt against the same ten labelled postings: calibration 0.9 each, flag recall 0.867 each, pro ahead only on flag precision (0.765 to 0.684) in a field mergeJudgment overwrites from Jev on every judged row. So the {MIN_FIT} intake cut is applied to flash scores, and one list no longer holds numbers from two tiers. Everything it scored is then judged in one pass through judgeMany, after the loop rather than inside it; a judgement that fails costs the flags and never the scoring already paid for.' },
     'sc.batch':   { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'scoreBatch',
       anchor: { file: 'index.html', fn: 'scoreBatch' }, section: 'scoring run',
@@ -280,8 +280,8 @@ module.exports = {
       note: 'Strips code fences and slices first { to last }. Throws on malformed output, which is caught one level up.' },
     'sc.keep':    { diagram: 'scoring', group: 'back in the browser', kind: 'sync', label: 'kept: fit {MIN_FIT}+',
       anchor: { file: 'index.html', const: 'MIN_FIT' }, section: "board search: every source's results, scored, 50+ kept" },
-    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}',
-      anchor: { file: 'index.html', re: 'else below\\+\\+' },
+    'sc.below':   { diagram: 'scoring', group: 'back in the browser', kind: 'drop', label: 'dropped: scored under {MIN_FIT}, remembered {MAX_AGE_DAYS} days',
+      anchor: { file: 'index.html', re: 'else rejected\\.push\\(j\\)' },
       note: 'The one place a paid-for row is thrown away. It was judged and it lost.' },
     'sc.rescore': { diagram: 'scoring', group: 'browser', kind: 'sync', label: 'runScoring \u2014 the Score button, batches of 6',
       anchor: { file: 'index.html', fn: 'runScoring' }, section: 'scoring run',

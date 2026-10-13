@@ -348,6 +348,15 @@ conflict resolution puts it back.
 
 ### Still standing
 
+**Update 2026-10-13: the rejection memory below is now on `main`, re-implemented
+rather than merged.** The branch stored it in the sync blob, which no longer
+exists (profiles are rows), and its edge function still carried LinkedIn. What
+landed is browser-side only: `rejectedOf` / `rememberRejected` / `seenKeys` in
+`index.html`, kept in `localStorage` per profile **and track**, expiring at
+`MAX_AGE_DAYS`, asserted in `selfcheck-boards.js`. Its ceiling is stated at the
+code: per-device, and not cleared when the CV changes. The branch itself is
+untouched and now carries nothing `main` wants.
+
 `claude/inspiring-brahmagupta-k0b4l7` (`8235557`) — **kept, and not merged.**
 One commit, 139 behind, conflicting in `index.html` and the edge function, and
 its edge function also still carries LinkedIn. It holds two things:

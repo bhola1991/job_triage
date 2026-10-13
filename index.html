@@ -4052,6 +4052,44 @@ function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
      3. scoreAndCut  - full scoring against the CV; below MIN_FIT is dropped */
 const MAX_AGE_DAYS = 30;
 
+/* Postings already scored below MIN_FIT and dropped. p.jobs is the tracker,
+   not a log, so a rejection used to leave no trace -- and the server floors
+   the search window at a week, so the same rejected posting came back every
+   day for seven days and was pulled from its ATS feed and re-scored each time:
+   one verdict, paid for up to seven times by anyone who searches daily.
+
+   Keyed by profile AND track, because a score is a verdict against a track and
+   a role wrong for one may be right for another. Entries expire at
+   MAX_AGE_DAYS: past that boardFilter drops the posting for age anyway.
+
+   ponytail: this browser only, and not cleared when the CV is edited. A second
+   device re-buys the verdicts once; an edited CV keeps its old rejections for
+   up to 30 days. Move it to a profiles column if either starts to matter. */
+const dayNo = () => Math.floor(Date.now()/864e5);
+const rejKey = p => 'triage:rejected:'+DB.current+':'+((p&&p.track)||'');
+function rejectedOf(key){
+  try{
+    const r=JSON.parse(localStorage.getItem(key)||'{}'), cut=dayNo()-MAX_AGE_DAYS;
+    for(const k in r) if(!(r[k]>cut)) delete r[k];
+    return r;
+  }catch(e){ return {}; }             // no storage, or not ours to parse: remember nothing
+}
+function rememberRejected(key, jobs){
+  if(!jobs.length) return;
+  const r=rejectedOf(key), d=dayNo();
+  jobs.forEach(j=>{ r[keyOf(j)]=d; const tc=tcKey(j); if(tc) r[tc]=d; });
+  try{ localStorage.setItem(key, JSON.stringify(r)); }catch(e){}
+}
+/* Everything this profile has already judged: what is in the list, by link and
+   by title+company, and what was scored and dropped. */
+function seenKeys(p){
+  const s=new Set();
+  ((p&&p.jobs)||[]).forEach(j=>{ s.add(keyOf(j)); const tc=tcKey(j); if(tc) s.add(tc); });
+  let key=''; try{ key=rejKey(p); }catch(e){}
+  if(key) Object.keys(rejectedOf(key)).forEach(k=>s.add(k));
+  return s;
+}
+
 /* A normalized server result (API source or site scraper) as a job row.
    query holds the publisher (LinkedIn, Naukri, ...) for the live list. */
 function jsearchRow(x){
@@ -4115,7 +4153,7 @@ function tcKey(j){
 }
 
 function boardFilter(jobs, trk, seen){
-  const p=P(); seen=seen||new Set(p?p.jobs.map(keyOf):[]);
+  seen=seen||seenKeys(P());
   const dropped={listing:0, old:0, dupe:0};
   const out=[];
   jobs.forEach(j=>{
@@ -4125,7 +4163,8 @@ function boardFilter(jobs, trk, seen){
     // job is scored against the CV now, and that decides relevance.
     const age=ageOf(j);                       // unknown age is kept: not the same as old
     if(age!==null && age>MAX_AGE_DAYS){ dropped.old++; return; }
-    // The same role syndicated to several boards, or already in the list.
+    // The same role syndicated to several boards, already in the list, or
+    // already scored below MIN_FIT by an earlier search and dropped.
     const tc=tcKey(j);
     if(seen.has(keyOf(j)) || (tc && seen.has(tc))){ dropped.dupe++; return; }
     seen.add(keyOf(j)); if(tc) seen.add(tc);
@@ -4142,7 +4181,7 @@ function boardFilter(jobs, trk, seen){
 const SCORE_BATCH = 12;
 const MIN_FIT = 50;
 async function scoreAndCut(jobs, prof, track){
-  const kept=[], unscored=[], scored=[]; let below=0;
+  const kept=[], unscored=[], scored=[], rejected=[];
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
@@ -4197,15 +4236,17 @@ async function scoreAndCut(jobs, prof, track){
 
   // The cut stays on the DeepSeek score until the eval set says the composed
   // one ranks at least as well — see PLAN.md 2e, which is the gate for that.
-  scored.forEach(({j, r})=>{ if(r.score>=MIN_FIT) kept.push(j); else below++; });
-  return {kept, unscored, below};
+  scored.forEach(({j, r})=>{ if(r.score>=MIN_FIT) kept.push(j); else rejected.push(j); });
+  // unscored is not rejected: the model never judged it, so nothing is known.
+  return {kept, unscored, rejected, below:rejected.length};
 }
 
 /* The live results while a search runs. Each source's jobs go in through
    add(): free filter, then full postings from company feeds (dropping closed
    ones), then scoring, and what scores MIN_FIT+ joins the list. */
 function liveBoard(trk, prof, track){
-  const p=P(), seen=new Set(p?p.jobs.map(keyOf):[]);
+  const p=P(), seen=seenKeys(p);
+  let rk=''; try{ rk=rejKey(p); }catch(e){}   // fixed now: the track can change mid-search
   const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, old:0, dupe:0}};
   /* Yield per origin (the source that delivered a job), for the usage ledger.
      seenIn records every origin that returned each job, before any filtering,
@@ -4237,6 +4278,7 @@ function liveBoard(trk, prof, track){
       st.closed+=ats.closed;
       const r=await scoreAndCut(ats.jobs, prof, track);
       st.checking--;
+      if(rk) rememberRejected(rk, r.rejected);
       r.kept.forEach(j=>O(j.origin||'google').kept_50++);
       st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
       st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
