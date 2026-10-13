@@ -49,6 +49,12 @@ const ATS_SENDERS = new Map(Object.entries({
   'icims.com': 'icims',
   'successfactors.com': 'successfactors',
   'taleo.net': 'taleo',
+  /* Job boards, which speak for a company exactly as an ATS does: the sender
+     is the board, never the employer, so the company comes from the text. */
+  'linkedin.com': 'linkedin',
+  'naukri.com': 'naukri',
+  'indeed.com': 'indeed',
+  'foundit.in': 'foundit',
 }));
 
 /* A box that cannot be written back to is a machine, whatever it says. */
@@ -196,6 +202,8 @@ const ACK_CUES = [
   'thank you for applying', 'thanks for applying', 'thank you for your application',
   'we have received your application', 'application received', 'your application has been received',
   'thank you for your interest in', 'successfully submitted', 'we will review your',
+  // How the job boards say it.
+  'your application was sent', 'application submitted', 'you applied to', 'you applied for',
 ];
 const HUMAN_CUES = [
   'are you available', 'your availability', 'schedule a call', 'set up a call',
@@ -270,7 +278,21 @@ export function decide(mail, jobs) {
     if (u.how.startsWith('ambiguous')) return { ...base, how: `unmarked:${u.how}`, action: 'store-unmatched' };
   }
 
-  if (!m.job || !m.confident) return { ...base, action: 'store-unmatched' };
+  if (!m.job || !m.confident) {
+    /* The Gmail filter is wide on purpose -- it matches on words, so it also
+       forwards a bank's "your loan application" and a newsletter about
+       interviews. Mail like that is DROPPED: not stored, not shown. What is
+       kept without a job is only what a person could still place by hand:
+         - a mail that named one of their jobs but not which (ambiguous);
+         - a reply or a rejection, whoever sent it;
+         - a receipt from a platform that sends receipts for a living.
+       A receipt from anybody else about a company they do not hold is
+       indistinguishable from the bank's, and there is no job to file it under. */
+    const placeable = m.how.includes('ambiguous')
+      || c.kind === 'human' || c.kind === 'reject'
+      || (c.kind === 'ack' && m.how.includes('ats:'));
+    return { ...base, action: placeable ? 'store-unmatched' : 'drop' };
+  }
   if (c.kind === 'human') {
     return m.job.stage === 'live'
       ? { ...base, action: 'note-only', note: 'already live' }

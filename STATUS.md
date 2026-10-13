@@ -494,6 +494,16 @@ person's reply) and only **one of five profiles** had set up forwarding.
   return (`askApplied`).
 - **Setup nudge** after marking applied, when there is no forwarding address.
 
+- **One wide Gmail filter, and a Worker that drops what is unrelated.** The old
+  setup text forwarded six ATS senders and told people to add a filter per
+  company, which nobody does. `GMAIL_FILTER` now matches on words as well, so
+  it also forwards a bank's "your application". `decide()` answers `drop` for
+  mail that matches no job and is not a reply, a rejection, an ambiguous match
+  or a platform receipt, and the Worker returns before storing it. LinkedIn,
+  Naukri, Indeed and Foundit are platform senders now. Unverified: the filter
+  string has not been pasted into a real Gmail, and `privacy.html` says
+  nothing about forwarded mail at all.
+
 `selfcheck-reply.js` covers all of it, including the app side run out of
 `index.html` against stubs, and was mutation-tested. **Not yet seen against a
 real mailbox**: the alert, the History entry and the picker have only run

@@ -123,6 +123,8 @@ async function routeToProfile(env, token, mail, providerId) {
   const jobs = await jr.json();
 
   const d = decide(mail, jobs);
+  // Not about any of their jobs: never stored. See decide().
+  if (d.action === 'drop') { console.log(`inbound mail dropped as unrelated (${d.kind}, ${d.how})`); return; }
   let appliedTo = null, appliedStage = null;
 
   if (d.action === 'set-stage') {

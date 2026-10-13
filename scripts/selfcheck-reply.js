@@ -217,6 +217,47 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
   }), JOBS);
   ok('a marked job is still confirmed, not re-marked', d.action === 'confirm-applied' && d.matched === 'u:zephyr', d);
 
+  /* ── a wide filter, and what it must not keep ─────────────────────────── */
+  console.log('unrelated mail is dropped');
+
+  // The words the Gmail filter matches on, in mail that is not about a job.
+  d = decide(mail({
+    from: 'HDFC Bank <alerts@hdfcbank.com>', subject: 'Your application has been received',
+    text: 'Thank you for your application for a personal loan.',
+  }), JOBS);
+  ok('a bank receipt is dropped', d.action === 'drop', d);
+
+  d = decide(mail({
+    from: 'Career Weekly <news@careerweekly.com>', subject: 'Ten interview tips',
+    text: 'How to prepare for your next interview.', headers: { 'list-unsubscribe': '<x>' },
+  }), JOBS);
+  ok('an interview newsletter is dropped', d.action === 'drop', d);
+
+  d = decide(mail({ from: 'a.friend@gmail.com', subject: 'lunch?', text: 'Are we still on for Friday' }), JOBS);
+  ok('ordinary mail is dropped', d.action === 'drop', d);
+
+  // What is kept with no job, because a person could still place it.
+  d = decide(mail({
+    from: 'jobs-noreply@linkedin.com', subject: 'Your application was sent to Halberd',
+    text: 'Your application was sent to Halberd.',
+  }), JOBS);
+  ok('a board receipt for an unknown company is kept to be placed', d.action === 'store-unmatched' && d.kind === 'ack', d);
+
+  d = decide(mail({
+    from: 'priya@somewhere-new.com', subject: 'Re: your profile', text: 'Are you available for a call this week?',
+  }), JOBS);
+  ok('a person replying is kept even with no job', d.action === 'store-unmatched' && d.kind === 'human', d);
+
+  // A board receipt naming a job they hold marks it, like any ATS receipt.
+  d = decide(mail({
+    from: 'jobs-noreply@linkedin.com', subject: 'Your application was sent to Quarry', text: 'Your application was sent to Quarry.',
+  }), JOBS);
+  ok('a LinkedIn receipt marks the unmarked job applied', d.action === 'mark-applied' && d.matched === 'u:untouched', d);
+
+  // Matched mail is never dropped, whatever it says.
+  d = decide(mail({ from: 'priya@zephyr.co.in', subject: 'Re: Data Engineer', text: 'Noted, thanks.' }), JOBS);
+  ok('matched mail is kept even when unclear', d.action === 'note-only' && d.matched === 'u:zephyr', d);
+
   /* ── ordering ─────────────────────────────────────────────────────────── */
   console.log('ordering');
 

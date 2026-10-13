@@ -4819,6 +4819,18 @@ const INBOX_DOMAIN = 'jobtriage.in';
         src/index.js can resolve a token to a profile.
 */
 const INBOX_LIVE = true;
+/* One filter, set once, for every application they will ever make. It matches
+   the platforms that send receipts for a living by sender, and everything else
+   by the words such mail uses -- because most replies come from a company's
+   own domain, which no sender list can know in advance. It is wide on purpose
+   and forwards unrelated mail too; src/reply-match.mjs drops that unstored
+   (action 'drop'), which is what makes wide affordable. Keep the two in step:
+   a word added here that no cue there recognises only forwards more to drop. */
+const GMAIL_FILTER = 'from:(greenhouse.io OR greenhouse-mail.io OR lever.co OR ashbyhq.com OR workable.com OR workablemail.com'
+  + ' OR smartrecruiters.com OR recruitee.com OR myworkday.com OR icims.com OR successfactors.com OR taleo.net)'
+  + ' OR "your application" OR "thank you for applying" OR "thanks for applying" OR "you applied" OR "application received"'
+  + ' OR "application submitted" OR interview OR "next steps" OR "your availability" OR "notice period" OR "schedule a call"'
+  + ' OR "moving forward" OR "other candidates" OR "regret to inform"';
 const inboxAddr = t => `r.${t}@${INBOX_DOMAIN}`;
 const newInboxToken = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join('');
@@ -4879,10 +4891,12 @@ async function replyInboxDialog(){
          <label class="lab">Set it up in Gmail</label>
          <ol style="margin:4px 0 12px;padding-left:18px;line-height:1.7">
            <li>Settings → <b>Forwarding and POP/IMAP</b> → <b>Add a forwarding address</b> → paste the address above. Gmail mails a code or a confirmation link here; reopen this panel to get it.</li>
-           <li>Settings → <b>Filters</b> → <b>Create a new filter</b>. In <i>Has the words</i> put the ATS senders you hear from, e.g.<br>
-             <span style="font-family:var(--mono);font-size:11px">from:(greenhouse.io OR lever.co OR ashbyhq.com OR workable.com OR smartrecruiters.com OR recruitee.com)</span></li>
-           <li>Tick <b>Forward it to</b> and pick the address. Add a second filter for any company you applied to directly.</li>
+           <li>Settings → <b>Filters</b> → <b>Create a new filter</b>. Paste this into <i>Has the words</i>:<br>
+             <textarea id="riFilter" readonly rows="4" style="font-family:var(--mono);font-size:11px;width:100%;margin-top:4px">${esc(GMAIL_FILTER)}</textarea>
+             <button class="btn-sm" id="riFilterCopy" style="margin-top:4px">Copy filter</button></li>
+           <li>Tick <b>Forward it to</b> and pick the address. That is the only filter you need, whatever you apply to next.</li>
          </ol>
+         <p style="margin:0 0 12px;font-size:11px">The filter matches on words, so it will also forward some mail that is not about a job — a bank&rsquo;s &ldquo;your application&rdquo;, a newsletter about interviews. <b>That mail is discarded on arrival and never stored.</b> Only mail about a job in your list, or a reply, rejection or receipt you could place yourself, is kept. A short reply with none of those words, from a recruiter&rsquo;s own address, will not be forwarded — mark that one by hand.</p>
          <p style="margin:0 0 12px;font-size:11px">Only mail your filter sends is ever seen. A receipt (&ldquo;thank you for applying&rdquo;) marks the job applied if you had not — useful when you applied on the company&rsquo;s site — and only a message from a person moves a job to <b>In conversation</b>. Each mail shows up in its job&rsquo;s history.</p>
          ${rows.length?`<label class="lab">What it has concluded</label>
            <div style="margin-top:4px">${rows.map(m=>{
@@ -4900,6 +4914,11 @@ async function replyInboxDialog(){
          <div class="btn-row"><button class="btn-sm" id="riRot">Rotate address</button></div>`;
 
     d.querySelectorAll('[data-ri-file]').forEach(b=>b.onclick=()=>{ d.remove(); fileMail(b.dataset.riFile); });
+    const fc=d.querySelector('#riFilterCopy');
+    if(fc) fc.onclick=()=>{ const t=d.querySelector('#riFilter'); t.select();
+      (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(
+        ()=>{ fc.textContent='Copied'; setTimeout(()=>fc.textContent='Copy filter',1200); },
+        ()=>{ try{document.execCommand('copy');}catch(_){} }); };
     const on=d.querySelector('#riOn');
     if(on) on.onclick=async()=>{ on.disabled=true; await setToken(newInboxToken()); };
     const cp=d.querySelector('#riCopy');
