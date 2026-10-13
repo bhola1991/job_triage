@@ -7232,8 +7232,18 @@ function renderReset(){
     AUTH.email=email;
     if(!email) { AUTH.err='Enter the email on your account.'; AUTH.msg=''; return renderReset(); }
     AUTH.busy=true; AUTH.err=''; AUTH.msg=''; renderReset();
-    try{ await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); }catch(err){}
+    /* supabase-js RETURNS {error} rather than throwing, so a try/catch alone
+       swallowed a mailer that was failing on every send and told the person
+       a link was on its way. An unknown address is not an error here (the
+       server answers 200 for it), so surfacing one gives nothing away. */
+    let failed=false;
+    try{ const {error}=await SB.auth.resetPasswordForEmail(email,{redirectTo:location.href}); failed=!!error; }
+    catch(err){ failed=true; }
     AUTH.busy=false;
+    if(failed){
+      AUTH.err='We could not send the email just now. Try again in a minute, or write to support@jobtriage.in.';
+      return renderReset();
+    }
     // Said the same way whether or not the address exists: telling a stranger
     // which emails have accounts here is not information worth giving away.
     AUTH.msg='If that address has an account, a reset link is on its way.';
