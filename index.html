@@ -228,10 +228,11 @@
      only reason marker colour is allowed on it. Do not lift them onto :root.
      Always paper, whatever the theme: it is marker on a white page.
      (Light rule, not a banner: this is one screen, not a pipeline stage.) */
-  .au-scene{
+  .au-scene,.au-strip,.ob-paper{
     --au-ink:#161A17;--au-paper:#F4F2EA;--au-card:#FFFDF6;
     --au-yl:#F4C61A;--au-rd:#D7363C;--au-bl:#2540C4;--au-gr:#2FA53A;--au-br:#5B3B24;--au-sk:#F1A98B;--au-gl:#6E7C8C;
-    --au-s1:#6A41C6;--au-s2:#EE579B;--au-s3:#1D8DCB;--au-gd:#6B4A2F;
+    --au-s1:#6A41C6;--au-s2:#EE579B;--au-s3:#1D8DCB;--au-gd:#6B4A2F}
+  .au-scene{
     /* How tall the floor is. Tied to the people's drawn height, so their feet
        and the car's wheels land on the lined ground at every width. */
     --au-floor:min(6.95vw,91px);
@@ -290,6 +291,50 @@
      is a black frame. Removed for this screen only, so no other screen moves. */
   body:has(.au-scene){margin:0}
   .au-fine{margin-top:16px}
+  /* Onboarding, on the same paper. The four setup steps come straight after
+     the drawing and show no job rows either, so they stay in its world: the
+     people stand in a strip across the top and the page below is paper, ink
+     outline and a hard marker shadow.
+     It is done by re-pointing the app's own tokens inside this wrapper rather
+     than by restyling each piece. Every card, chip, field and button on these
+     screens already reads --ink, --panel, --line and --signal, so they follow
+     without being touched -- and anything added to onboarding later follows
+     too. The greens and reds here are darker than the marker inks because they
+     are used as TEXT on paper and have to clear AA; the filled button takes
+     the marker green with ink on it, as the sign-in button does. */
+  .ob-paper{
+    color-scheme:light;min-height:100vh;background:var(--au-paper);color:var(--au-ink);
+    --ink:var(--au-paper);--panel:var(--au-card);--panel2:#EFEADB;--line:var(--au-ink);--hair:#D8D2C0;
+    --text:var(--au-ink);--muted:#484D49;--dim:#5B605C;
+    --signal:#1B7A2A;--signal-hi:#176B25;--on-signal:var(--au-ink);--cool:#1B7A2A;
+    --go:#1B7A2A;--good:#1B7A2A;--go-line:#1B7A2A;--good-line:#1B7A2A;--go-tint:#DDF0DC;--good-tint:#DDF0DC;
+    --signal-tint:#DDF0DC;--signal-glow:transparent;
+    --warn:#B3261E;--due:#B3261E;--warn-line:#B3261E;--warn-tint:#F9DEDC;
+    --shadow:4px 4px 0 var(--au-ink);--shadow-md:5px 5px 0 var(--au-ink);--shadow-lg:7px 7px 0 var(--au-ink)}
+  body:has(.ob-paper){margin:0}
+  .ob-paper .topbar{border-bottom:3px solid var(--au-ink)}
+  .ob-paper .onb .lede{font-weight:750;letter-spacing:-.025em}
+  .ob-paper .card,.ob-paper .trk,.ob-paper .drop{border-width:2px;border-radius:9px}
+  .ob-paper .trk{box-shadow:var(--shadow)}
+  .ob-paper .trk.sel{background:var(--go-tint);border-color:var(--au-ink)}
+  .ob-paper button{border-width:2px;border-color:var(--au-ink);border-radius:8px;font-weight:650;
+    box-shadow:3px 3px 0 var(--au-ink)}
+  .ob-paper button:hover:not(:disabled){border-color:var(--au-ink);color:var(--au-ink);
+    transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--au-ink)}
+  .ob-paper button:active:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--au-ink)}
+  .ob-paper .btn-go,.ob-paper .btn-go:hover:not(:disabled){background:var(--au-gr);color:var(--au-ink);border-color:var(--au-ink)}
+  .ob-paper input[type=text],.ob-paper textarea,.ob-paper select{border-width:2px;border-radius:8px;
+    background:#fff;font-family:var(--disp);font-size:14px}
+  .ob-paper input:focus,.ob-paper textarea:focus,.ob-paper select:focus{border-color:var(--au-ink);
+    outline:3px solid var(--au-bl);outline-offset:2px}
+  /* The strip: the same sky, ground and people, as a band rather than a page. */
+  .au-strip{--au-floor:49px;position:relative;overflow:hidden;height:180px;background:var(--au-paper);
+    border-bottom:3px solid var(--au-ink)}
+  .au-strip .au-people{position:absolute;right:4%;bottom:0;width:auto;height:92%;margin:0;padding:0}
+  @media(max-width:640px){
+    .au-strip{--au-floor:36px;height:132px}
+    .au-strip .au-people{right:2%}
+  }
   @media(max-width:900px){
     /* Stacked: the sign, then the people standing under it. No post -- it would
        run straight down through whoever is standing in the middle. */
@@ -5387,15 +5432,16 @@ function renderOnb(){
         <button id="onbBack3">${ONB.editing?'Skip':'Back'}</button></div>`;
   }
 
-  $('#root').innerHTML=`<div class="topbar"><h1>Job Triage</h1>
+  $('#root').innerHTML=`<div class="ob-paper"><div class="topbar"><h1>Job Triage</h1>
       <span class="sub" style="color:var(--muted);font-size:12px">fit &times; reachability</span>
       ${CLOUD&&USER?`<div class="spacer"></div>
         <span class="sub" style="color:var(--dim);font-size:12px">${esc(userName())}</span>
         <button class="btn-sm" id="onbSignOut">Sign out</button>`:''}</div>
+    <div class="au-strip">${AU_BACK}${AU_PEOPLE}</div>
     <div class="onb">
       <div class="steps">${steps.map((s,i)=>
         `<div class="stp ${i===ONB.step?'on':''} ${i<ONB.step?'did':''}">${i+1} &nbsp;${s}</div>`).join('')}</div>
-      ${body}</div>`;
+      ${body}</div></div>`;
 
   if($('#onbSignOut')) $('#onbSignOut').onclick=async()=>{
     // Same rule as the main sign-out: unsynced work is only here.
