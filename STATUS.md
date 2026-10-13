@@ -505,9 +505,11 @@ person's reply) and only **one of five profiles** had set up forwarding.
   nothing about forwarded mail at all.
 
 `selfcheck-reply.js` covers all of it, including the app side run out of
-`index.html` against stubs, and was mutation-tested. **Not yet seen against a
-real mailbox**: the alert, the History entry and the picker have only run
-against stubs, because they need a signed-in cloud session with mail in it.
+`index.html` against stubs, and was mutation-tested. **Seen against real mail on
+2026-10-13**: a receipt sent to the token address was stored as
+`mark-applied`, moved its `new` job to Applied, and the alert and the History
+entry both appeared in the app. The "Which job?" picker has still only run
+against stubs.
 
 ### Why forwarding and not a mailbox
 
