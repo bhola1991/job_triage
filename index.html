@@ -1965,7 +1965,9 @@ async function loadCredits(){
   if(!cloudNow()) return;
   try{ const {data}=await SB.from('credits').select('*').eq('user_id',USER.id).maybeSingle();
        // No row yet = a new account with the whole free tier still ahead of it.
-       showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true, tester:false}); }catch(e){}
+       // tester:true matches the column default while the beta runs -- see
+       // supabase/migrations/20261013_01_tester_default.sql before changing either.
+       showCredits(data || {balance:0, free_search:FREE_SEARCH_START, free_tier:true, tester:true}); }catch(e){}
 }
 async function hosted(action, body){
   const {data,error}=await SB.functions.invoke('api',{body:{action,...body}});

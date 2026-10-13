@@ -92,6 +92,9 @@ alter table public.credits add column if not exists unlimited boolean not null d
 -- Like `unlimited`, no policy lets a user write this column, and the browser
 -- reads it through the existing "own credits: select" policy.
 alter table public.credits add column if not exists tester boolean not null default false;
+-- New signups are testers while the beta runs (20261013_01_tester_default.sql).
+-- index.html's no-row fallback in loadCredits() must say the same.
+alter table public.credits alter column tester set default true;
 
 -- Make somebody a tester, or stop them being one, from the SQL editor:
 --   select public.set_tester('their_username');           -- or their email
