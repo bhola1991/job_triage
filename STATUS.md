@@ -511,6 +511,23 @@ person's reply) and only **one of five profiles** had set up forwarding.
 entry both appeared in the app. The "Which job?" picker has still only run
 against stubs.
 
+### 2026-10-13: what testers do is now recorded, and read every morning
+
+Invites went out today. Jobs, searches, scoring, mail and feedback already
+recorded themselves; what was invisible was visits, which screen onboarding
+loses people on, which jobs get opened and left, and errors that only happen
+in a tester's browser. `public.activity` holds those -- written by `track()` in
+`index.html`, testers only, actions and counts and never content, insert-only
+with no select policy, erased by `delete_my_data()`. `privacy.html` says so.
+
+`scripts/insights.js` reads it with everything else and prints who did what, how
+far each tester has ever got, what broke, what they said, and rule-based
+observations that each name the people they count. No model: with this few
+testers every number is checkable by reading the table above it.
+`scripts/morning.sh` runs it at 09:00 and keeps a dated copy under
+`~/.local/state/jobtriage/`. Activity before 2026-10-13 was never recorded, so
+"opened a job" starts at zero for everyone.
+
 ### Why forwarding and not a mailbox
 
 The obvious build is Gmail's API with `gmail.readonly`, a cron job, and a

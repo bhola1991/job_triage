@@ -472,7 +472,8 @@ scripts/selfcheck-feedback.js       When the app asks for feedback: the gap, the
 scripts/read-feedback.js            Reads public.feedback with the service role. The ONLY reader; RLS gives the app no view of it.
 scripts/heartbeat.js                Is the LIVE system working? Corpus freshness, DeepSeek balance, Mantiks credits, whether the
                                     refresh unit is stuck. NOT part of §8: it needs the network and real keys. refresh.sh runs it last.
-scripts/morning.sh                  heartbeat + read-feedback, summarised as a desktop notification. Run at 09:00 by jobtriage-morning.timer.
+scripts/morning.sh                  heartbeat + read-feedback + insights, summarised as a desktop notification. Run at 09:00 by jobtriage-morning.timer.
+scripts/insights.js                 What each beta tester did and where they stopped, from the tables plus public.activity. Rules and counts, no model. Reads only.
 scripts/selfcheck-worker.js         The Worker's two public write routes, and pricing.html's prices against the code. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/record-eval.ts              Records what scripts/eval/ commits: --deepseek fills `recorded`, --jev writes judgments.json. Live, needs keys.

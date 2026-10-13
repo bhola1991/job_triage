@@ -565,6 +565,7 @@ module.exports = {
       'public.claim_username': 'sign-up, not ingestion',
       'public.my_username': 'sign-in, not ingestion',
       'public.feedback': 'beta feedback from the person using the app, not a job arriving',
+      'public.activity': 'what a beta tester did in the app, read only by scripts/insights.js; not a job arriving',
       'public.inbound_mail': 'after the application, like the Applied review banner below. It will need a real node the day it writes jobs.stage for anyone: src/reply-match.mjs decides, nothing deployed applies the decision yet, and until something does there is no edge to draw.',
     },
     'billing.sql objects': {

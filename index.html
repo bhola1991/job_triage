@@ -1959,7 +1959,7 @@ function showCredits(w){
   if(typeof w.unlimited==='boolean') UNLIMITED=w.unlimited;
   if(typeof w.tester==='boolean') TESTER=w.tester;
   const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
-  fbGate();
+  fbGate(); trackReady();
 }
 async function loadCredits(){
   if(!cloudNow()) return;
@@ -4366,6 +4366,7 @@ let BOARD_COST = 25;
 async function finishSearch(trk, live, failed, paid){
   const p=P(); const st=live.st, d=st.dropped;
   const n=addJobs(st.kept.concat(st.unscored));
+  track('search_done',{ paid:!!paid, found:st.found, kept:st.kept.length, below:st.below, added:n, failed:failed.length });
   if(SEARCH_ID){
     hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
     // Only a search on our keys moves the "new since" point; it's what that window is for.
@@ -4614,6 +4615,40 @@ function fbNext(s, outcome, now){   // 'asked' | 'ignored' | 'gave'
    which opens the same card and is never prompted. The flag arrives with the
    wallet, after the first paint, so fbGate runs again when it lands. */
 const fbBeta=()=>!!(CLOUD && USER && TESTER);
+
+/* What a tester did that leaves no other trace: that they came back, which
+   screen they stopped on, which job they opened and left. Searches, scores,
+   stages, mail and feedback record themselves already. Testers only, actions
+   only -- a kind and a few small facts, never a CV, a posting or a message.
+   Insert-only (public.activity has no select policy); scripts/insights.js is
+   the one reader. Fire-and-forget: a lost event must never cost the person
+   anything, so every failure here is swallowed.
+
+   Whether this account is a tester is not known until the credits row has
+   loaded, so what happens before that waits in TRACK_Q rather than being lost
+   -- the first thing anyone does is exactly what is worth knowing. */
+let TRACK_Q=[], TRACK_READY=false, TRACK_VIEW='', TRACK_ERRS=0, TRACK_BACK=0;
+function trackSend(row){
+  try{ SB.from('activity').insert(row).then(()=>{},()=>{}); }catch(e){}
+}
+function track(kind, detail){
+  if(!CLOUD || !USER) return;
+  const row={ kind:String(kind).slice(0,40), detail:detail||{} };
+  if(!TRACK_READY){ if(TRACK_Q.length<50) TRACK_Q.push(row); return; }
+  if(TESTER) trackSend(row);
+}
+function trackReady(){
+  TRACK_READY=true;
+  const q=TRACK_Q; TRACK_Q=[];
+  if(CLOUD && USER && TESTER) q.forEach(trackSend);
+}
+/* Errors that only ever happen in somebody's browser. Capped per page load:
+   one broken render can throw on every frame. */
+function trackError(msg, where){
+  if(TRACK_ERRS++<10) track('error',{ msg:String(msg||'').slice(0,200), where:String(where||'').slice(0,80) });
+}
+window.addEventListener('error', e=>trackError(e.message, `${e.lineno||0}:${e.colno||0}`));
+window.addEventListener('unhandledrejection', e=>trackError(e.reason && (e.reason.message||e.reason), 'promise'));
 function fbGate(){
   const f=$('#fbFab'), b=$('#btnFeedback');
   if(f) f.hidden=!fbBeta();
@@ -4667,6 +4702,7 @@ function fbPick(kind){
   $('#fbMsg').placeholder=FB_KINDS.find(k=>k[0]===kind)[2];
 }
 function fbOpen(kind, note){
+  track('feedback_open',{ kind:kind||'' });
   fbAskHide();
   $('#fbAnon').hidden=!!(CLOUD&&USER);
   if(kind) fbPick(kind);
@@ -4840,6 +4876,7 @@ async function replyInboxDialog(){
     <h2 style="margin:6px 0 6px">Let replies mark themselves</h2>
     <p style="color:var(--muted);font-size:12px;margin:0 0 12px">One Gmail filter, set once. After that a reply moves the job to <b>In conversation</b> on its own, so the pipeline is true without you maintaining it.</p>
     <div id="riBody" style="color:var(--muted);font-size:12px">Loading…</div>`);
+  track('replies_open');
   const body=d.querySelector('#riBody');
   if(!CLOUD||!USER){ body.innerHTML='<span class="err">This needs you signed in — the address is tied to your account.</span>'; return; }
   const pid=PROFILE_IDS[DB.current];
@@ -4937,7 +4974,7 @@ async function replyInboxDialog(){
     try{
       const { error }=await SB.from('profiles').update({inbox_token:t}).eq('id',pid);
       if(error) throw new Error(error.message);
-      token=t; draw(); setInfo('Address ready — set the Gmail filter next.');
+      token=t; MAIL_TOKEN=t; track('inbox_address'); draw(); setInfo('Address ready — set the Gmail filter next.');
     }catch(e){ body.innerHTML='<span class="err">Could not save: '+esc(e.message)+'</span>'; }
   }
   draw();
@@ -5009,6 +5046,7 @@ async function checkMail(force){
   if(moved) await save();
   render();
 
+  if(fresh.length) track('mail_alert',{ n:fresh.length, placed:fresh.filter(m=>mailJobKey(m,p.jobs)).length });
   fresh.slice(0,3).forEach(m=>{
     const key=mailJobKey(m,p.jobs), i=key ? p.jobs.findIndex(x=>keyOf(x)===key) : -1, j=p.jobs[i];
     const said=KIND_SAYS[m.decision.kind]||'a mail';
@@ -5050,6 +5088,7 @@ function fileMail(id){
       : `<p style="color:var(--muted);font-size:12px">No job matches. Clear the search to see them all.</p>`;
     list.querySelectorAll('[data-fm]').forEach(r=>r.onclick=async()=>{
       const j=p.jobs[+r.dataset.fm], st=stOf(j);
+      track('mail_filed',{ kind:k });
       /* The same rules the Worker plays by: a person replying is the only
          thing that reaches In conversation, a rejection closes, a receipt
          marks an untouched job applied, and anything else just logs. */
@@ -5078,6 +5117,7 @@ function askApplied(){
   ASK_APPLIED=null;
   const p=P(), i=p ? p.jobs.findIndex(x=>keyOf(x)===a.key) : -1, j=i>=0 && p.jobs[i];
   if(!j || stOf(j)!=='new') return;
+  track('ask_applied');
   askToast('Did you apply?', [j.title,j.company].filter(Boolean).join(' · '),
     [{label:'Yes, mark applied', go:true, run:async()=>{ stageChange(j,'sent'); await save(); render(); }}],
     'Not yet');
@@ -5090,6 +5130,7 @@ function inboxNudge(){
   if(!INBOX_LIVE || !cloudNow() || !MAIL_AT || MAIL_TOKEN) return;
   const k='triage:inboxnudge';
   try{ if(Date.now()-(+localStorage.getItem(k)||0) < 4*864e5) return; localStorage.setItem(k, String(Date.now())); }catch(e){ return; }
+  track('inbox_nudge');
   askToast('Let replies file themselves',
     'Forward recruiter mail here once, and replies, rejections and receipts land on the right job on their own.',
     [{label:'Set it up', go:true, run:()=>replyInboxDialog()}], 'Later');
@@ -5097,6 +5138,8 @@ function inboxNudge(){
 
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible') return;
+  // A return to the tab, at most every ten minutes: sessions, not every glance.
+  if(Date.now()-TRACK_BACK>6e5){ TRACK_BACK=Date.now(); track('back'); }
   askApplied(); checkMail();
 });
 document.addEventListener('click',e=>{
@@ -7203,6 +7246,7 @@ document.addEventListener('click',async e=>{
      blocker only lets window.open through inside the gesture that caused it,
      so this cannot wait until after the save. */
   if(a==='apply'){
+    track('apply_click',{ score:+j.ai_score||null });
     const u=httpUrl(String(j.url||'').trim());
     if(u) window.open(u,'_blank','noopener');
   }
@@ -7212,7 +7256,7 @@ document.addEventListener('click',async e=>{
   /* Selects, where it used to toggle. A toggle made sense when the row held
      the detail; with a pane, clicking the row you are already reading should
      leave it alone rather than slam the pane shut. */
-  if(a==='open'){ SEL_JOB = keyOf(j); return render(); }
+  if(a==='open'){ SEL_JOB = keyOf(j); track('job_open',{ stage:stOf(j), score:+j.ai_score||null }); return render(); }
   if(a==='unsel'){ SEL_JOB = null; return render(); }
   if(a==='goto') return showJob(i);
   if(a==='pitch')  return draftPitch(i,false);
@@ -7245,6 +7289,7 @@ document.addEventListener('click',async e=>{
    hand once the row has moved tab. Does not save: every caller does. */
 function stageChange(j,to,extra){
   const undo = snapRow(j);
+  track('stage',{ from:stOf(j), to, mail:!!extra });
   setStage(j,to);
   logEvent(j, to==='live'?'reply':to==='sent'?'sent':to==='closed'?'closed':'note', stageNote(j,to));
   // extra rides on the event just logged: {mail:id} files a mail under this job.
@@ -7572,7 +7617,9 @@ function render(){
   if(CLOUD && RECOVER && USER) return renderRecover();
   if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
-  (VIEW==='app'&&P()) ? renderApp() : renderOnb();
+  const app=VIEW==='app'&&P(), v=app ? 'app:'+TAB : 'onb:'+ONB.step+(ONB.editing?':edit':'');
+  if(v!==TRACK_VIEW){ TRACK_VIEW=v; track('view',{ view:v }); }
+  app ? renderApp() : renderOnb();
 }
 
 /* Carries a browser-only setup into the account the first time someone signs
@@ -7605,11 +7652,14 @@ async function afterAuth(){
      security would refuse it -- the ids belong to the other user -- but
      "the database happened to stop us" is not where this should be decided. */
   LAST_SAVED=null; PROFILE_IDS={}; MIGRATED=false;
+  TRACK_Q=[]; TRACK_READY=false; TRACK_VIEW=''; TESTER=false;
   if(cloudNow()) splash('Loading your account\u2026');
   CREDITS=null; loadCredits();          // not awaited: a slow balance mustn't hold up the app
   try{
     await afterAuthInner();
     checkMail(true);                    // not awaited: news must not hold up the app
+    { const pr=Object.values(DB.profiles||{}).filter(usable);
+      track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.

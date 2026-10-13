@@ -419,13 +419,14 @@ const mail = (o) => ({ to: 'r.' + 'a'.repeat(32) + '@in.jobtriage.app', date: '2
     const src = require('fs').readFileSync(require('path').join(__dirname, '..', 'index.html'), 'utf8');
     const grab = (re) => { const m = re.exec(src); if (!m) throw new Error('slice missing: ' + re); return m[0]; };
     const block = grab(/let MAIL=\[\], MAIL_TOKEN=null[\s\S]*?\n(?=document\.addEventListener\('visibilitychange')/);
-    const env = { toasts: [], saves: 0, store: new Map(), rows: [], token: null };
+    const env = { tracked: [], toasts: [], saves: 0, store: new Map(), rows: [], token: null };
     const mk = new Function('env', `
       const INBOX_LIVE=true, USER={id:'u'}, DB={current:'p1'}, PROFILE_IDS={p1:'pid'};
       const cloudNow=()=>true, keyOf=j=>j.k, stOf=j=>j.stage, setStage=(j,st)=>{ j.stage=st; };
       const listOf=(j,k)=>{ try{ const v=JSON.parse(j[k]||'[]'); return Array.isArray(v)?v:[]; }catch(e){ return []; } };
       const setList=(j,k,v)=>{ j[k]=JSON.stringify(v); };
       const P=()=>env.p, save=async()=>{ env.saves++; }, render=()=>{}, showJob=()=>{}, replyInboxDialog=()=>{}, modal=()=>null;
+      const track=(k,d)=>env.tracked.push(k);
       const askToast=(label,status,acts)=>env.toasts.push({label,status,acts:(acts||[]).map(a=>a.label)});
       const stageChange=(j,to)=>{ j.stage=to; };
       const localStorage={ getItem:k=>env.store.has(k)?env.store.get(k):null, setItem:(k,v)=>env.store.set(k,String(v)) };
