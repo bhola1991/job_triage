@@ -409,33 +409,34 @@ the SVG and are not tokens: a yellow shirt says nothing about a closing job.
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
 or `ui-kit`. Inline the one path you need.
 
-### The opening page is a drawing — and the one place marker colour is allowed
+### The opening page and onboarding are always paper
 
-The sign-in screen (`renderAuth`, the `.au-*` rules in `index.html`) is not built
-from the app's tokens. It is a felt-pen drawing of the three people the app is
-for, standing by a yellow car, redrawn as vector: the wavy sky is the page
-background, the lined ground is the floor, and signing in is a sign planted in it.
+The sign-in screen (`renderAuth`, `auScene`, the `.au-*` rules in `index.html`)
+shows the three people the app is for, standing on a lined floor beside their
+car, with signing in as a card on the same page. Reset, claim and recover use
+the same frame. It began as a felt-pen drawing with a wavy sky and a wobble
+filter; since 2026-10-14 it is the clean version of that — the same figures as
+`CAST` in a different pose (`AU_PEOPLE`), a thin even line, and the
+straight-line fill kept for the floor alone.
 
-- **It adds no image file.** Everything is inline SVG — the people (`AU_PEOPLE`),
-  two pattern-filled backgrounds, a shared wobble filter — plus the Google mark
-  that was already there. §4's "zero `<img>`, zero `data:image`" still holds, and
-  the icon list above describes the app proper, not this screen.
-- **Its inks are not tokens and must stay scoped.** `--au-yl`, `--au-rd`, `--au-bl`,
-  `--au-gr` and the rest live on `.au-scene`, never on `:root`. Yellow, blue, red
-  and green each mean one thing wherever a job row can be seen (§1); no row is
-  ever on this screen, which is the only reason they are allowed here.
-- **It is always paper**, in both themes, because it is marker on a white page.
-- **Text on the green button is ink, not white.** White on `--au-gr` is 3.2:1.
-- **Onboarding is on the same paper** (`.ob-paper`, with the drawing as a strip
+- **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
+  and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
+- **Its values are fixed, not read from `:root`.** `--au-ink`, `--au-paper`,
+  `--au-gr` and the rest live on `.au-scene`, `.au-strip` and `.ob-paper` and
+  hold the paper theme's values, so these screens stay paper for someone whose
+  device is set to night. Do not lift them onto `:root`.
+- **The green button carries white text.** `--au-gr` is `#13733A`, 5.9:1 under
+  white. (The marker green it replaced was 3.2:1 and had to carry ink.)
+- **The card's hard offset shadow is one of the two in the product** — the
+  other is the selected job. Buttons and fields here have none.
+- **Onboarding is on the same paper** (`.ob-paper`, with the people as a strip
   across the top). It is done by re-pointing the app's tokens inside that
-  wrapper — `--ink`, `--panel`, `--line`, `--signal`, the shadows — not by
-  restyling components, so anything added to onboarding follows without work.
-  Its greens and reds are darker than the marker inks because they are text on
-  paper and must clear AA. Do not copy that wrapper onto any screen with rows.
+  wrapper, not by restyling components, so anything added to onboarding follows
+  without work. Do not copy that wrapper onto any screen with rows.
 - Dialogs opened from these screens are appended to `<body>`, outside the
-  wrapper, so they still render in the app's dark tokens.
-- Inside the app, the same drawing may appear only as **line art in the neutral
-  tokens** (`--line`, `--muted`, `--text`) — for empty states, never on a row.
+  wrapper, so they render in whichever theme the app is in.
+- Inside the app the people appear once, at the foot of the open rail. Anywhere
+  else — an empty state, say — they stand on `--tile` and never on a row.
 
 ---
 
