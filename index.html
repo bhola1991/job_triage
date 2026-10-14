@@ -541,6 +541,8 @@
      its one instruction on its edge, and every fact on it is a label over a
      value, in columns that line up down the page. */
   .qsec{margin-bottom:28px}
+  /* A wrapper for the phone carousel; on a wide screen it is not there at all. */
+  .qcar{display:contents}
   .qsec-h{display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
   .qsec-h h3{font-size:14px}
   .qsec-h .ct{font-family:var(--mono);font-size:12px;color:var(--dim)}
@@ -998,6 +1000,16 @@
     .qitem.sel .qrow{grid-template-columns:6px minmax(0,1fr);padding:20px 16px 20px 12px}
     .qitem.sel .qacts{margin-top:12px}
     .qitem.sel .qt{font-size:21px}
+    /* A carousel, not a thread: one job at a time, swiped sideways, with the
+       next one showing at the edge so it is plain there is more. Sections stay
+       stacked, so the colour law still reads top to bottom. Native scroll-snap,
+       no script; the cards in a section share the tallest one's height. */
+    .qcar{display:flex;gap:10px;overflow-x:auto;scroll-snap-type:x mandatory;overscroll-behavior-x:contain;
+      margin:0 -22px;padding:4px 22px 12px;scroll-padding-inline:22px;scrollbar-width:none}
+    .qcar::-webkit-scrollbar{display:none}
+    .qcar>.qitem{flex:0 0 86%;scroll-snap-align:start;margin-top:0;display:flex}
+    .qcar>.qitem:only-child{flex-basis:100%}
+    .qcar>.qitem>.qrow{flex:1}
   }
 </style>
 
@@ -1204,6 +1216,9 @@ let RANGE = null, TAB = 'unapplied', busy = false;
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
+/* How far each phone carousel was swiped, by section, so a re-render -- which
+   rebuilds it at the first card -- puts it back where the thumb left it. */
+const CAR = {};
 /* Which job is selected, held by keyOf rather than by index: a retention pass
    or an import can renumber the array underneath it, and the pane must not
    reopen on somebody else's job. One at a time, because the point of it is to
@@ -6281,7 +6296,7 @@ function nextStep(){
 const sect=(acc,title,sub,rows)=>rows.length?`<div class="qsec ${acc}">
     <div class="qsec-h"><h3>${title}</h3><span class="ct">${rows.length}</span></div>
     <p class="qsec-sub">${sub}</p>
-    ${rows.map(x=>jobCard(x.j,x.i)).join('')}</div>`:'';
+    <div class="qcar" data-car="${esc(title)}">${rows.map(x=>jobCard(x.j,x.i)).join('')}</div></div>`:'';
 
 /* The same section, folded away: rows that are real but not what you came for
    -- under the bar, not yet scored, already closed. Reachable without being
@@ -6301,7 +6316,7 @@ const foldSect=(key,title,sub,rows)=>{
     <summary>${title}<span class="num" style="font-size:12px;color:var(--dim);margin-left:7px">${rows.length}</span></summary>
     <div class="foldbody">
       <p class="qsec-sub" style="margin:0 0 4px">${sub}</p>
-      ${shown.map(x=>jobCard(x.j,x.i)).join('')}
+      <div class="qcar" data-car="${esc(key)}">${shown.map(x=>jobCard(x.j,x.i)).join('')}</div>
       ${hidden>0?`<p class="hint">${hidden} more not shown. Narrow with the channel filter, or sort to bring what you want to the top.</p>`:''}
     </div></details>`;
 };
@@ -6878,6 +6893,15 @@ function renderApp(){
   // Only ever visible at the widths where the pane overlays the queue; docked,
   // CSS hides it, because there is nothing behind the pane to dismiss it onto.
   if($('#panescrim')) $('#panescrim').onclick=()=>{ SEL_JOB=null; render(); };
+  document.querySelectorAll('.qcar').forEach(c=>{
+    const k=c.dataset.car;
+    if(CAR[k]) c.scrollLeft=CAR[k];
+    // The open job comes into view, wherever the carousel was left.
+    const sel=c.querySelector('.qitem.sel');
+    if(sel && getComputedStyle(c).display==='flex')
+      c.scrollLeft+=sel.getBoundingClientRect().left-c.getBoundingClientRect().left-22;
+    c.addEventListener('scroll',()=>{ CAR[k]=c.scrollLeft; },{passive:true});
+  });
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
   bindPlot();

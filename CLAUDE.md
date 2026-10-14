@@ -380,6 +380,7 @@ left edge: 68px of icons with count badges, 296px with words when opened.
 - **Every control kept its id** (`tbOpen`, `trackSel`, `btnPal`, `btnTheme`, `btnFeedback`, `btnCredits`, `btnSignOut`, and `btnReplies` when inbound mail is live), because the command palette dispatches by clicking them. Do not rename or duplicate one.
 - **Open pushes, it does not cover** — `.rail.open ~ .wrap` takes a 296px margin at ≥1200px. Below that there is no room, so it lies over the queue.
 - **On a phone (≤900px) it is a strip along the bottom** that pulls up into a sheet, by its handle (`#railGrab`) or a swipe. It replaced `#toolbar`.
+- **On a phone the queue is a carousel, not a thread.** Each section's rows sit in a `.qcar` that scrolls sideways with native scroll-snap, one card at a time with the next peeking; sections stay stacked so the colour law still reads top to bottom. On a wide screen `.qcar` is `display:contents` and changes nothing. `CAR` remembers each carousel's position across re-renders, and the open job is scrolled into view.
 - **Open is remembered** (`localStorage` `triage:rail`) on a wide screen only; on a phone open is a sheet, and a sheet must not be the first thing a page shows.
 - **The avatar is neutral, the badges carry the accents.** A badge is a count of rows in that state, so its colour means what the row's edge means.
 - **Closed, the direction picker is the compass**: the native `<select>` lies invisibly over the icon, so one click opens the list with no scripted menu.
