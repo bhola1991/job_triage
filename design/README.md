@@ -12,19 +12,19 @@ Drop-in design artefacts. Every `.dc.html` opens directly in a browser; `support
 
 ## The palette
 
-Ground `#18211C` — near-black, green rather than neutral. Light is the same hue inverted: `#F1F5F2` paper with `#18211C` as the ink.
+Two neutral grounds: night `#111315` (charcoal) and paper `#F6F6F2` with `#14181A` ink. Adopted 2026-10-14, replacing the green near-black `#18211C` that `Ground 18211C.dc.html` still depicts — that artboard shows the law and the layout of its day, not the current values. `jobtriage.tokens.json` is current.
 
 Four accents, one instruction each:
 
 | Role | Dark | Light | Means |
 | --- | --- | --- | --- |
-| go | `#56C88A` | `#157F42` | Do this now. The only fill-weight button. |
-| due | `#E2685C` | `#C33B2E` | Overdue — past the follow-up date. |
-| closing | `#D9A441` | `#8A6314` | Posting old enough to be filled soon. |
-| awaiting | `#57AEC9` | `#1E6C86` | Sent; the next move is theirs. |
+| go | `#4CC76B` | `#13733A` | Do this now. The only fill-weight button. |
+| due | `#FF7A70` | `#C4302B` | Overdue — past the follow-up date. |
+| closing | `#F5B700` | `#8A5A00` | Posting old enough to be filled soon. |
+| awaiting | `#8FA2FF` | `#2449C9` | Sent; the next move is theirs. |
 
 Three rules:
 
 1. A row carries at most one accent. If a job is both closing and overdue, the nearer deadline wins and the other becomes plain text.
 2. Score is never an accent. Colour says what to do; the number says how good it is.
-3. Dark states the accent on the row edge; light tints the whole cell.
+3. The accent is stated on the row's edge in both themes; the card behind it stays plain.
