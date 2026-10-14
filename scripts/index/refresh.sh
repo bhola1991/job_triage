@@ -54,7 +54,9 @@ node scripts/index/ingest.js scripts/index/index.jsonl
 
 say "4/7  Boards that publish JobPosting data: probe newly named ones, then read them"
 node scripts/index/probe-boards.js --from-profiles || echo "  probe skipped: $?"
-node scripts/index/jsonld-boards.js scripts/index/jsonld.jsonl
+# Not allowed to stop the night: set -e would cancel the deposit below over one
+# board misbehaving. On failure the file from the last good run is still there.
+node scripts/index/jsonld-boards.js scripts/index/jsonld.jsonl || echo "  jsonld-boards failed ($?); depositing without it"
 
 say "5/7  Deposit into the shared corpus"
 node scripts/index/push-index.js \
