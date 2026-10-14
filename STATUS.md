@@ -549,8 +549,11 @@ is why every check passed while this shipped. `insights.js` names the pattern
 ("DATA AT RISK") and counts old-style blob profiles as profiles: it had
 reported one tester as never adding a CV when hers is simply unmigrated.
 
-Open from the same tester: no way to stop a running search (he reloaded to stop
-one, which is what exposed this); only one direction can be chosen in
+A running search can now be stopped (`STOP` in `index.html`): it aborts the
+scrapers at their next poll, starts no new scoring batch, and finishes the
+ordinary way with what has been scored, so nothing paid for is dropped. Checked
+in `selfcheck-boards.js`; the button itself has not been pressed in a real
+search. Still open from the same tester: only one direction can be chosen in
 onboarding; and a username he says was refused, which is valid and available
 and could not be reproduced.
 

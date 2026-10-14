@@ -67,7 +67,7 @@ const judgeMany=async(postings, cand, ex)=>JUDGED(postings, cand, ex);
    "Identifier 'rankOf' has already been declared". */
 const esc=x=>String(x), $=()=>null, setSearchInfo=()=>{};
 const blank=()=>({title:'',company:'',url:'',location:'',description:''});
-eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,redactCV,candidateOf,sysPrompt,redLine,statedPayMonthly,barsFor,freshWeight,isStrong,overBar,rankFor,rankOf};');
+eval(src+';globalThis.T={atsOfUrl,jsearchRow,isPostingUrl,boardFilter,scoreAndCut,liveBoard,fromAts,tcKey,setStop:v=>{STOP=v;},redactCV,candidateOf,sysPrompt,redLine,statedPayMonthly,barsFor,freshWeight,isStrong,overBar,rankFor,rankOf};');
 
 const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
 (async()=>{
@@ -364,6 +364,22 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
      'browsing: the better score leads');
    ok(T.rankFor(fresh,{intent:'now'})>T.rankFor(stale,{intent:'now'}),
      'now: the fresher posting leads instead');
+ }
+
+ /* Stopping a search keeps what is scored and starts nothing new. */
+ {
+   let calls=0;
+   SCORES=j=>{ calls++; if(calls===12) T.setStop(true); return 80; };   // asked to stop during the first batch
+   DBJOBS=[]; AGE={}; FEEDS={};
+   const thirty=Array.from({length:30},(_,i)=>J('https://s/'+i,'Data Engineer '+i,'Co'+i,'A'));
+   T.setStop(false);
+   const sb=liveBoard({titles:['Data Engineer']},{},'t'); await sb.add(thirty);
+   ok(calls===12 && sb.st.kept.length===12,'stop: the batch in flight is kept and no further batch starts, scored '+calls+' kept '+sb.st.kept.length);
+   const before=sb.st.found; await sb.add([J('https://s/late','Data Engineer','Late','A')]);
+   ok(sb.st.found===before && calls===12,'stop: results landing afterwards are not scored');
+   T.setStop(null);
+   const fresh=liveBoard({titles:['Data Engineer']},{},'t'); await fresh.add([J('https://s/next','Data Engineer','Next','A')]);
+   ok(fresh.st.kept.length===1,'the next search runs normally');
  }
 
  /* Rejection memory. Everything above ran with no DB and no localStorage, so

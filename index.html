@@ -2092,6 +2092,7 @@ async function apifyRun(actor, payload, o){
   let status="RUNNING", waited=0;
   while(status==="RUNNING"||status==="READY"){
     await new Promise(z=>setTimeout(z,every)); waited+=every/1000;
+    if(stopped()){ api.abort(id); throw new Error('stopped'); }
     if(waited>cap){ api.abort(id); throw new Error(`${o.label||'That run'} timed out after ${Math.round(cap/60)} minutes.`); }
     status=(await api.status(id))||"UNKNOWN";
     if(o.onStatus) o.onStatus(`${o.label||'working'} — ${status.toLowerCase()}, ${waited}s`);
@@ -4229,6 +4230,19 @@ const MAX_AGE_DAYS = 30;
    ponytail: this browser only, and not cleared when the CV is edited. A second
    device re-buys the verdicts once; an edited CV keeps its old rejections for
    up to 30 days. Move it to a profiles column if either starts to matter. */
+/* Stopping a search. There was no way to, so a tester reloaded the page to
+   stop one -- and lost what it had already found and been charged for.
+
+   Stopping is not cancelling: nothing in flight is thrown away. It stops
+   WAITING (the slow site scrapers are aborted at their next poll, which also
+   stops them costing anything further) and stops STARTING (no new scoring
+   batch), then the search finishes the ordinary way with whatever has been
+   scored. So it takes a few seconds, and everything paid for is kept.
+
+   null: no search running. false: one is. true: asked to stop. */
+let STOP = null;
+const stopped = () => STOP === true;
+
 const dayNo = () => Math.floor(Date.now()/864e5);
 const rejKey = p => 'triage:rejected:'+DB.current+':'+((p&&p.track)||'');
 function rejectedOf(key){
@@ -4347,6 +4361,7 @@ const MIN_FIT = 50;
 async function scoreAndCut(jobs, prof, track){
   const kept=[], unscored=[], scored=[], rejected=[];
   for(let i=0;i<jobs.length;i+=SCORE_BATCH){
+    if(stopped()) break;              // what is left was never judged; the next search finds it again
     const part=jobs.slice(i,i+SCORE_BATCH);
     try{
       // Not sized per batch any more: reasoning does not scale with the row count.
@@ -4420,7 +4435,7 @@ function liveBoard(trk, prof, track){
   const seenIn=new Map();
   const idsOf=j=>{ const tc=tcKey(j); return tc ? [keyOf(j), tc] : [keyOf(j)]; };
   const draw=(extra)=>{
-    setSearchInfo(`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
+    setSearchInfo((stopped()?'Stopping — ':'')+`${st.found} found · ${st.kept.length} score ${MIN_FIT}+ · ${st.below} below ${MIN_FIT}`
       + (st.checking?` · scoring ${st.checking} batch${st.checking===1?'':'es'}…`:'') + (extra?` — ${extra}`:''));
     const el=$('#searchLive'); if(!el) return;
     el.innerHTML=st.kept.slice(0,10).map(j=>
@@ -4430,6 +4445,7 @@ function liveBoard(trk, prof, track){
   return {
     st, draw,
     async add(jobs){
+      if(stopped()) return;
       st.found+=jobs.length;
       jobs.forEach(j=>{ const o=j.origin||'google'; O(o).found++;
         idsOf(j).forEach(k=>{ if(!seenIn.has(k)) seenIn.set(k,new Set()); seenIn.get(k).add(o); }); });
@@ -4527,8 +4543,9 @@ let BOARD_COST = 25;
    found little is an invitation to spend, and needs to say so. */
 async function finishSearch(trk, live, failed, paid){
   const p=P(); const st=live.st, d=st.dropped;
+  const wasStopped=stopped(); STOP=null;
   const n=addJobs(st.kept.concat(st.unscored));
-  track('search_done',{ paid:!!paid, found:st.found, kept:st.kept.length, below:st.below, added:n, failed:failed.length });
+  track('search_done',{ paid:!!paid, found:st.found, kept:st.kept.length, below:st.below, added:n, failed:failed.length, stopped:wasStopped });
   if(SEARCH_ID){
     hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
     // Only a search on our keys moves the "new since" point; it's what that window is for.
@@ -4546,10 +4563,10 @@ async function finishSearch(trk, live, failed, paid){
       ? `Added ${st.kept.length} jobs scoring ${MIN_FIT}+ from ${st.found} results.`
         + (st.unscored.length?` ${st.unscored.length} more couldn't be scored yet — use "Score new jobs".`:'')
       : `Searched ${st.found} results, none new scoring ${MIN_FIT}+.`);
-  setSearchInfo(found + (why?` Skipped: ${why}.`:'')
+  setSearchInfo((wasStopped?'Stopped. ':'') + found + (why?` Skipped: ${why}.`:'')
     + (failed.length?` (${failed.length} source${failed.length===1?'':'s'} failed: ${failed.map(f=>f.split(':')[0]).join(', ')})`:'')
-    + (paid?'':' The live boards are a separate search, and a paid one.'));
-  fbMoment('search');
+    + (paid||wasStopped?'':' The live boards are a separate search, and a paid one.'));
+  if(!wasStopped) fbMoment('search');
 }
 
 /* Phase one, and free.
@@ -4577,7 +4594,7 @@ async function runBoards(trk, where){
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
   const qs=buildBoardQueries(titles,boards,where);
-  busy=true; PAID_OFFER=null; render();
+  busy=true; STOP=false; PAID_OFFER=null; render();
   try{
     // Pinned to the person's country so Google ranks for where they can
     // actually work. The location term in the query does the real narrowing;
@@ -4602,14 +4619,17 @@ async function runBoards(trk, where){
          sources down) runPaidBoards finishes with the index alone and leaves
          the offer below so the person can retry it. */
       PAID_OFFER={trackId:trk.id, where, since_days};
+      // Stopped while the index was being read: the live boards never start.
+      if(stopped()){ await finishSearch(trk, live, failed, false); return; }
       await runPaidBoards(trk, where, since_days, {live, failed});
       return;
     } else {
-      await live.add(await apifyBoardSearch(qs,cc,setSearchInfo));
+      try{ await live.add(await apifyBoardSearch(qs,cc,setSearchInfo)); }
+      catch(e){ if(!stopped()) throw e; }
       await finishSearch(trk, live, failed, true);
     }
   }catch(e){
-    busy=false; SEARCH_ID=null; render();
+    busy=false; STOP=null; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runBoards(trk,where)); return; }
     setSearchInfo(e.message); fbMoment('error');
   }
@@ -4629,7 +4649,7 @@ async function runPaidBoards(trk, where, since_days, pre){
   const boards=portalsFor(trk.mode).concat((trk.boards||[]).filter(b=>!PORTALS.includes(b)));
   const titles=(trk.titles||[]);
   if(!titles.length){ setSearchInfo("This track has no titles to search."); return; }
-  busy=true; PAID_OFFER=null; render();
+  busy=true; if(!pre) STOP=false; PAID_OFFER=null; render();
   try{
     const cc=p.profile.country_code||"";
     const live=pre?pre.live:liveBoard(trk, p.profile, p.track), failed=pre?pre.failed:[];
@@ -4656,7 +4676,7 @@ async function runPaidBoards(trk, where, since_days, pre){
     const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
     const land=(label, promise)=>promise
       .then(jobs=>live.add(jobs||[]))
-      .catch(e=>{ failed.push(`${label}: ${e.message}`); })
+      .catch(e=>{ if(!stopped()) failed.push(`${label}: ${e.message}`); })
       .finally(()=>{ left--; live.draw(note()); });
     const work=[live.add((r.jobs||[]).map(jsearchRow))];
     (r.scrapers||[]).forEach(s=>work.push(land(s.label,
@@ -4667,7 +4687,7 @@ async function runPaidBoards(trk, where, since_days, pre){
     await Promise.all(work);
     await finishSearch(trk, live, failed, true);
   }catch(e){
-    busy=false; SEARCH_ID=null; render();
+    busy=false; STOP=null; SEARCH_ID=null; render();
     if(e.message==='NEEDAPIFY'){ keyDialog(()=>runPaidBoards(trk,where,since_days)); return; }
     setSearchInfo(e.message); fbMoment('error');
   }
@@ -6395,6 +6415,7 @@ function renderApp(){
              <p class="hint">The shared index, LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork, job APIs, plus these specialist boards. New postings only, every job scored.</p>`
           : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
+        ${busy && STOP===false ? `<button class="btn-sm" id="btnStop" style="width:100%;margin-top:9px">Stop search — keep what's found so far</button>` : ''}
         ${offer
           ? `<button class="btn-sm" id="btnPaidBoards" style="width:100%;margin-top:9px" ${busy?'disabled':''}>
                Retry live boards — ${BOARD_COST} credits</button>
@@ -6631,6 +6652,11 @@ function renderApp(){
   }
   const goBoards=()=>{ WHERE=$('#sqLoc').value.trim(); runBoards(trk,WHERE); };
   $('#btnBoards').onclick=goBoards;
+  { const sb=$('#btnStop'); if(sb) sb.onclick=()=>{
+      if(STOP!==false) return;
+      STOP=true; track('search_stop'); sb.disabled=true; sb.textContent='Stopping…';
+      setSearchInfo('Stopping — finishing the batch being scored, then keeping what has been found. A few seconds.');
+    }; }
   $('#sqLoc').onkeydown=e=>{ if(e.key==='Enter') goBoards(); };
   if($('#btnPaidBoards')) $('#btnPaidBoards').onclick=()=>{
     const o=PAID_OFFER; if(!o) return;
