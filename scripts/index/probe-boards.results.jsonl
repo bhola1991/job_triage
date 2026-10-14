@@ -142,3 +142,57 @@
 {"board":"peopleperhour.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":4,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap_children":1,"sitemap":"https://www.peopleperhour.com/pphsitemaps/sitemap.live.hire_freelancers.0.xml","probed":"2026-10-14"}
 {"board":"remoteok.com","verdict":"BULK","how":"sitemap + JobPosting data","jobs_listed":5000,"desc_chars":851,"fields":"title,hiringOrganization,jobLocation,datePosted,validThrough,baseSalary,employmentType","notes":[],"sitemap_children":84,"sitemap":"https://remoteok.com/sitemap-jobs-1.xml","sample":"https://remoteok.com/remote-jobs/remote-customer-support-specialist-ultimate-marketing-1137512","probed":"2026-10-14"}
 {"board":"workingnomads.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":7771,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap":"https://www.workingnomads.com/sitemap.xml","probed":"2026-10-14"}
+{"board":"ibps.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UNABLE_TO_VERIFY_LEAF_SIGNATURE"]}
+{"board":"rrbcdg.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"employmentnews.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"drdo.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"ssc.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"rbi.org.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"apprenticeshipindia.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"sbi.co.in","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":62,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap":"https://sbi.bank.in/webfiles/uploads/files_2526/sitemap.xml"}
+{"board":"skillindiadigital.gov.in","verdict":"WALLED","how":"blocks crawlers","jobs_listed":0,"desc_chars":0,"fields":"","notes":["robots.txt disallows everything"]}
+{"board":"sail.co.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UNABLE_TO_VERIFY_LEAF_SIGNATURE"]}
+{"board":"isro.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"nta.ac.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"coalindia.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"upsc.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"gail.co.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["ENOTFOUND"]}
+{"board":"bsnl.co.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":["has a sitemap, but no job pages found in the files read"]}
+{"board":"ntpc.co.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"bhel.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":5,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap":"https://bhel.com/sitemap.xml"}
+{"board":"iocl.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":4,"desc_chars":0,"fields":"","notes":["job page 307","job page 307","job page 307"],"sitemap":"https://iocl.com/sitemap.xml"}
+{"board":"ongcindia.com","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":["has a sitemap, but no job pages found in the files read"],"sitemap_children":3}
+{"board":"kmcgov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"aai.aero","verdict":"FEED","how":"feed, 10 items","jobs_listed":0,"desc_chars":0,"fields":"","notes":[],"feed":"https://www.aai.aero/en/rss.xml","feed_items":10}
+{"board":"employmentbankwb.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"wbsedcl.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"calcuttahighcourt.gov.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UNABLE_TO_VERIFY_LEAF_SIGNATURE"]}
+{"board":"wbpsc.gov.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UND_ERR_CONNECT_TIMEOUT"]}
+{"board":"jadavpuruniversity.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UNABLE_TO_VERIFY_LEAF_SIGNATURE"]}
+{"board":"wb.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"iimcal.ac.in","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":22,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap":"https://www.iimcal.ac.in/sitemap.xml"}
+{"board":"isical.ac.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"iiests.ac.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":["has a sitemap, but no job pages found in the files read"]}
+{"board":"freejobalert.com","verdict":"FEED","how":"feed, 100 items","jobs_listed":3,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap_children":25,"sitemap":"https://www.freejobalert.com/sitemap-general.xml","feed":"https://www.freejobalert.com/feed/","feed_items":100}
+{"board":"caluniv.ac.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"sarkariresult.com","verdict":"FEED","how":"feed, 10 items","jobs_listed":0,"desc_chars":0,"fields":"","notes":["has a sitemap, but no job pages found in the files read"],"feed":"https://www.sarkariresult.com/feed/","feed_items":10}
+{"board":"govtjobsguru.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["ERR_SSL_TLSV1_ALERT_INTERNAL_ERROR"]}
+{"board":"jagranjosh.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":21,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap_children":82,"sitemap":"https://www.jagranjosh.com/sitemap/daily/2026-10-14.xml"}
+{"board":"sarkariexam.com","verdict":"WALLED","how":"blocks crawlers","jobs_listed":0,"desc_chars":0,"fields":"","notes":["home 403: bot wall"]}
+{"board":"sarkarinaukri.com","verdict":"FEED","how":"feed, 10 items","jobs_listed":1464,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap_children":14,"sitemap":"https://sarkarinaukri.com/wp-sitemap-posts-post-1.xml","feed":"https://sarkarinaukri.com/feed/","feed_items":10}
+{"board":"truelancer.com","verdict":"WALLED","how":"blocks crawlers","jobs_listed":0,"desc_chars":0,"fields":"","notes":["home 429: bot wall"]}
+{"board":"rojgarresult.com","verdict":"FEED","how":"feed, 10 items","jobs_listed":4,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap_children":16,"sitemap":"https://rojgarresult.com/post-sitemap1.xml","feed":"https://rojgarresult.com/feed/","feed_items":10}
+{"board":"indgovtjobs.in","verdict":"BULK","how":"sitemap + JobPosting data","jobs_listed":569,"desc_chars":410,"fields":"title,hiringOrganization,jobLocation,datePosted,validThrough,baseSalary,employmentType","notes":[],"sitemap_children":21,"sitemap":"https://www.indgovtjobs.in/sitemap.xml?page=1","feed":"https://www.indgovtjobs.in/feeds/posts/default","feed_items":25,"sample":"https://www.indgovtjobs.in/2026/10/udupi-csl-executive-recruitment-2026.html"}
+{"board":"wbssc.gov.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UND_ERR_CONNECT_TIMEOUT"]}
+{"board":"wbhealth.gov.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["EAI_AGAIN"]}
+{"board":"workindia.in","verdict":"WALLED","how":"blocks crawlers","jobs_listed":0,"desc_chars":0,"fields":"","notes":["home 403: bot wall"]}
+{"board":"unstop.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":756,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap_children":741,"sitemap":"https://unstop.com/sitemaps/opportunity/sitemap1.xml"}
+{"board":"guru.com","verdict":"WALLED","how":"blocks crawlers","jobs_listed":0,"desc_chars":0,"fields":"","notes":["home 403: bot wall"]}
+{"board":"olx.in","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":30903,"desc_chars":0,"fields":"","notes":["robots.txt disallows the job pages"],"sitemap_children":97,"sitemap":"https://www.olx.in/sitemap-other-jobs.xml"}
+{"board":"mygov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"quikr.com","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}
+{"board":"letsintern.com","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":["has a sitemap, but no job pages found in the files read"],"sitemap_children":4}
+{"board":"fresherslive.com","verdict":"LIST-ONLY","how":"sitemap of job pages, but the page text needs its own scraper","jobs_listed":370,"desc_chars":0,"fields":"","notes":["job page has no JobPosting data"],"sitemap_children":9,"sitemap":"https://www.fresherslive.com/jobs-by-location.xml"}
+{"board":"worknhire.com","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["EAI_AGAIN"]}
+{"board":"hirect.in","verdict":"unreachable","how":"","jobs_listed":0,"desc_chars":0,"fields":"","notes":["UND_ERR_CONNECT_TIMEOUT"]}
+{"board":"nhm.gov.in","verdict":"none","how":"no sitemap of jobs and no feed found","jobs_listed":0,"desc_chars":0,"fields":"","notes":[]}

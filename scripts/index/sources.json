@@ -392,6 +392,10 @@
         "valid_through": "JD1_lblPostedDate"
       },
       "match": "jobdescription\\.aspx\\?job_id="
+    },
+    "indgovtjobs.in": {
+      "sitemap": "https://www.indgovtjobs.in/sitemap.xml?page=1",
+      "_note": "Indian government job aggregator; JobPosting data per page."
     }
   }
 }
