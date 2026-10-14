@@ -1,5 +1,5 @@
 {
-  "_note": "Seed crawl list for the shared job index. Every source here is free and keyless \u2014 ATS feeds are the same data a company's careers page loads, which is the point README makes about reading feeds rather than scraping. Paid scrapers (LinkedIn, Indeed, Naukri) are deliberately absent: they are the only part of the index that costs money, so prove the funnel without them first.",
+  "_note": "Seed crawl list for the shared job index. Every source here is free and keyless — ATS feeds are the same data a company's careers page loads, which is the point README makes about reading feeds rather than scraping. Paid scrapers (LinkedIn, Indeed, Naukri) are deliberately absent: they are the only part of the index that costs money, so prove the funnel without them first.",
   "greenhouse": [
     "abacus",
     "abnormalsecurity",
@@ -196,6 +196,7 @@
   ],
   "ashby": [
     "9fin",
+    "aidigest",
     "airwallex",
     "alan",
     "almedia",
@@ -203,15 +204,18 @@
     "backmarket",
     "basecamp-research",
     "blackbox-strategies",
+    "blockstream",
     "bunch",
     "camunda",
     "carwow",
+    "chartahealth",
     "circle",
     "clerk",
     "cohere",
     "comind",
     "constructor",
     "coursecareers",
+    "craze",
     "creatoriq",
     "dataleap",
     "deel",
@@ -223,6 +227,7 @@
     "flink",
     "fundingcircle",
     "hex",
+    "higgsfieldai",
     "hirehangar",
     "hive-autonomy",
     "ideals",
@@ -230,6 +235,7 @@
     "inato",
     "industrious",
     "infiterra",
+    "jellyfishcareers",
     "kestra",
     "kong",
     "laelaps",
@@ -245,6 +251,7 @@
     "namespace",
     "neara",
     "neko-health",
+    "newform",
     "nivoda",
     "notabene",
     "novo",
@@ -267,9 +274,11 @@
     "satispay",
     "scarlet",
     "sifflet",
+    "snowball",
     "sosafe",
     "statista",
     "supabase",
+    "superpower",
     "swarmaero",
     "taptapsend",
     "teton",
@@ -277,6 +286,7 @@
     "together",
     "upflow",
     "vanta",
+    "victorious",
     "voodoo",
     "zefir"
   ],
@@ -341,5 +351,47 @@
     "trafilea",
     "zelh"
   ],
-  "_workable_note": "Not crawled: apply.workable.com caps per DAY (429, Retry-After ~86000). Workable is covered by the jobs.workable.com aggregate the edge function queries per search. Slugs kept for the record."
+  "_workable_note": "Not crawled: apply.workable.com caps per DAY (429, Retry-After ~86000). Workable is covered by the jobs.workable.com aggregate the edge function queries per search. Slugs kept for the record.",
+  "_jsonld_note": "Boards read by jsonld-boards.js: a job sitemap plus schema.org JobPosting data on each page. Found by probe-boards.js (verdict BULK). exclude is a regex over the url and the employment type.",
+  "jsonld": {
+    "placementindia.com": {
+      "sitemap": "https://www.placementindia.com/sitemap/modified_job_details.xml"
+    },
+    "charityjob.co.uk": {
+      "sitemap": "https://www.charityjob.co.uk/jobsitemap.xml",
+      "exclude": "volunteer"
+    },
+    "agfunder.com": {
+      "sitemap": "https://agfunder.com/job_listing-sitemap.xml"
+    },
+    "devnetjobsindia.org": {
+      "sitemap": "https://devnetjobsindia.org/sitemap.aspx",
+      "ids": {
+        "title": "JD1_lblJobTitle",
+        "company": "JD1_lblCompanyName",
+        "location": [
+          "JD1_lblLocation",
+          "JD1_lblCountry"
+        ],
+        "description": "JD1_lblJobDesc",
+        "valid_through": "JD1_lblPostedDate"
+      },
+      "_note": "lblPostedDate is the APPLY-BY date (the page labels it 'Apply by'); there is no posting date.",
+      "match": "jobdescription\\.aspx\\?job_id="
+    },
+    "devnetjobs.org": {
+      "sitemap": "https://devnetjobs.org/sitemap.aspx",
+      "ids": {
+        "title": "JD1_lblJobTitle",
+        "company": "JD1_lblCompanyName",
+        "location": [
+          "JD1_lblLocation",
+          "JD1_lblCountry"
+        ],
+        "description": "JD1_lblJobDesc",
+        "valid_through": "JD1_lblPostedDate"
+      },
+      "match": "jobdescription\\.aspx\\?job_id="
+    }
+  }
 }

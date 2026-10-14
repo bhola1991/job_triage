@@ -200,6 +200,34 @@ const have = (k) => `${k} ${k === 1 ? 'has' : 'have'}`;
   const quietFb = testers.filter((t) => t.jobs > 0 && t.feedback === 0);
   if (quietFb.length && n) ins.push(`${have(quietFb.length)} used it and said nothing: ${names(quietFb)}. The Feedback button is not reaching them; ask directly.`);
 
+  /* ── where the jobs come from ───────────────────────────────────────────── */
+  /* The boards people's directions name, against what the probe found for each
+     (scripts/index/probe-boards.js keeps the ledger; refresh.sh probes newly
+     named ones nightly and adds the bulk-readable ones by itself). What is left
+     is the work list: boards people want that still need a scraper of their
+     own, most-wanted first. robots.txt-forbidden and walled boards are listed
+     apart, because no scraper of ours is the answer for those. */
+  try {
+    const { wantedBoards, coveredBoards } = require('./index/probe-boards.js');
+    const want = await wantedBoards(), covered = coveredBoards();
+    for (const b of covered) want.delete(b);
+    const ledger = new Map(fs.readFileSync(path.join(ROOT, 'scripts/index/probe-boards.results.jsonl'), 'utf8')
+      .split('\n').filter(Boolean).map((l) => JSON.parse(l)).map((r) => [r.board.replace(/^www\./, ''), r]));
+    const SRC = JSON.parse(fs.readFileSync(path.join(ROOT, 'scripts/index/sources.json'), 'utf8'));
+    const reading = Object.keys(SRC.jsonld || {});
+    const ranked = [...want].map(([b, us]) => ({ b, n: us.size, r: ledger.get(b) || { verdict: 'unprobed' } })).sort((x, y) => y.n - x.n);
+    const forbidden = (r) => (r.notes || []).some((x) => /robots\.txt disallows/.test(x));
+    const todo = ranked.filter(({ r }) => ['LIST-ONLY', 'FEED', 'none'].includes(r.verdict) && !forbidden(r));
+    const closed = ranked.filter(({ r }) => r.verdict === 'WALLED' || forbidden(r));
+    say(`WHERE THE JOBS COME FROM   (${want.size} boards named in live profiles, besides the ones the crawl already reads)`);
+    say(`  read in bulk every night: ${reading.join(', ') || 'none'}`);
+    say(`  need a scraper of their own, most wanted first: ${todo.slice(0, 8).map(({ b, n, r }) => `${b} (${n} ${n === 1 ? 'person' : 'people'}, ${r.verdict === 'LIST-ONLY' ? (r.jobs_listed || '?') + '+ jobs' : r.verdict.toLowerCase()})`).join(', ') || 'none'}`);
+    say(`  closed to crawlers (walled, or robots.txt says no): ${closed.length} — ${closed.slice(0, 6).map(({ b }) => b).join(', ')}${closed.length > 6 ? ', …' : ''}`);
+    const unprobed = ranked.filter(({ r }) => r.verdict === 'unprobed').length;
+    if (unprobed) say(`  not probed yet: ${unprobed} (tonight's refresh will)`);
+    say();
+  } catch (e) { say(`WHERE THE JOBS COME FROM: could not read the board ledger (${e.message})`); say(); }
+
   say('WHAT IT ADDS UP TO');
   if (!ins.length) say('  Nothing stands out yet.');
   ins.forEach((s, i) => say(`  ${i + 1}. ${s}`));

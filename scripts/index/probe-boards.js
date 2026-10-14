@@ -2,6 +2,13 @@
 //
 //   node scripts/index/probe-boards.js idealist.org mandy.com ...
 //   node scripts/index/probe-boards.js --file boards.txt [--out probe.jsonl]
+//   node scripts/index/probe-boards.js --from-profiles      # what refresh.sh runs
+//
+// --from-profiles reads every board named in a live profile, probes only the
+// ones never probed before (probe-boards.results.jsonl is the ledger), appends
+// what it finds, and adds each BULK board to sources.json "jsonld" so the same
+// night's jsonld-boards.js reads it. Everything else waits in the ledger, and
+// scripts/insights.js lists it each morning ranked by how many people want it.
 //
 // Why this exists
 // ---------------
@@ -138,12 +145,67 @@ async function probe(domain) {
   return out;
 }
 
+// Shared with jsonld-boards.js, which reads the boards this finds.
+module.exports = { get, robots, locs, jobPosting, JOBISH, UA, wantedBoards, coveredBoards };   // hoisted from below
+if (require.main !== module) return;
+
+/* The boards live profiles name, with how many people name each. Profiles are
+   rows now; an account that has never migrated still keeps its profile in the
+   one-blob store, so that is read for those accounts only. Only tracks[].boards
+   is used -- the rest of the profile, the CV above all, is not looked at. */
+/* Already crawled another way: the ATS platforms ingest.js reads company by
+   company, every host in sources.json "feeds" and the paged feeds, and the
+   boards the paid scrapers cover. Probing them only finds their marketing
+   site, and a BULK verdict would read the same postings twice. */
+function coveredBoards() {
+  const SRC = JSON.parse(fs.readFileSync(require('path').join(__dirname, 'sources.json'), 'utf8'));
+  const covered = new Set(['greenhouse.io', 'job-boards.greenhouse.io', 'boards.greenhouse.io', 'greenhouse.com', 'lever.co', 'jobs.lever.co',
+    'ashbyhq.com', 'jobs.ashbyhq.com', 'smartrecruiters.com', 'recruitee.com', 'workable.com', 'himalayas.app', 'jobicy.com',
+    'workingnomads.com', 'mycareersfuture.gov.sg', 'linkedin.com', 'indeed.com', 'naukri.com', 'upwork.com']);
+  Object.values(SRC.feeds || {}).forEach((u) => { try { covered.add(new URL(u).hostname.replace(/^www\./, '')); } catch { /* skip */ } });
+  return covered;
+}
+
+async function wantedBoards() {
+  const env = {};
+  for (const l of fs.readFileSync(require('path').join(__dirname, '../../supabase/.env'), 'utf8').split('\n')) {
+    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(l); if (m) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  }
+  const H = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
+  const q = async (p) => { const r = await fetch(`${env.SUPABASE_URL}/rest/v1/${p}`, { headers: H, signal: AbortSignal.timeout(60000) }); if (!r.ok) throw new Error(`${p.split('?')[0]} ${r.status}`); return r.json(); };
+  const want = new Map();
+  const add = (user, tracks) => [].concat(tracks || []).forEach((t) => [].concat((t && t.boards) || []).forEach((b) => {
+    const k = String(b).toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/^www\./, '');
+    if (k.includes('.')) { if (!want.has(k)) want.set(k, new Set()); want.get(k).add(user); }
+  }));
+  const rows = await q('profiles?select=user_id,tracks&deleted=is.false');
+  rows.forEach((r) => add(r.user_id, r.tracks));
+  const haveRows = new Set(rows.map((r) => r.user_id));
+  for (const s of await q('user_state?select=user_id,v&k=eq.triage:db')) {
+    if (haveRows.has(s.user_id)) continue;
+    let d; try { d = JSON.parse(s.v); } catch { continue; }
+    Object.values((d && d.profiles) || {}).forEach((p) => p && p.profile && add(s.user_id, p.profile.tracks));
+  }
+  return want;
+}
+
 (async () => {
   const args = process.argv.slice(2);
   const fi = args.indexOf('--file'), oi = args.indexOf('--out');
   let boards = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--file' && args[i - 1] !== '--out');
   if (fi > -1) boards = boards.concat(fs.readFileSync(args[fi + 1], 'utf8').split(/\s+/).filter(Boolean));
   boards = [...new Set(boards.map((b) => b.toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '')))];
+
+  const LEDGER = require('path').join(__dirname, 'probe-boards.results.jsonl');
+  const fromProfiles = args.includes('--from-profiles');
+  if (fromProfiles) {
+    const done = new Set(); try { fs.readFileSync(LEDGER, 'utf8').split('\n').filter(Boolean).forEach((l) => done.add(JSON.parse(l).board.replace(/^www\./, ''))); } catch { /* no ledger yet */ }
+    const want = await wantedBoards();
+    const covered = coveredBoards();
+    boards = [...want.keys()].filter((b) => !done.has(b) && !covered.has(b));
+    console.log(`  ${want.size} boards named across live profiles, ${boards.length} not probed before`);
+    if (!boards.length) return;
+  }
   if (!boards.length) { console.error('usage: probe-boards.js <domain>... | --file boards.txt [--out probe.jsonl]'); process.exit(1); }
 
   const results = []; let next = 0;
@@ -156,6 +218,18 @@ async function probe(domain) {
     }
   }));
   if (oi > -1) fs.writeFileSync(args[oi + 1], results.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  if (fromProfiles) {
+    fs.appendFileSync(LEDGER, results.map((r) => JSON.stringify({ ...r, probed: new Date().toISOString().slice(0, 10) })).join('\n') + '\n');
+    const bulk = results.filter((r) => r.verdict === 'BULK' && r.sitemap);
+    if (bulk.length) {
+      const SP = require('path').join(__dirname, 'sources.json');
+      const SRC = JSON.parse(fs.readFileSync(SP, 'utf8'));
+      SRC.jsonld = SRC.jsonld || {};
+      bulk.forEach((r) => { if (!SRC.jsonld[r.board]) SRC.jsonld[r.board] = { sitemap: r.sitemap }; });
+      fs.writeFileSync(SP, JSON.stringify(SRC, null, 2) + '\n');
+      console.log(`  added to the nightly read: ${bulk.map((r) => r.board).join(', ')}`);
+    }
+  }
 
   const order = ['BULK', 'FEED', 'LIST-ONLY', 'WALLED', 'none', 'unreachable', 'error'];
   results.sort((a, b) => order.indexOf(a.verdict) - order.indexOf(b.verdict) || (b.jobs_listed || 0) - (a.jobs_listed || 0));

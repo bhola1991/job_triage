@@ -31,14 +31,14 @@ if [ -f supabase/.env ]; then set -a; . ./supabase/.env; set +a; fi
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
 
-say "1/6  Naukri: every city sitemap plus the latest-jd feed"
+say "1/7  Naukri: every city sitemap plus the latest-jd feed"
 # One index, followed. ~350k urls: nine named cities, OtherCities-1..6 which is
 # everywhere else in India, and latest-jd which is a day old at the head.
 node scripts/index/sitemap-jobs.js \
   "https://www.naukri.com/sitemap/sitemap.xml" \
   --out scripts/index/naukri.jsonl
 
-say "2/6  Naukri: the postings it says are expired"
+say "2/7  Naukri: the postings it says are expired"
 # A board publishing its own dead list is a better closure signal than absence
 # from a snapshot, which carries rotation noise. Kept separate so verify.js can
 # record WHICH kind of closure it was.
@@ -46,17 +46,21 @@ node scripts/index/sitemap-jobs.js \
   "https://www.naukri.com/sitemap/sitemap-expired-jd-pages.xml" \
   --out scripts/index/expired.jsonl
 
-say "3/6  ATS boards and the keyless APIs"
+say "3/7  ATS boards and the keyless APIs"
 # Greenhouse/Lever/Ashby from sources.json, plus Remotive, RemoteOK, Arbeitnow,
 # Himalayas and Singapore's MyCareersFuture. These are the FULL rows -- the ones
 # carrying a real description, so the only ones a judge can read.
 node scripts/index/ingest.js scripts/index/index.jsonl
 
-say "4/6  Deposit into the shared corpus"
-node scripts/index/push-index.js \
-  scripts/index/naukri.jsonl scripts/index/index.jsonl $DRY
+say "4/7  Boards that publish JobPosting data: probe newly named ones, then read them"
+node scripts/index/probe-boards.js --from-profiles || echo "  probe skipped: $?"
+node scripts/index/jsonld-boards.js scripts/index/jsonld.jsonl
 
-say "5/6  Harvest ATS slugs out of what the corpus just took in"
+say "5/7  Deposit into the shared corpus"
+node scripts/index/push-index.js \
+  scripts/index/naukri.jsonl scripts/index/index.jsonl scripts/index/jsonld.jsonl $DRY
+
+say "6/7  Harvest ATS slugs out of what the corpus just took in"
 # The loop that makes acquisition get cheaper as it runs. A paid search row is
 # not only a job: for anyone on Greenhouse/Lever/Ashby it carries a slug, and a
 # slug is that company's WHOLE board, free, for as long as they keep hiring --
@@ -78,14 +82,14 @@ else
   echo "  skipped: --no-push"
 fi
 
-say "6/6  What is still real"
+say "7/7  What is still real"
 # --expired marks declared closures; absence from today's snapshot marks
 # inferred ones. Both land in job_checks with closed_src saying which.
 # --prune 30 is what makes this safe to leave running. A posting dead for a
 # month has already given up its decay statistics, and anything a user tracks
 # is exempt. Without it the measured intake fills the tier in about two weeks.
 node --max-old-space-size=4096 scripts/index/verify.js \
-  scripts/index/naukri.jsonl scripts/index/index.jsonl \
+  scripts/index/naukri.jsonl scripts/index/index.jsonl scripts/index/jsonld.jsonl \
   --expired scripts/index/expired.jsonl --prune 30 $PUSH
 
 # ── is the live system actually working? ────────────────────────────────────

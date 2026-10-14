@@ -83,3 +83,5 @@ worker-configuration.d.ts
 .env.local
 .env*.local
 scripts/index/*.meta.json
+scripts/index/jsonld.jsonl
+scripts/index/jsonld.cache.json
