@@ -511,6 +511,7 @@ scripts/index/                      The OFFLINE CRAWLER, and the reason the corp
   verify.js                         Liveness: a set difference over daily snapshots. Two absences close a posting.
   harvest-slugs.js  probe-ats.js    Finding new boards. probe-ats guesses a company's ATS; --write names orphans.
   sitemap-jobs.js  corpus-urls.js   Sitemap harvesting and the url list verify.js reads.
+  probe-boards.js                   Can a job board be bulk-downloaded? robots.txt, job sitemap, feed, JobPosting data. Input: the boards profiles name.
   retrieve.js  validate.js          Local read and check helpers. No network.
   refresh.sh                        What the timer runs. Waits on the above, so a hang there cancels every later night.
   sources.json                      The board catalogue: greenhouse 150, ashby 84, lever 40, smartrecruiters 23, recruitee 19, workable 8.
