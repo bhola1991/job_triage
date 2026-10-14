@@ -528,6 +528,32 @@ testers every number is checkable by reading the table above it.
 `~/.local/state/jobtriage/`. Activity before 2026-10-13 was never recorded, so
 "opened a job" starts at zero for everyone.
 
+### 2026-10-14: the first new tester lost a finished onboarding
+
+Found by the first morning report, from one tester's activity timeline: he
+finished onboarding at 21:06, searched, reloaded at 21:20 and came back to an
+empty account. Two causes, both fixed:
+
+- **A double tap.** `finishOnb()` had no guard, so a second tap 2.8s after the
+  first filed a second record with `profile: null`.
+- **That record poisoned every save.** `profileRow()` wrote its `limits` as
+  null, `profiles.limits` is NOT NULL, and PostgREST refuses a whole batch for
+  one bad row -- so the real profile beside it was never saved either. The
+  blob was written first and held everything; nothing read it, because the
+  account was already on rows.
+
+`load()` now restores from the blob when an account has no profile row in any
+state (never when rows exist but are deleted), and saves it as rows at once.
+`selfcheck-sync.js`'s stand-in enforces the NOT NULL it used to ignore, which
+is why every check passed while this shipped. `insights.js` names the pattern
+("DATA AT RISK") and counts old-style blob profiles as profiles: it had
+reported one tester as never adding a CV when hers is simply unmigrated.
+
+Open from the same tester: no way to stop a running search (he reloaded to stop
+one, which is what exposed this); only one direction can be chosen in
+onboarding; and a username he says was refused, which is valid and available
+and could not be reproduced.
+
 ### Why forwarding and not a mailbox
 
 The obvious build is Gmail's API with `gmail.readonly`, a cron job, and a

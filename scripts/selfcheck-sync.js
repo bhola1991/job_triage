@@ -31,6 +31,11 @@ function fakeSupabase(){
       const keys = st.ins.opt.onConflict.split(',');
       const seen = new Set();
       const out = [];
+      /* profiles.limits is NOT NULL, and Postgres fails the whole statement on
+         one bad row. Enforced here because the stand-in not enforcing it is how
+         a null got shipped: every check passed and a tester lost their profile. */
+      if(st.table === 'profiles' && st.ins.rows.some(r => 'limits' in r && r.limits === null))
+        throw new Error('null value in column "limits" of relation "profiles" violates not-null constraint');
       for(const r of st.ins.rows){
         const sig = keys.map(k => r[k]).join(NUL);
         /* Postgres refuses this outright -- "ON CONFLICT DO UPDATE command
@@ -335,6 +340,44 @@ const profileRec = jobs => ({
     KV5['triage:db'] = '';
     await legacy.save();
     ok(KV5['triage:db'] !== '', "a bare '1' keeps its blob: its fortnight starts now, not retroactively");
+  }
+
+  // ---- the double tap that lost a tester's profile (2026-10-13) -----------
+  /* Onboarding finished twice: a real profile, and beside it a record with no
+     profile in it. The broken one must not stop the real one being saved. */
+  {
+    const SB6 = fakeSupabase(), KV6 = { 'triage:migrated': new Date().toISOString() };
+    const t = await (async () => { const x = newTab(SB6, KV6); await x.load(); return x; })();
+    t.setDB({ profiles: { p_good: profileRec([job('Echo')]), p_bad: { profile: null, raw: '', track: null, jobs: [], created: '2026-10-13' } }, current: 'p_good' });
+    await t.save();
+    ok(SB6._t.profiles.some(r => r.local_id === 'p_good'), 'a broken record beside a real profile does not stop the real one saving');
+    const back = newTab(SB6, KV6); await back.load();
+    ok(back.getDB().profiles.p_good && back.getDB().profiles.p_good.jobs.length === 1, 'and the real profile is there after a reload');
+  }
+
+  // ---- an account whose row save never landed -----------------------------
+  /* What that tester's account looks like today: migrated, a blob holding the
+     profile, and not one profile row. Loading must give the profile back and
+     put it where it belongs, without the broken record. */
+  {
+    const SB7 = fakeSupabase(), KV7 = { 'triage:migrated': new Date().toISOString(),
+      'triage:db': JSON.stringify({ profiles: { p_good: profileRec([]), p_bad: { profile: null, raw: '', track: null, jobs: [], created: '2026-10-13' } }, current: 'p_bad' }) };
+    const t = newTab(SB7, KV7); await t.load();
+    const db = t.getDB();
+    ok(Object.keys(db.profiles).join() === 'p_good', 'the profile is restored from the blob and the broken record is left behind, got ' + Object.keys(db.profiles));
+    ok(db.current === 'p_good', 'the open profile points at something usable, got ' + db.current);
+    ok(SB7._t.profiles.filter(r => r.local_id === 'p_good').length === 1, 'and it is saved as a row straight away');
+    const again = newTab(SB7, KV7); await again.load();
+    ok(again.getDB().profiles.p_good, 'so the next load finds it in the rows');
+  }
+
+  // ---- and it must never resurrect what somebody deleted -------------------
+  {
+    const SB8 = fakeSupabase(), KV8 = { 'triage:migrated': new Date().toISOString() };
+    SB8._t.profiles.push({ id: 'px', user_id: 'user-1', local_id: 'p_gone', deleted: true });
+    KV8['triage:db'] = JSON.stringify({ profiles: { p_gone: profileRec([]) }, current: 'p_gone' });
+    const t = newTab(SB8, KV8); await t.load();
+    ok(Object.keys(t.getDB().profiles).length === 0, 'a stale blob does not bring back a profile the person deleted');
   }
 
   console.log(process.exitCode ? 'SOME FAILED' : 'ALL PASS');

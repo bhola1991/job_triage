@@ -60,7 +60,7 @@ const have = (k) => `${k} ${k === 1 ? 'has' : 'have'}`;
   const ur = await fetch(`${SB}/auth/v1/admin/users?per_page=1000`, { headers: H, signal: AbortSignal.timeout(30e3) });
   if (!ur.ok) throw new Error(`users: ${ur.status}`);
   const users = (await ur.json()).users || [];
-  const [credits, profiles, jobs, usage, feedback, mail, activity] = await Promise.all([
+  const [credits, profiles, jobs, usage, feedback, mail, activity, blobs] = await Promise.all([
     rows('credits', 'select=user_id,tester,unlimited,free_search,free_llm,balance'),
     rows('profiles', 'select=id,user_id,created_at,intent,inbox_token&deleted=is.false'),
     rows('jobs', 'select=user_id,stage,ai_score,created_at,date_applied&deleted=is.false'),
@@ -68,7 +68,12 @@ const have = (k) => `${k} ${k === 1 ? 'has' : 'have'}`;
     rows('feedback', `select=user_id,kind,message,context,via,created_at&created_at=gte.${since}&order=created_at.desc`),
     rows('inbound_mail', `select=user_id,created_at,decision,applied_stage&created_at=gte.${since}`),
     rows('activity', `select=user_id,at,kind,detail&at=gte.${since}&order=at.asc`),
+    /* Who has a profile in the old one-blob storage. Only the user_id comes
+       back: the blob is somebody's whole CV and there is no reason to read it
+       to learn that it exists. */
+    rows('user_state', `select=user_id&k=eq.triage:db&v=like.${encodeURIComponent('*"profile":{*')}`),
   ]);
+  const hasBlob = new Set(blobs.map((b) => b.user_id));
 
   const cr = new Map(credits.map((c) => [c.user_id, c]));
   const g = (list) => by(list, (x) => x.user_id);
@@ -84,7 +89,12 @@ const have = (k) => `${k} ${k === 1 ? 'has' : 'have'}`;
       id, name: (u.user_metadata || {}).username || '(no username)', owner: !!c.unlimited,
       joined: u.created_at, seen,
       opened: ac.some((a) => a.kind === 'open') || (u.last_sign_in_at && new Date(u.last_sign_in_at) >= START),
-      profile: (P.get(id) || []).length > 0,
+      profile: (P.get(id) || []).length > 0 || hasBlob.has(id),
+      /* The signature of a row save that never landed: a profile in the blob,
+         none in the tables, on an account that has opened the app since rows
+         became the storage. This is how a tester lost a finished onboarding on
+         2026-10-13 -- worth a line of its own every morning it is true. */
+      unsaved: hasBlob.has(id) && !(P.get(id) || []).length && ac.some((a) => a.kind === 'open'),
       searches: new Set(us.filter((e) => e.search_id).map((e) => e.search_id)).size,
       jobs: js.length, scored: js.filter((j) => j.ai_score != null && j.ai_score !== '').length,
       jobOpens: ac.filter((a) => a.kind === 'job_open').length,
@@ -166,6 +176,8 @@ const have = (k) => `${k} ${k === 1 ? 'has' : 'have'}`;
 
   /* ── what it adds up to ─────────────────────────────────────────────────── */
   const ins = [];
+  const unsaved = testers.filter((t) => t.unsaved);
+  if (unsaved.length) ins.push(`DATA AT RISK — ${have(unsaved.length)} a profile that was never saved to the tables: ${names(unsaved)}. They see an empty app on reload. The app restores it from the backup copy on their next visit; if this line is still here tomorrow for the same person, that did not work.`);
   const noOpen = testers.filter((t) => !t.opened);
   if (noOpen.length) ins.push(`${have(noOpen.length)} not opened the app since the invites (of ${n}): ${names(noOpen)}. Nothing to learn from them yet — a nudge is the only move.`);
   const noCv = testers.filter((t) => t.opened && !t.profile);

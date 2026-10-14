@@ -1518,7 +1518,12 @@ function profileRow(localId, p){
     // Same keys as the usable branch below, or a mixed batch nulls real
     // columns: PostgREST's upsert unions the keys across the array.
     PROF_INT.forEach(c => r[c] = null);
-    PROF_OBJ.forEach(c => r[c] = null);
+    /* limits is NOT NULL in the table. Written as null it failed the insert,
+       and PostgREST refuses the whole batch for one bad row -- so a single
+       broken record beside a real profile meant NO profile was ever saved for
+       that account, every save failed the same way, and a reload showed an
+       empty app. Seen on 2026-10-13: a tester lost a finished onboarding. */
+    PROF_OBJ.forEach(c => r[c] = (c === 'limits') ? {} : null);
     r.years_experience = null; r.cv_text = null; r.track = null; r.created = null;
     r.extras = { __raw: JSON.stringify(p) };
     return r;
@@ -1842,9 +1847,36 @@ async function load(){
       if(v){ const d=JSON.parse(v); DB.profiles=d.profiles||{}; DB.current=d.current||null; }
     }catch(e){}
   }
+  /* Rows came back with no profile. Usually that is the truth. But if this
+     account has no profile row in ANY state -- not even a deleted one -- then
+     a row save has never once landed for it, and the blob, which save() writes
+     first, is the only copy of whatever they made. Read it back rather than
+     show them an empty app, and send it up properly below.
+
+     The any-state check is what makes this safe: someone who deleted their
+     profiles has rows marked deleted, so a stale blob can never resurrect
+     what a person chose to remove. */
+  let rescued = false;
+  if(fromRows && !Object.keys(DB.profiles).length){
+    try{
+      const {count, error} = await SB.from('profiles').select('id', {count:'exact', head:true}).eq('user_id', USER.id);
+      if(!error && count === 0){
+        for(const read of [get, getLocal]){
+          let d = null; try{ d = JSON.parse((await read('triage:db')) || 'null'); }catch(e){}
+          const good = {};
+          Object.keys((d && d.profiles) || {}).forEach(k => { if(usable(d.profiles[k])) good[k] = d.profiles[k]; });
+          if(Object.keys(good).length){
+            DB.profiles = good; DB.current = good[d.current] ? d.current : Object.keys(good)[0];
+            rescued = true; break;
+          }
+        }
+      }
+    }catch(e){ console.warn('blob rescue skipped:', e && e.message); }
+  }
   /* What the server is now known to hold, so the next save sends only what
      changed rather than every row the person has ever had. */
-  LAST_SAVED = (cloudNow() && MIGRATED) ? snapshot().sigs : null;
+  LAST_SAVED = (cloudNow() && MIGRATED) ? (rescued ? {} : snapshot().sigs) : null;
+  if(rescued){ console.warn('profiles restored from the blob; saving them as rows'); await save(); }
   KEY   = (await get('triage:key'))   || '';
   PROV  = (await get('triage:prov'))  || 'deepseek';
   APIFY = (await get('triage:apify')) || '';
@@ -5594,6 +5626,11 @@ async function finishOnb(){
     VIEW='app'; ONB=blankOnb();
     await save(); render(); return;
   }
+  /* A second tap on the button, before the first has finished saving and
+     redrawn: ONB was already reset, so there is nothing to finish. Without
+     this the second tap filed a record with no profile in it -- which is the
+     broken record profileRow() has to cope with above. */
+  if(!ONB.parsed) return;
   const id = 'p_'+Date.now().toString(36);
   DB.profiles[id]={ profile:ONB.parsed, raw:ONB.raw, track:ONB.track, jobs:[], created:today() };
   DB.current=id; VIEW='app';

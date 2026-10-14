@@ -162,6 +162,11 @@ ok(T.coerceProfile(wire(T.profileRow('p_x', odd))).profile.favourite_colour === 
 const broken = { raw: 'x', jobs: [], created: '2026-01-01' };
 const b2 = T.coerceProfile(wire(T.profileRow('p_b', broken)));
 eq(b2, broken, 'a record with no .profile is stored verbatim and comes back broken, not fake-repaired');
+/* profiles.limits is NOT NULL. A null here failed the insert, PostgREST refused
+   the whole batch, and the real profile beside the broken one was never saved:
+   a tester reloaded into an empty account on 2026-10-13. */
+{ const lim = T.profileRow('p_b', broken).limits;
+  ok(lim && typeof lim === 'object' && !Array.isArray(lim), 'a broken record still writes limits as an object, never null: ' + JSON.stringify(lim)); }
 
 /* inbox_token is set once by the Replies panel and read by the Email Worker to
    route a forwarded reply. saveRows() upserts a whole profile row, and
