@@ -23,7 +23,7 @@ stale file has the more obvious name and sits at the repository root.
 
 | Palette | Ground | Where it lives | Status |
 | --- | --- | --- | --- |
-| **v2 "go/due/closing/awaiting"** | `#111315` (night) / `#F6F6F2` (paper) | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css`, `icon.svg`, `manifest.json` | **SHIPPED — use this** |
+| **v2 "go/due/closing/awaiting"** | `#111315` (night) / `#F4E1D2` (salmon paper) | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css`, `icon.svg`, `manifest.json` | **SHIPPED — use this** |
 | v1 "signal/good/live/warn" | `#0E1411` | `job-triage.tokens.json` (repo root), `*.dc.html` at repo root | Superseded |
 
 (A third, pre-v1 blue-grey ground `#131A21` survived in `icon.svg` and
@@ -144,9 +144,9 @@ That is why `scripts/selfcheck-tokens.js` asserts **all sixteen** pairs: each
 accent as text on its chip and on its row, in both themes. On the palette
 adopted 2026-10-14 every tint is **opaque** in both themes, so a chip no longer
 depends on the surface under it, and the rows are plain cards (`-row` equals
-`--panel`). The measured floor is paper `--due` on its tint at **4.61:1**;
-paper `--go` on its tint is 5.15 and everything at night clears 5.8. Treat the
-paper red as the one with no room: lighten `--due-tint` or brighten `--due`
+`--panel`). The measured floor is paper `--due` on its tint at **4.71:1**;
+paper `--go` on its tint is 5.20 and everything at night clears 5.8. Treat the
+paper red as the one with least room: lighten `--due-tint` or brighten `--due`
 and it fails.
 
 Two ways to fix a failing pair, and which is right differs: **move the accent**
@@ -154,14 +154,28 @@ Two ways to fix a failing pair, and which is right differs: **move the accent**
 wash** (when the accent cannot move without changing colour). Run the check
 after either.
 
-### The surfaces are neutral, and paper's line is black
+### Three colour styles: salmon paper, blush, night
 
-`--ink → --panel → --panel2` carry no hue in either theme. `--muted`
-(`#AEB4BA` at night) clears AA body contrast on all three: 8.90 on `--ink`,
-8.08 on `--panel`, 7.18 on `--panel2`. On paper `--line` is `#14181A` — the same
-value as `--text` — which is what draws every card and button with a true
-outline; at night it is a mid grey (`#59616A`), because a white outline on
-charcoal would shout. Do not "fix" the two themes to match.
+The theme button (`#btnTheme`, labelled "Colours") cycles `auto → light →
+blush → dark`. `auto` follows the device: salmon by day, night by night.
+
+- **Salmon paper** is the light theme — the pink-brown of a financial daily,
+  adopted 2026-10-15 because the near-white before it was too bright. It is
+  the one light set in `design/jobtriage.tokens.json`, so the kit and
+  `legal.css` carry it too.
+- **Blush** is app-only: `:root[data-theme="light"][data-paper="blush"]` in
+  `index.html`, a pinker ground a shade darker than salmon. It rides on the
+  light theme, so every rule written for light still applies; it only re-points
+  values. It is not in the tokens file and `selfcheck-tokens.js` does not see
+  it — its contrast was checked when it was set (floor: `--due` on its tint,
+  4.76). If you change it, check the same pairs by hand.
+- **Night** is the dark theme, neutral charcoal.
+
+On paper `--line` is a warm near-black (`#2B211C`), close to `--text`, which
+is what draws every card and button with a true outline; at night it is a mid
+grey (`#59616A`), because a light outline on charcoal would shout. Do not
+"fix" the themes to match. Night's surfaces carry no hue; `--muted` (`#AEB4BA`)
+clears AA on all three of them.
 
 ### Token vocabulary
 
@@ -185,11 +199,11 @@ Four accents, one instruction each (`index.html:13-23`, `design/README.md`):
 
 | Token | Dark | Light | Means |
 | --- | --- | --- | --- |
-| `--go` | `#4CC76B` | `#13733A` | Do this now. The only fill-weight button. |
-| `--due` | `#FF7A70` | `#C4302B` | Overdue — past the follow-up date. |
-| `--closing` | `#F5B700` | `#8A5A00` | Posting old enough to be filled soon. |
-| `--awaiting` | `#8FA2FF` | `#2449C9` | Sent; the next move is theirs. |
-| `--closed` | `#4A5058` | `#B4B4AC` | Grey = the absence of an instruction. |
+| `--go` | `#4CC76B` | `#1C6B38` | Do this now. The only fill-weight button. |
+| `--due` | `#FF7A70` | `#B02E2A` | Overdue — past the follow-up date. |
+| `--closing` | `#F5B700` | `#7A5000` | Posting old enough to be filled soon. |
+| `--awaiting` | `#8FA2FF` | `#2A45AC` | Sent; the next move is theirs. |
+| `--closed` | `#4A5058` | `#BFAEA2` | Grey = the absence of an instruction. |
 
 Three rules a Figma import must not violate:
 
@@ -378,7 +392,7 @@ Everything the top bar held is in `<nav class="rail" id="rail">`, down the
 left edge: 68px of icons with count badges, 296px with words when opened.
 
 - **Every control kept its id** (`tbOpen`, `trackSel`, `btnPal`, `btnTheme`, `btnFeedback`, `btnCredits`, `btnSignOut`, and `btnReplies` when inbound mail is live), because the command palette dispatches by clicking them. Do not rename or duplicate one.
-- **Open pushes, it does not cover** — `.rail.open ~ .wrap` takes a 296px margin at ≥1200px. Below that there is no room, so it lies over the queue.
+- **Open pushes, it does not cover**, at every width where the rail is a column (above 900px): `.rail.open ~ .wrap` takes a 296px margin. It pushed only from 1200px until 2026-10-15, which meant it covered the queue on most laptops. Below 1200px the decision pane is a sheet over the page, so the queue still has room. On a screen under 800px tall the drawing at its foot is hidden rather than cut off.
 - **On a phone (≤900px) it is a strip along the bottom** that pulls up into a sheet, by its handle (`#railGrab`) or a swipe. It replaced `#toolbar`.
 - **On a phone the queue is a carousel, not a thread.** Each section's rows sit in a `.qcar` that scrolls sideways with native scroll-snap, one card at a time with the next peeking; sections stay stacked so the colour law still reads top to bottom. On a wide screen `.qcar` is `display:contents` and changes nothing. `CAR` remembers each carousel's position across re-renders, and the open job is scrolled into view.
 - **Open is remembered** (`localStorage` `triage:rail`) on a wide screen only; on a phone open is a sheet, and a sheet must not be the first thing a page shows.
@@ -423,9 +437,9 @@ straight-line fill kept for the floor alone.
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
 - **Its values are fixed, not read from `:root`.** `--au-ink`, `--au-paper`,
   `--au-gr` and the rest live on `.au-scene`, `.au-strip` and `.ob-paper` and
-  hold the paper theme's values, so these screens stay paper for someone whose
+  hold salmon paper's values, so these screens stay salmon paper for someone whose
   device is set to night. Do not lift them onto `:root`.
-- **The green button carries white text.** `--au-gr` is `#13733A`, 5.9:1 under
+- **The green button carries white text.** `--au-gr` is `#1C6B38`, 6.5:1 under
   white. (The marker green it replaced was 3.2:1 and had to carry ink.)
 - **The card's hard offset shadow is one of the two in the product** — the
   other is the selected job. Buttons and fields here have none.

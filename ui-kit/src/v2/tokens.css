@@ -30,24 +30,24 @@
 
 [data-palette="v2"][data-theme="light"] {
   color-scheme: light;
-  --ink: #F6F6F2; --panel: #FFFFFF; --panel2: #EEEEE8; --line: #14181A; --hair: #E0E0D9;
-  --text: #14181A; --muted: #51585C; --dim: #6B7276;
+  --ink: #F4E1D2; --panel: #FCF1E7; --panel2: #EBD3C1; --line: #2B211C; --hair: #E0C6B3;
+  --text: #211A16; --muted: #5A4A40; --dim: #6F5E53;
 
-  --go: #13733A; --on-go: #FFFFFF; --go-line: #13733A; --go-chip: #E3F3E8; --go-row: #FFFFFF;
-  --due: #C4302B; --on-due: #FFFFFF; --due-line: #C4302B; --due-chip: #FBE6E4; --due-row: #FFFFFF;
-  --closing: #8A5A00; --closing-line: #8A5A00; --closing-chip: #FBF0CC; --closing-row: #FFFFFF;
-  --awaiting: #2449C9; --awaiting-line: #2449C9; --awaiting-chip: #E4EAFB; --awaiting-row: #FFFFFF;
+  --go: #1C6B38; --on-go: #FFFFFF; --go-line: #1C6B38; --go-chip: #E1E8D2; --go-row: #FCF1E7;
+  --due: #B02E2A; --on-due: #FFFFFF; --due-line: #B02E2A; --due-chip: #F5D6CE; --due-row: #FCF1E7;
+  --closing: #7A5000; --closing-line: #7A5000; --closing-chip: #F3DFBE; --closing-row: #FCF1E7;
+  --awaiting: #2A45AC; --awaiting-line: #2A45AC; --awaiting-chip: #E2DCE6; --awaiting-row: #FCF1E7;
 
   /* The tokens above are named -chip after the source of truth; components.css
      reads -tint, which is what index.html calls the same light value. Without
      these four the -tint names fell through to their DARK definitions, so every
      pill, outline button and callout rendered a translucent dark wash on white.
      Same values as the chips -- one name per consumer, not two colours. */
-  --go-tint: #E3F3E8; --due-tint: #FBE6E4;
-  --closing-tint: #FBF0CC; --awaiting-tint: #E4EAFB;
-  --closed: #B4B4AC;
+  --go-tint: #E1E8D2; --due-tint: #F5D6CE;
+  --closing-tint: #F3DFBE; --awaiting-tint: #E2DCE6;
+  --closed: #BFAEA2;
 
-  --shadow: 0 1px 2px rgba(20,24,26,.06);
-  --shadow-md: 0 6px 18px rgba(20,24,26,.10);
-  --shadow-lg: 0 14px 40px rgba(20,24,26,.16);
+  --shadow: 0 1px 2px rgba(43,33,28,.07);
+  --shadow-md: 0 6px 18px rgba(43,33,28,.12);
+  --shadow-lg: 0 14px 40px rgba(43,33,28,.18);
 }

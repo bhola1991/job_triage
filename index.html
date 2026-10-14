@@ -74,47 +74,66 @@
     --mono:ui-monospace,'Cascadia Mono',Consolas,monospace;
   }
 
-  /* Paper. The ground becomes the ink and --line becomes a true black outline,
-     which is what gives this theme its drawn look. Accents darken to hold
+  /* Salmon paper: the pink-brown of a financial daily, darker and warmer than
+     the near-white it replaced on 2026-10-15. --line is a warm near-black
+     outline, which is what gives this theme its drawn look. Accents darken to hold
      contrast on white. Shadows lose most of their weight -- a heavy shadow on
      white reads as dirt rather than as depth. */
   :root[data-theme="light"]{
     color-scheme:light;
-    --brand:#6A41C6; --hard:#14181A; --tile:#EEEEE8; --gnd:#C9C9C0;
-    --ink:#F6F6F2; --panel:#FFFFFF; --panel2:#EEEEE8; --line:#14181A; --hair:#E0E0D9;
-    --text:#14181A; --muted:#51585C; --dim:#6B7276;
+    --brand:#6A41C6; --hard:#2B211C; --tile:#EBD3C1; --gnd:#D2B8A4;
+    --ink:#F4E1D2; --panel:#FCF1E7; --panel2:#EBD3C1; --line:#2B211C; --hair:#E0C6B3;
+    --text:#211A16; --muted:#5A4A40; --dim:#6F5E53;
 
-    --go:#13733A;       --on-go:#FFFFFF;  --go-line:#13733A;       --go-tint:#E3F3E8;
-    --due:#C4302B;      --on-due:#FFFFFF; --due-line:#C4302B;      --due-tint:#FBE6E4;
-    --closing:#8A5A00;  --closing-line:#8A5A00;  --closing-tint:#FBF0CC;
-    --awaiting:#2449C9; --awaiting-line:#2449C9; --awaiting-tint:#E4EAFB;
-    --closed:#B4B4AC;
-    --go-row:#FFFFFF; --due-row:#FFFFFF; --closing-row:#FFFFFF; --awaiting-row:#FFFFFF;
+    --go:#1C6B38;       --on-go:#FFFFFF;  --go-line:#1C6B38;       --go-tint:#E1E8D2;
+    --due:#B02E2A;      --on-due:#FFFFFF; --due-line:#B02E2A;      --due-tint:#F5D6CE;
+    --closing:#7A5000;  --closing-line:#7A5000;  --closing-tint:#F3DFBE;
+    --awaiting:#2A45AC; --awaiting-line:#2A45AC; --awaiting-tint:#E2DCE6;
+    --closed:#BFAEA2;
+    --go-row:#FCF1E7; --due-row:#FCF1E7; --closing-row:#FCF1E7; --awaiting-row:#FCF1E7;
     --row-pad:10px;
 
-    --signal:#13733A; --signal-hi:#0F5E2F; --on-signal:#FFFFFF;
-    --cool:#13733A;
-    --warn:#C4302B;   --warn-line:#C4302B;
-    --good:#13733A;   --good-line:#13733A;
+    --signal:#1C6B38; --signal-hi:#155530; --on-signal:#FFFFFF;
+    --cool:#1C6B38;
+    --warn:#B02E2A;   --warn-line:#B02E2A;
+    --good:#1C6B38;   --good-line:#1C6B38;
 
-    --posted:#13733A; --posted-dim:#E3F3E8;
-    --cold:#51585C;   --cold-dim:#EEEEE8;
-    --neutral:#6B7276; --neutral-line:#14181A;
-    --live:#13733A;   --live-line:#13733A;
-    --stale-line:#E0E0D9;
+    --posted:#1C6B38; --posted-dim:#E1E8D2;
+    --cold:#5A4A40;   --cold-dim:#EBD3C1;
+    --neutral:#6F5E53; --neutral-line:#2B211C;
+    --live:#1C6B38;   --live-line:#1C6B38;
+    --stale-line:#E0C6B3;
 
     --glow1:transparent; --glow2:transparent;
-    --signal-tint:#E3F3E8; --signal-tint2:rgba(19,115,58,.03);
+    --signal-tint:#E1E8D2; --signal-tint2:rgba(28,107,56,.03);
     --signal-glow:transparent;
-    --good-tint:#E3F3E8;
-    --warn-tint:#FBE6E4; --warn-chip:#FBE6E4;
-    --live-tint:#E3F3E8;
-    --plot-fade:#B4B4AC;
-    --veil:rgba(20,24,26,.45); --veil-lite:rgba(20,24,26,.28);
+    --good-tint:#E1E8D2;
+    --warn-tint:#F5D6CE; --warn-chip:#F5D6CE;
+    --live-tint:#E1E8D2;
+    --plot-fade:#BFAEA2;
+    --veil:rgba(43,33,28,.45); --veil-lite:rgba(43,33,28,.28);
     /* The shadow colour is --text (20,24,26), per the tokens file. */
-    --shadow:0 1px 2px rgba(20,24,26,.06);
-    --shadow-md:0 6px 18px rgba(20,24,26,.10);
-    --shadow-lg:0 14px 40px rgba(20,24,26,.16);
+    --shadow:0 1px 2px rgba(43,33,28,.07);
+    --shadow-md:0 6px 18px rgba(43,33,28,.12);
+    --shadow-lg:0 14px 40px rgba(43,33,28,.18);
+  }
+  /* Blush: the second paper. Same law, same accents a shade deeper, on a pink
+     ground a little darker than salmon. App-only -- the tokens file carries one
+     light set, and this rides on top of it as data-paper="blush", so every
+     rule written for the light theme still applies. */
+  :root[data-theme="light"][data-paper="blush"]{
+    --ink:#EBD9D5; --panel:#F7EEEB; --panel2:#E2CDC8; --line:#2A2022; --hair:#D6BFBA;
+    --text:#21191B; --muted:#574749; --dim:#695A5C;
+    --go:#1C6B38; --go-line:#1C6B38; --go-tint:#DCE6D4; --go-row:#F7EEEB;
+    --due:#AC2C31; --due-line:#AC2C31; --due-tint:#F2D3D2; --due-row:#F7EEEB;
+    --closing:#774E00; --closing-line:#774E00; --closing-tint:#EFDCC0; --closing-row:#F7EEEB;
+    --awaiting:#2D44AA; --awaiting-line:#2D44AA; --awaiting-tint:#DDDAEA; --awaiting-row:#F7EEEB;
+    --closed:#C2AFAB; --plot-fade:#C2AFAB;
+    --signal:#1C6B38; --cool:#1C6B38; --good:#1C6B38; --good-line:#1C6B38; --posted:#1C6B38; --live:#1C6B38; --live-line:#1C6B38;
+    --posted-dim:#DCE6D4; --signal-tint:#DCE6D4; --good-tint:#DCE6D4; --live-tint:#DCE6D4;
+    --warn:#AC2C31; --warn-line:#AC2C31; --warn-tint:#F2D3D2; --warn-chip:#F2D3D2;
+    --cold:#574749; --cold-dim:#E2CDC8; --neutral:#695A5C; --neutral-line:#2A2022; --stale-line:#D6BFBA;
+    --hard:#2A2022; --tile:#E2CDC8; --gnd:#C9AFA9;
   }
   *{box-sizing:border-box}
   #app{background:
@@ -226,8 +245,8 @@
      than read from :root -- the paper theme's own, by value. No job row is
      ever on this screen, so nothing here is an instruction. */
   .au-scene,.au-strip,.ob-paper{
-    --au-ink:#14181A;--au-paper:#F6F6F2;--au-card:#FFFFFF;--au-wash:#EEEEE8;--au-gndl:#C9C9C0;
-    --au-yl:#F5B700;--au-rd:#C4302B;--au-bl:#2449C9;--au-gr:#13733A;--au-brand:#6A41C6}
+    --au-ink:#211A16;--au-paper:#F4E1D2;--au-card:#FCF1E7;--au-wash:#EBD3C1;--au-gndl:#D2B8A4;
+    --au-yl:#F5B700;--au-rd:#B02E2A;--au-bl:#2A45AC;--au-gr:#1C6B38;--au-brand:#6A41C6}
   .au-scene{
     /* How tall the floor is. Tied to the people's drawn height, so their feet
        and the car's wheels land on the lined ground at every width. */
@@ -253,7 +272,7 @@
     font-size:15px;font-weight:700;color:var(--au-ink);background:var(--au-card);
     border:1.5px solid var(--au-ink);border-radius:10px;padding:11px 14px}
   .au-sign .au-b:hover:not(:disabled){color:var(--au-ink);border-color:var(--au-ink);background:var(--au-wash);transform:none}
-  /* White on this green is 5.9:1. The marker green it replaced was too light to carry white. */
+  /* White on this green is 6.5:1. The marker green it replaced was too light to carry white. */
   .au-sign .au-b.au-go,.au-sign .au-b.au-go:hover:not(:disabled){background:var(--au-gr);border-color:var(--au-gr);color:#fff}
   .au-sign .au-b.au-sm{width:auto;margin-top:0;font-size:13.5px;padding:8px 12px}
   .au-g{display:flex;background:#fff;border-radius:50%;padding:3px}
@@ -268,7 +287,7 @@
   .au-fields{display:flex;flex-direction:column;gap:7px;margin-top:8px}
   .au-fields label.lab{color:var(--au-ink);font-size:12.5px;font-weight:650;margin:4px 0 0}
   .au-fields input[type=text],.au-fields input[type=email],.au-fields input[type=password]{
-    font-family:var(--disp);font-size:14px;padding:9px 11px;background:#fff;color:var(--au-ink);
+    font-family:var(--disp);font-size:14px;padding:9px 11px;background:var(--au-card);color:var(--au-ink);
     border:1.5px solid var(--au-ink);border-radius:8px}
   .au-fields input:focus{border-color:var(--au-ink)}
   .au-fields .pw .rev{color:var(--au-ink)}
@@ -288,19 +307,19 @@
      turn charcoal half way through for someone whose device is set to night. */
   .ob-paper{
     color-scheme:light;min-height:100vh;background:var(--au-paper);color:var(--au-ink);
-    --ink:var(--au-paper);--panel:var(--au-card);--panel2:var(--au-wash);--line:var(--au-ink);--hair:#E0E0D9;
-    --text:var(--au-ink);--muted:#51585C;--dim:#6B7276;
-    --signal:var(--au-gr);--signal-hi:#0F5E2F;--on-signal:#fff;--cool:var(--au-gr);
+    --ink:var(--au-paper);--panel:var(--au-card);--panel2:var(--au-wash);--line:var(--au-ink);--hair:#E0C6B3;
+    --text:var(--au-ink);--muted:#5A4A40;--dim:#6F5E53;
+    --signal:var(--au-gr);--signal-hi:#155530;--on-signal:#fff;--cool:var(--au-gr);
     --go:var(--au-gr);--on-go:#fff;--good:var(--au-gr);--go-line:var(--au-gr);--good-line:var(--au-gr);
-    --go-tint:#E3F3E8;--good-tint:#E3F3E8;--signal-tint:#E3F3E8;--signal-glow:transparent;
-    --warn:var(--au-rd);--due:var(--au-rd);--warn-line:var(--au-rd);--warn-tint:#FBE6E4;
-    --shadow:0 1px 2px rgba(20,24,26,.06);--shadow-md:0 6px 18px rgba(20,24,26,.10);--shadow-lg:0 14px 40px rgba(20,24,26,.16)}
+    --go-tint:#E1E8D2;--good-tint:#E1E8D2;--signal-tint:#E1E8D2;--signal-glow:transparent;
+    --warn:var(--au-rd);--due:var(--au-rd);--warn-line:var(--au-rd);--warn-tint:#F5D6CE;
+    --shadow:0 1px 2px rgba(43,33,28,.07);--shadow-md:0 6px 18px rgba(43,33,28,.12);--shadow-lg:0 14px 40px rgba(43,33,28,.18)}
   .ob-paper .topbar{border-bottom:1.5px solid var(--au-ink)}
   .ob-paper .topbar h1{color:var(--au-brand);font-weight:750}
   .ob-paper .onb .lede{font-weight:750;letter-spacing:-.025em}
   .ob-paper .card,.ob-paper .trk,.ob-paper .drop{border-width:1.5px;border-radius:10px}
   .ob-paper .trk.sel{background:var(--go-tint);border-color:var(--au-ink);border-width:2px}
-  .ob-paper input[type=text],.ob-paper textarea,.ob-paper select{background:#fff;font-family:var(--disp);font-size:14px}
+  .ob-paper input[type=text],.ob-paper textarea,.ob-paper select{background:var(--au-card);font-family:var(--disp);font-size:14px}
   .ob-paper input:focus,.ob-paper textarea:focus,.ob-paper select:focus{border-color:var(--au-ink);
     outline:3px solid var(--au-bl);outline-offset:2px}
   /* The strip: the same floor and people, as a band rather than a page. */
@@ -693,7 +712,11 @@
   .bar{height:3px;background:var(--panel2);border-radius:2px;overflow:hidden;margin-top:5px}
   .bar i{display:block;height:100%}
 
-  .empty{border:1px dashed var(--line);border-radius:4px;padding:34px 20px;text-align:center;color:var(--muted)}
+  .empty{border:1.5px solid var(--line);border-radius:10px;padding:34px 20px 52px;text-align:center;color:var(--muted);
+    background:var(--panel);position:relative;overflow:hidden}
+  /* The straight-line motif, as on the sign-in floor and at the rail's foot. */
+  .empty::after{content:"";position:absolute;left:0;right:0;bottom:0;height:22px;border-top:1.5px solid var(--line);
+    background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
   .empty b{display:block;color:var(--text);font-size:15px;font-weight:500;margin-bottom:6px}
   .prog{height:2px;background:var(--panel2);border-radius:1px;overflow:hidden;margin-top:8px}
   .prog i{display:block;height:100%;background:var(--signal);transition:width .3s}
@@ -921,16 +944,17 @@
   .rail.open{width:296px}
   .rail.open .r-lb{display:block;white-space:normal}
   .rail.open .r-foot{display:block}
+  /* On a short screen the list already fills the rail; a cut-off drawing looks broken. */
+  @media(max-height:800px) and (min-width:901px){ .rail.open .r-foot{display:none} }
   #syncInfo{margin:0 22px}
   .rail ~ .wrap{margin-left:68px;transition:margin-left .18s ease}
   .rail ~ #syncInfo{margin-left:90px}
-  /* Open, the rail pushes the workspace across instead of covering it -- while
-     there is room. Below that it lies over the queue, like the drawer does. */
-  @media(min-width:1200px){
-    .rail.open ~ .wrap{margin-left:296px}
-    .rail.open ~ #syncInfo{margin-left:318px}
-  }
-  @media(max-width:1199px){ .rail.open{box-shadow:var(--shadow-lg)} }
+  /* Open, the rail pushes the workspace across instead of covering it, at
+     every width where it is a column. It used to push only from 1200px, so on
+     most laptops it covered the queue instead. Below 1200 the decision pane is
+     a sheet over the page, so there is still room for the queue beside it. */
+  .rail.open ~ .wrap{margin-left:296px}
+  .rail.open ~ #syncInfo{margin-left:318px}
   @media(prefers-reduced-motion:reduce){ .rail,.rail ~ .wrap{transition:none} }
 
   /* A job open on a small screen: the sheet leads with the name and the one
@@ -1213,14 +1237,17 @@ let FOLDS = { add:false, score:false, data:false };
    in the account: which screen you are sitting at is not a fact about you, and
    syncing it would mean a phone in bed inheriting a desktop's daylight. */
 let THEME = 'auto';
-const THEMES = ['auto','light','dark'];
+const THEMES = ['auto','light','blush','dark'];
 /* One place reads a token's computed value, so the plot can be drawn in the
    same colours as everything else instead of repeating their hexes. */
 const CV = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const sysLight = () => !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches);
 function applyTheme(){
-  const light = THEME==='auto' ? sysLight() : THEME==='light';
+  const light = THEME==='auto' ? sysLight() : THEME!=='dark';
   document.documentElement.dataset.theme = light ? 'light' : 'dark';
+  // Blush is a paper, not a theme: it rides on light, so light's rules hold.
+  if(THEME==='blush') document.documentElement.dataset.paper='blush';
+  else delete document.documentElement.dataset.paper;
   // The browser paints its own chrome from this on mobile; leaving it on the
   // old dark value puts a black bar above a white page.
   const m=document.querySelector('meta[name="theme-color"]');
@@ -6568,7 +6595,7 @@ function renderApp(){
     <button class="r-it r-x2" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>
       <span class="r-ic">${ic('chat')}</span><span class="r-lb">Feedback<small>tell us what broke</small></span></button>
     <button class="r-it r-x2" id="btnTheme" title="Theme: ${THEME}. Click to change.">
-      <span class="r-ic">${ic('moon')}</span><span class="r-lb">Theme<small>${THEME==='auto'?'follows this device':THEME==='light'?'paper':'night'}</small></span></button>
+      <span class="r-ic">${ic('moon')}</span><span class="r-lb">Colours<small>${({auto:'follows this device',light:'salmon paper',blush:'blush',dark:'night'})[THEME]}</small></span></button>
     ${CLOUD&&USER?`<button class="r-it r-x2" id="btnCredits" title="Credits">
       <span class="r-ic">${ic('coin')}</span><span class="r-lb">${esc(creditsLabel())}</span></button>
     <button class="r-it r-x2" id="btnSignOut" title="${esc(userName())}">

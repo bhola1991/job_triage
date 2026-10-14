@@ -12,16 +12,16 @@ Drop-in design artefacts. Every `.dc.html` opens directly in a browser; `support
 
 ## The palette
 
-Two neutral grounds: night `#111315` (charcoal) and paper `#F6F6F2` with `#14181A` ink. Adopted 2026-10-14, replacing the green near-black `#18211C` that `Ground 18211C.dc.html` still depicts — that artboard shows the law and the layout of its day, not the current values. `jobtriage.tokens.json` is current.
+Night `#111315` (charcoal) and salmon paper `#F4E1D2` with `#211A16` ink (2026-10-15; the app also offers a darker pink paper, blush, on top of the light set). Night adopted 2026-10-14, replacing the green near-black `#18211C` that `Ground 18211C.dc.html` still depicts — that artboard shows the law and the layout of its day, not the current values. `jobtriage.tokens.json` is current.
 
 Four accents, one instruction each:
 
 | Role | Dark | Light | Means |
 | --- | --- | --- | --- |
-| go | `#4CC76B` | `#13733A` | Do this now. The only fill-weight button. |
-| due | `#FF7A70` | `#C4302B` | Overdue — past the follow-up date. |
-| closing | `#F5B700` | `#8A5A00` | Posting old enough to be filled soon. |
-| awaiting | `#8FA2FF` | `#2449C9` | Sent; the next move is theirs. |
+| go | `#4CC76B` | `#1C6B38` | Do this now. The only fill-weight button. |
+| due | `#FF7A70` | `#B02E2A` | Overdue — past the follow-up date. |
+| closing | `#F5B700` | `#7A5000` | Posting old enough to be filled soon. |
+| awaiting | `#8FA2FF` | `#2A45AC` | Sent; the next move is theirs. |
 
 Three rules:
 
