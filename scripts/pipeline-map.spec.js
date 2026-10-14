@@ -403,8 +403,8 @@ module.exports = {
        shared -- and why it is the part most likely to be forgotten, since no
        screen goes blank when it stops. */
     'cx.refresh': { diagram: 'corpus', group: 'the nightly pass', kind: 'entry', label: 'refresh.sh \u2014 crawl, deposit, harvest, verify',
-      anchor: { file: 'scripts/index/refresh.sh', re: '^say "1/6' },
-      note: 'Six steps, and deliberately a shell script: each one is already a program with its own flags and its own failure mode, so an orchestrator would only add a layer that can fail in ways none of them can. set -e means a failed step stops the pass rather than pushing a half-built corpus over a good one. The value is in the SERIES, not any single run -- liveness is a set difference, so run one closes nothing and every run after it closes what left the boards since.' },
+      anchor: { file: 'scripts/index/refresh.sh', re: '^say "1/7' },
+      note: 'Seven steps, and deliberately a shell script: each one is already a program with its own flags and its own failure mode, so an orchestrator would only add a layer that can fail in ways none of them can. set -e means a failed step stops the pass rather than pushing a half-built corpus over a good one. The value is in the SERIES, not any single run -- liveness is a set difference, so run one closes nothing and every run after it closes what left the boards since.' },
     'cx.urls':    { diagram: 'corpus', group: 'the nightly pass', kind: 'db', label: 'corpus-urls.js - what the corpus took in',
       anchor: { file: 'scripts/index/corpus-urls.js', re: '^const SB = ' },
       note: 'job_index has no url column on purpose (dropping it returned 81 MB), so the key IS the url and rebuilding it is a substring rather than a guess. Reads the last week rather than all of it: a naukri sitemap row is never an ATS link, and 340k of them re-read every morning is a slow way to learn nothing.' },
