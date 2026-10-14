@@ -218,54 +218,44 @@
   .onb .lede{font-size:26px;line-height:1.25;margin:14px 0 10px;letter-spacing:-.02em}
   .onb .say{color:var(--muted);margin:0 0 26px;font-size:14px}
 
-  /* The opening page is a drawing. It began as a felt-pen picture of the three
-     people this app is for, standing by a yellow car, and the screen is that
-     picture rather than a screen with the picture on it: its wavy sky is the
-     background, its lined ground is the floor, and signing in is a sign planted
-     in that ground. Three habits carry it -- a bold black outline, flat marker
-     colour, and line used as fill.
-     These inks are NOT accents and are scoped here on purpose. The colour law
-     at the top of this file gives yellow, blue, red and green one meaning each
-     wherever a job row can be seen; no row is ever on this screen, which is the
-     only reason marker colour is allowed on it. Do not lift them onto :root.
-     Always paper, whatever the theme: it is marker on a white page.
-     (Light rule, not a banner: this is one screen, not a pipeline stage.) */
+  /* The opening page. The three people the app is for stand on a lined floor
+     beside their car, and signing in is a card on the same page. It is the
+     clean version of what began as a felt-pen drawing: one thin even line,
+     flat colour, and the straight-line fill kept for the ground alone.
+     Always paper, whatever the theme, so its values are fixed here rather
+     than read from :root -- the paper theme's own, by value. No job row is
+     ever on this screen, so nothing here is an instruction. */
   .au-scene,.au-strip,.ob-paper{
-    --au-ink:#161A17;--au-paper:#F4F2EA;--au-card:#FFFDF6;
-    --au-yl:#F4C61A;--au-rd:#D7363C;--au-bl:#2540C4;--au-gr:#2FA53A;--au-br:#5B3B24;--au-sk:#F1A98B;--au-gl:#6E7C8C;
-    --au-s1:#6A41C6;--au-s2:#EE579B;--au-s3:#1D8DCB;--au-gd:#6B4A2F}
+    --au-ink:#14181A;--au-paper:#F6F6F2;--au-card:#FFFFFF;--au-wash:#EEEEE8;--au-gndl:#C9C9C0;
+    --au-yl:#F5B700;--au-rd:#C4302B;--au-bl:#2449C9;--au-gr:#13733A;--au-brand:#6A41C6}
   .au-scene{
     /* How tall the floor is. Tied to the people's drawn height, so their feet
        and the car's wheels land on the lined ground at every width. */
-    --au-floor:min(6.95vw,91px);
+    --au-floor:min(4.6vw,60px);
     position:relative;overflow:hidden;min-height:100vh;color-scheme:light;
     display:flex;flex-direction:column;align-items:flex-start;
     background:var(--au-paper);color:var(--au-ink);font-size:15px;line-height:1.5}
-  .au-defs{position:absolute}
-  .au-sky{position:absolute;inset:0;width:100%;height:100%}
-  .au-gnd{position:absolute;left:0;bottom:0;width:100%;height:var(--au-floor)}
-  .au-people{position:absolute;right:3%;bottom:0;width:min(58%,760px);height:auto;display:block;z-index:2}
-  .au-o{stroke:var(--au-ink);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
-  .au-thin{stroke:var(--au-ink);stroke-width:2;stroke-linecap:round;fill:none}
+  /* The floor: the one place the drawing's lines survive, as a quiet band. */
+  .au-scene::after,.au-strip::after{content:"";position:absolute;left:0;right:0;bottom:0;height:var(--au-floor);
+    background:repeating-linear-gradient(180deg,transparent 0 7px,var(--au-gndl) 7px 8.5px);
+    border-top:1.5px solid var(--au-ink)}
+  .au-scene::before{content:"";position:absolute;right:9%;top:11%;width:118px;height:118px;border-radius:50%;
+    background:var(--au-yl);border:2.5px solid var(--au-ink)}
+  .au-people{position:absolute;right:3%;bottom:0;width:min(56%,720px);height:auto;display:block;z-index:2}
 
-  .au-sign{position:relative;z-index:3;width:min(430px,88%);margin:58px 0 150px 6%;padding:24px 24px 18px;
-    background:var(--au-card);border:3px solid var(--au-ink);border-radius:12px;box-shadow:7px 7px 0 var(--au-ink)}
-  /* The post. Runs down behind everything to the floor and is cut off by the scene. */
-  .au-sign::after{content:"";position:absolute;left:calc(50% - 6px);top:calc(100% + 3px);width:12px;height:2400px;
-    background:var(--au-br);border-left:3px solid var(--au-ink);border-right:3px solid var(--au-ink);z-index:-1}
-  .au-name{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700}
-  #app .au-sign h2{font-size:31px;line-height:1.12;letter-spacing:-.025em;font-weight:750;margin:10px 0 10px}
+  .au-sign{position:relative;z-index:3;width:min(430px,88%);margin:58px 0 150px 6%;padding:28px 28px 20px;
+    background:var(--au-card);border:2px solid var(--au-ink);border-radius:16px;box-shadow:6px 6px 0 var(--au-ink)}
+  .au-name{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:var(--au-brand)}
+  #app .au-sign h2{font-size:32px;line-height:1.12;letter-spacing:-.025em;font-weight:750;margin:10px 0 10px}
   .au-pitch{margin:0;font-size:15.5px}
-  .au-pitch b{background:linear-gradient(transparent 62%,var(--au-yl) 62%);font-weight:650}
+  .au-pitch b{background:linear-gradient(transparent 66%,#FBE08A 66%);font-weight:650}
   .au-sign .au-b{display:flex;align-items:center;justify-content:center;gap:9px;width:100%;margin-top:20px;
     font-size:15px;font-weight:700;color:var(--au-ink);background:var(--au-card);
-    border:3px solid var(--au-ink);border-radius:9px;padding:11px 14px;box-shadow:4px 4px 0 var(--au-ink)}
-  .au-sign .au-b:hover:not(:disabled){color:var(--au-ink);border-color:var(--au-ink);
-    transform:translate(-1px,-1px);box-shadow:5px 5px 0 var(--au-ink)}
-  .au-sign .au-b:active:not(:disabled){transform:translate(3px,3px);box-shadow:1px 1px 0 var(--au-ink)}
-  /* Ink on green, not white on green: white is 3.2:1 here and this type is not large. */
-  .au-sign .au-b.au-go{background:var(--au-gr)}
-  .au-sign .au-b.au-sm{width:auto;margin-top:0;font-size:13.5px;padding:8px 12px;box-shadow:3px 3px 0 var(--au-ink)}
+    border:1.5px solid var(--au-ink);border-radius:10px;padding:11px 14px}
+  .au-sign .au-b:hover:not(:disabled){color:var(--au-ink);border-color:var(--au-ink);background:var(--au-wash);transform:none}
+  /* White on this green is 5.9:1. The marker green it replaced was too light to carry white. */
+  .au-sign .au-b.au-go,.au-sign .au-b.au-go:hover:not(:disabled){background:var(--au-gr);border-color:var(--au-gr);color:#fff}
+  .au-sign .au-b.au-sm{width:auto;margin-top:0;font-size:13.5px;padding:8px 12px}
   .au-g{display:flex;background:#fff;border-radius:50%;padding:3px}
   .au-sign button:focus-visible,.au-sign summary:focus-visible,.au-sign input:focus-visible{
     outline:3px solid var(--au-bl);outline-offset:2px}
@@ -279,7 +269,7 @@
   .au-fields label.lab{color:var(--au-ink);font-size:12.5px;font-weight:650;margin:4px 0 0}
   .au-fields input[type=text],.au-fields input[type=email],.au-fields input[type=password]{
     font-family:var(--disp);font-size:14px;padding:9px 11px;background:#fff;color:var(--au-ink);
-    border:3px solid var(--au-ink);border-radius:8px}
+    border:1.5px solid var(--au-ink);border-radius:8px}
   .au-fields input:focus{border-color:var(--au-ink)}
   .au-fields .pw .rev{color:var(--au-ink)}
   .au-fields .hint,.au-sign .au-fine .say{color:var(--au-ink);opacity:.78;margin:0}
@@ -287,62 +277,45 @@
   /* On reset, claim and recover the fields are the screen, not an option under
      a bigger button, so they stand a little clear of the sentence above them. */
   .au-fields.au-solo{margin-top:16px}
-  .au-sign .lnk{color:var(--au-ink);border-bottom:1.5px solid var(--au-ink);font-family:var(--disp);font-weight:600}
-  /* The page has the browser's default 8px body margin, which nothing in this
-     file resets. Around the dark app it is invisible; around a paper scene it
-     is a black frame. Removed for this screen only, so no other screen moves. */
-  body:has(.au-scene){margin:0}
+  .au-sign .lnk{color:var(--au-ink);border-bottom:1px solid var(--au-ink);font-family:var(--disp);font-weight:500}
   .au-fine{margin-top:16px}
   /* Onboarding, on the same paper. The four setup steps come straight after
-     the drawing and show no job rows either, so they stay in its world: the
-     people stand in a strip across the top and the page below is paper, ink
-     outline and a hard marker shadow.
-     It is done by re-pointing the app's own tokens inside this wrapper rather
-     than by restyling each piece. Every card, chip, field and button on these
-     screens already reads --ink, --panel, --line and --signal, so they follow
-     without being touched -- and anything added to onboarding later follows
-     too. The greens and reds here are darker than the marker inks because they
-     are used as TEXT on paper and have to clear AA; the filled button takes
-     the marker green with ink on it, as the sign-in button does. */
+     sign-in and show no job rows either, so they stay on its page: the people
+     stand in a strip across the top and everything below is the paper theme.
+     Done by re-pointing the app's own tokens inside this wrapper rather than
+     by restyling each piece, so anything added to onboarding follows without
+     work. The values are the paper theme's, fixed, so onboarding does not
+     turn charcoal half way through for someone whose device is set to night. */
   .ob-paper{
     color-scheme:light;min-height:100vh;background:var(--au-paper);color:var(--au-ink);
-    --ink:var(--au-paper);--panel:var(--au-card);--panel2:#EFEADB;--line:var(--au-ink);--hair:#D8D2C0;
-    --text:var(--au-ink);--muted:#484D49;--dim:#5B605C;
-    --signal:#1B7A2A;--signal-hi:#176B25;--on-signal:var(--au-ink);--cool:#1B7A2A;
-    --go:#1B7A2A;--good:#1B7A2A;--go-line:#1B7A2A;--good-line:#1B7A2A;--go-tint:#DDF0DC;--good-tint:#DDF0DC;
-    --signal-tint:#DDF0DC;--signal-glow:transparent;
-    --warn:#B3261E;--due:#B3261E;--warn-line:#B3261E;--warn-tint:#F9DEDC;
-    --shadow:4px 4px 0 var(--au-ink);--shadow-md:5px 5px 0 var(--au-ink);--shadow-lg:7px 7px 0 var(--au-ink)}
-  body:has(.ob-paper){margin:0}
-  .ob-paper .topbar{border-bottom:3px solid var(--au-ink)}
+    --ink:var(--au-paper);--panel:var(--au-card);--panel2:var(--au-wash);--line:var(--au-ink);--hair:#E0E0D9;
+    --text:var(--au-ink);--muted:#51585C;--dim:#6B7276;
+    --signal:var(--au-gr);--signal-hi:#0F5E2F;--on-signal:#fff;--cool:var(--au-gr);
+    --go:var(--au-gr);--on-go:#fff;--good:var(--au-gr);--go-line:var(--au-gr);--good-line:var(--au-gr);
+    --go-tint:#E3F3E8;--good-tint:#E3F3E8;--signal-tint:#E3F3E8;--signal-glow:transparent;
+    --warn:var(--au-rd);--due:var(--au-rd);--warn-line:var(--au-rd);--warn-tint:#FBE6E4;
+    --shadow:0 1px 2px rgba(20,24,26,.06);--shadow-md:0 6px 18px rgba(20,24,26,.10);--shadow-lg:0 14px 40px rgba(20,24,26,.16)}
+  .ob-paper .topbar{border-bottom:1.5px solid var(--au-ink)}
+  .ob-paper .topbar h1{color:var(--au-brand);font-weight:750}
   .ob-paper .onb .lede{font-weight:750;letter-spacing:-.025em}
-  .ob-paper .card,.ob-paper .trk,.ob-paper .drop{border-width:2px;border-radius:9px}
-  .ob-paper .trk{box-shadow:var(--shadow)}
-  .ob-paper .trk.sel{background:var(--go-tint);border-color:var(--au-ink)}
-  .ob-paper button{border-width:2px;border-color:var(--au-ink);border-radius:8px;font-weight:650;
-    box-shadow:3px 3px 0 var(--au-ink)}
-  .ob-paper button:hover:not(:disabled){border-color:var(--au-ink);color:var(--au-ink);
-    transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--au-ink)}
-  .ob-paper button:active:not(:disabled){transform:translate(2px,2px);box-shadow:1px 1px 0 var(--au-ink)}
-  .ob-paper .btn-go,.ob-paper .btn-go:hover:not(:disabled){background:var(--au-gr);color:var(--au-ink);border-color:var(--au-ink)}
-  .ob-paper input[type=text],.ob-paper textarea,.ob-paper select{border-width:2px;border-radius:8px;
-    background:#fff;font-family:var(--disp);font-size:14px}
+  .ob-paper .card,.ob-paper .trk,.ob-paper .drop{border-width:1.5px;border-radius:10px}
+  .ob-paper .trk.sel{background:var(--go-tint);border-color:var(--au-ink);border-width:2px}
+  .ob-paper input[type=text],.ob-paper textarea,.ob-paper select{background:#fff;font-family:var(--disp);font-size:14px}
   .ob-paper input:focus,.ob-paper textarea:focus,.ob-paper select:focus{border-color:var(--au-ink);
     outline:3px solid var(--au-bl);outline-offset:2px}
-  /* The strip: the same sky, ground and people, as a band rather than a page. */
-  .au-strip{--au-floor:49px;position:relative;overflow:hidden;height:180px;background:var(--au-paper);
-    border-bottom:3px solid var(--au-ink)}
+  /* The strip: the same floor and people, as a band rather than a page. */
+  .au-strip{--au-floor:34px;position:relative;overflow:hidden;height:170px;background:var(--au-paper);
+    border-bottom:1.5px solid var(--au-ink)}
   .au-strip .au-people{position:absolute;right:4%;bottom:0;width:auto;height:92%;margin:0;padding:0}
   @media(max-width:640px){
-    .au-strip{--au-floor:36px;height:132px}
+    .au-strip{--au-floor:26px;height:128px}
     .au-strip .au-people{right:2%}
   }
   @media(max-width:900px){
-    /* Stacked: the sign, then the people standing under it. No post -- it would
-       run straight down through whoever is standing in the middle. */
-    .au-scene{--au-floor:11.94vw;align-items:stretch}
+    /* Stacked: the card, then the people standing under it. */
+    .au-scene{--au-floor:9vw;align-items:stretch}
+    .au-scene::before{display:none}
     .au-sign{width:auto;margin:20px 16px 0;padding:20px 18px 16px;box-shadow:5px 5px 0 var(--au-ink)}
-    .au-sign::after{display:none}
     #app .au-sign h2{font-size:26px}
     .au-people{position:relative;right:auto;width:100%;margin-top:auto;padding-top:26px}
     .au-sign button,.au-mail>summary{min-height:44px}
@@ -5629,7 +5602,7 @@ function renderOnb(){
       ${CLOUD&&USER?`<div class="spacer"></div>
         <span class="sub" style="color:var(--dim);font-size:12px">${esc(userName())}</span>
         <button class="btn-sm" id="onbSignOut">Sign out</button>`:''}</div>
-    <div class="au-strip">${AU_BACK}${AU_PEOPLE}</div>
+    <div class="au-strip">${AU_PEOPLE}</div>
     <div class="onb">
       <div class="steps">${steps.map((s,i)=>
         `<div class="stp ${i===ONB.step?'on':''} ${i<ONB.step?'did':''}">${i+1} &nbsp;${s}</div>`).join('')}</div>
@@ -7718,94 +7691,18 @@ function myUsername(){
 }
 function userName(){ return myUsername() || (USER && USER.email) || ''; }
 
-/* The three people this app is for, and their car. Redrawn as vector from a
-   felt-pen drawing; see the .au-scene rules for why it looks the way it does.
-   Static markup -- nothing from a record is ever interpolated into it. */
-const AU_PEOPLE = `<svg class="au-people" viewBox="0 62 720 288" role="img"
-         aria-label="Three job seekers standing beside a yellow car, drawn in marker">
-      <g filter="url(#auWob)">
-        <g class="au-thin" style="stroke:var(--au-gr)" stroke-width="3">
-          <path d="M352 296 l6-14 M362 297 l4-16 M372 296 l8-13"/><path d="M26 322 l5-13 M35 323 l4-15 M44 322 l7-12"/>
-          <path d="M548 336 l5-12 M557 337 l3-14 M566 336 l7-11"/>
-        </g>
-        <g>
-          <rect class="au-o" x="66" y="290" width="27" height="13" rx="5" style="fill:var(--au-ink)"/>
-          <rect class="au-o" x="99" y="290" width="27" height="13" rx="5" style="fill:var(--au-ink)"/>
-          <polygon class="au-o" points="76,212 116,212 121,292 101,292 96,238 91,292 71,292" style="fill:var(--au-br)"/>
-          <polygon class="au-o" points="64,150 84,136 108,136 128,150 143,186 127,193 118,172 118,216 74,216 74,172 65,193 49,186" style="fill:var(--au-yl)"/>
-          <circle class="au-o" cx="57" cy="191" r="6" style="fill:var(--au-sk)"/><circle class="au-o" cx="135" cy="191" r="6" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="90" y="122" width="12" height="16" style="fill:var(--au-sk)"/>
-          <polygon class="au-o" points="87,136 105,136 96,152" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="78" y="84" width="36" height="42" rx="10" style="fill:var(--au-sk)"/>
-          <path class="au-o" d="M76 98 Q76 76 96 76 Q116 76 116 98 Q108 88 96 88 Q84 88 76 98 Z" style="fill:var(--au-ink)"/>
-          <rect class="au-thin" x="81" y="99" width="13" height="11" rx="2"/><rect class="au-thin" x="98" y="99" width="13" height="11" rx="2"/>
-          <path class="au-thin" d="M94 104 H98 M91 118 H101"/>
-        </g>
-        <g>
-          <rect class="au-o" x="171" y="290" width="25" height="13" rx="5" style="fill:var(--au-bl)"/>
-          <rect class="au-o" x="201" y="290" width="25" height="13" rx="5" style="fill:var(--au-bl)"/>
-          <path class="au-thin" d="M178 291 v11 M185 291 v11 M208 291 v11 M215 291 v11" style="stroke:var(--au-card)"/>
-          <polygon class="au-o" points="178,222 214,222 219,292 201,292 196,248 191,292 173,292" style="fill:var(--au-bl)"/>
-          <polygon class="au-o" points="170,168 186,158 206,158 222,168 233,200 220,205 214,188 214,226 178,226 178,188 172,205 159,200" style="fill:var(--au-rd)"/>
-          <circle class="au-o" cx="165" cy="204" r="6" style="fill:var(--au-sk)"/><circle class="au-o" cx="227" cy="204" r="6" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="190" y="146" width="12" height="14" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="180" y="114" width="32" height="36" rx="10" style="fill:var(--au-sk)"/>
-          <g class="au-o" style="fill:var(--au-ink)"><circle cx="181" cy="117" r="8"/><circle cx="191" cy="110" r="8"/><circle cx="202" cy="110" r="8"/><circle cx="212" cy="117" r="8"/><circle cx="178" cy="128" r="6"/><circle cx="214" cy="128" r="6"/></g>
-          <path class="au-thin" d="M189 133 h.5 M203 133 h.5 M191 142 H201" stroke-width="3"/>
-        </g>
-        <g>
-          <rect class="au-o" x="268" y="108" width="48" height="78" rx="12" style="fill:var(--au-ink)"/>
-          <rect class="au-o" x="281" y="250" width="9" height="42" style="fill:var(--au-sk)"/><rect class="au-o" x="295" y="250" width="9" height="42" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="276" y="290" width="16" height="10" rx="4" style="fill:var(--au-ink)"/><rect class="au-o" x="293" y="290" width="16" height="10" rx="4" style="fill:var(--au-ink)"/>
-          <polygon class="au-o" points="272,214 312,214 323,256 261,256" style="fill:var(--au-rd)"/>
-          <polygon class="au-o" points="270,164 284,156 300,156 314,164 327,206 315,211 308,188 310,218 274,218 276,188 269,211 257,206" style="fill:var(--au-gr)"/>
-          <circle class="au-o" cx="262" cy="211" r="6" style="fill:var(--au-sk)"/><circle class="au-o" cx="322" cy="211" r="6" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="286" y="144" width="12" height="14" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="276" y="114" width="32" height="36" rx="10" style="fill:var(--au-sk)"/>
-          <rect class="au-o" x="273" y="106" width="38" height="13" rx="6" style="fill:var(--au-ink)"/>
-          <circle class="au-o" cx="285" cy="131" r="6.5" stroke-width="2" style="fill:var(--au-rd)"/><circle class="au-o" cx="299" cy="131" r="6.5" stroke-width="2" style="fill:var(--au-rd)"/>
-          <path class="au-thin" d="M287 143 H297"/>
-        </g>
-        <g>
-          <path class="au-o" d="M440 238 Q444 150 552 150 Q660 150 664 238 Z" style="fill:var(--au-yl)"/>
-          <path class="au-o" d="M404 294 V252 Q404 238 420 238 H684 Q700 238 700 252 V294 Z" style="fill:var(--au-yl)"/>
-          <path class="au-o" d="M462 229 Q468 174 540 169 V229 Z" style="fill:var(--au-gl)"/>
-          <path class="au-o" d="M564 169 Q636 174 642 229 H564 Z" style="fill:var(--au-gl)"/>
-          <path class="au-thin" d="M552 150 V294 M478 222 l22-34 M580 222 l22-34" stroke-width="2.5"/>
-          <circle class="au-o" cx="474" cy="294" r="34" style="fill:var(--au-ink)"/><circle class="au-o" cx="474" cy="294" r="20" style="fill:var(--au-card)"/><circle class="au-o" cx="474" cy="294" r="10" style="fill:var(--au-ink)"/>
-          <circle class="au-o" cx="630" cy="294" r="34" style="fill:var(--au-ink)"/><circle class="au-o" cx="630" cy="294" r="20" style="fill:var(--au-card)"/><circle class="au-o" cx="630" cy="294" r="10" style="fill:var(--au-ink)"/>
-        </g>
-      </g>
-    </svg>`;
+/* The three people this app is for, and their car, as they stand on the
+   signed-out screens: one waving, one cheering. The same rule-built figures as
+   CAST at the foot of the rail, in a different pose. Static markup. */
+const AU_PEOPLE = '<svg class="au-people" viewBox="0 0 540 250" role="img" aria-label="The three job seekers and their car"><g><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L106.6 40.2" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L106.6 40.2" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="106.6" cy="40.2" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#F2B79C" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#F2B79C" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M38.5 42 A21.5 21.5 0 0 1 81.5 42 Q60 27 38.5 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="45" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="62" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M58 45 H62" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(96 25) scale(.9)"><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L91.1 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L91.1 138.4" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="91.1" cy="138.4" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#8E5B3D" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="41.2" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="48.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="60.0" cy="22.0" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="71.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="78.8" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="2.2" fill="#14181A"/><circle cx="68" cy="46" r="2.2" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(188 0)"><rect x="35" y="24" width="50" height="78" rx="23" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M42.0 86.0 L13.4 40.2" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L13.4 40.2" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="13.4" cy="40.2" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M51.0 178.0 L51.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M51.0 178.0 L51.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><rect x="42" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="60" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M40 128 H80 L90 180 H30 Z" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="62" rx="14" fill="#1F9D55" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L106.6 40.2" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L106.6 40.2" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="106.6" cy="40.2" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#C98A68" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#C98A68" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M39 42 A21 21 0 0 1 81 42 Q60 32 39 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="68" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="52" cy="46" r="1.8" fill="#14181A"/><circle cx="68" cy="46" r="1.8" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(300 119) scale(.9)"><path d="M52 72 Q58 22 130 22 Q202 22 208 72 Z" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="10" y="70" width="240" height="46" rx="16" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M72 64 Q78 36 124 34 V64 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M136 34 Q182 36 188 64 H136 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M130 70 V114 M22 92 H34" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g></svg>';
 
-/* The sky and the ground: three bands of wavy line, one of straight, and the
-   filter that gives every stroke a marker's wobble. Static. */
-const AU_BACK = `
-    <svg class="au-defs" width="0" height="0" aria-hidden="true"><defs>
-      <filter id="auWob" x="-2%" y="-2%" width="104%" height="104%">
-        <feTurbulence type="fractalNoise" baseFrequency=".018" numOctaves="2" seed="7" result="n"/>
-        <feDisplacementMap in="SourceGraphic" in2="n" scale="5"/></filter>
-      <pattern id="auW1" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s1)" stroke-width="2.6"/></pattern>
-      <pattern id="auW2" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s2)" stroke-width="2.6"/></pattern>
-      <pattern id="auW3" width="56" height="11" patternUnits="userSpaceOnUse"><path d="M0 6 Q14 0 28 6 T56 6" fill="none" style="stroke:var(--au-s3)" stroke-width="2.6"/></pattern>
-      <pattern id="auGd" width="40" height="10" patternUnits="userSpaceOnUse"><path d="M0 5 H40" fill="none" style="stroke:var(--au-gd)" stroke-width="2.6"/></pattern>
-    </defs></svg>
-    <svg class="au-sky" aria-hidden="true"><g filter="url(#auWob)">
-      <rect x="-2%" y="-2%" width="104%" height="36%" fill="url(#auW1)"/>
-      <rect x="-2%" y="34%" width="104%" height="28%" fill="url(#auW2)"/>
-      <rect x="-2%" y="62%" width="104%" height="40%" fill="url(#auW3)"/></g></svg>
-    <svg class="au-gnd" aria-hidden="true">
-      <rect width="100%" height="100%" style="fill:var(--au-paper)"/>
-      <rect width="100%" height="100%" fill="url(#auGd)" filter="url(#auWob)"/></svg>
-`;
-
-/* The frame every signed-out screen stands in: the drawing, with one sign in
+/* The frame every signed-out screen stands in: the page, with one card on
    it. Signing in, resetting a password, claiming a username and setting a new
    password are the same place, so they are drawn as the same place -- a person
    who clicks "Forgot your password?" should not land somewhere that looks like
    a different product. */
 const auScene = sign => `
-  <div class="au-scene">${AU_BACK}
+  <div class="au-scene">
     <div class="au-sign">
       <div class="au-name">Job Triage</div>
 ${sign}
