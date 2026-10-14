@@ -120,7 +120,14 @@ async function jobUrls(sitemap) {
     const R = robots(rb.ok ? rb.text : '');
     const urls = (await jobUrls(conf.sitemap)).filter((u) => !(skip && skip.test(u)) && (!only || only.test(u)));
     m.listed = urls.length;
-    if (!urls.length) { m.error = 'sitemap listed no job pages'; return; }
+    if (!urls.length) {
+      /* A sitemap that failed to load is not a board that closed every job.
+         verify.js reads absence as closure, so carry what was read before
+         forward unchanged, and let a real closure show up on a night it loads. */
+      m.error = 'sitemap listed no job pages; kept last run\'s postings';
+      for (const [u, c] of Object.entries(cache)) if (c.source === `jsonld:${board}` && !c.nodata) { rows.push(c); m.cached++; }
+      return;
+    }
     let budget = CAP;
     for (const u of urls) {
       let c = cache[u];
