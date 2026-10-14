@@ -4763,6 +4763,26 @@ async function runBoards(trk, where){
   }
 }
 
+/* A new direction gets jobs before anyone searches it. The corpus only grows
+   towards a kind of work after somebody asks for it, so the first person in a
+   new field found the free index empty (a filmmaker, 2026-10-13). So the first
+   time a direction is in use -- the end of onboarding, or switching to one --
+   the server is asked once to fill it: free sources plus one scraper, into
+   the shared corpus, scored here like a search. Free to the person; the
+   server allows it once per direction and a few times a day (direction_fill).
+   Remembered per device too, so this does not even ask twice. */
+async function fillDirection(){
+  const p=P(); if(!p || busy || !cloudNow() || !USER || ownApify()) return;
+  const trk=(p.profile.tracks||[]).find(t=>t.id===p.track);
+  if(!trk || !(trk.titles||[]).length) return;
+  const k='triage:filled:'+DB.current+':'+trk.id;
+  try{ if(localStorage.getItem(k)) return; localStorage.setItem(k, today()); }catch(e){ return; }
+  track('direction_fill',{ mode:trk.mode||'' });
+  setSearchInfo('Finding jobs for this direction — free, and only this once…');
+  const where = WHERE!==null ? WHERE : String(p.profile.location||'').split(',')[0].trim();
+  await runPaidBoards(trk, where, 30, null, 'direction_fill');
+}
+
 /* Phase two, and the one that costs credits: the live boards. Only ever reached
    from the button runBoards offers, never automatically.
 
@@ -4770,7 +4790,7 @@ async function runBoards(trk, where){
    scrapers (LinkedIn, Indeed, Naukri...) run on Apify and land later. Each
    batch is CV-checked the moment it arrives. One source failing loses only its
    own results. One charge for the lot. */
-async function runPaidBoards(trk, where, since_days, pre){
+async function runPaidBoards(trk, where, since_days, pre, action){
   const p=P(); if(!p||(busy&&!pre)) return;
   // A profile extracted before the board catalogue existed picks it up here, on its first search.
   if(!trk.catalogued) addCatalogueBoards(trk, p.profile);
@@ -4787,9 +4807,13 @@ async function runPaidBoards(trk, where, since_days, pre){
     // fallback: portal queries the server runs on Google if every API source comes back empty.
     let r;
     try{
-      r=await hosted('board_search',{titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
-        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'),
-        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')});
+      const body={titles:titles.slice(0,4), skills:(p.profile.hard_skills||[]).slice(0,6), since_days,
+        where, country:cc, mode:trk.mode||'', queries:rq.join('\n'), track_key:DB.current+':'+trk.id,
+        fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')};
+      // Two literal calls rather than hosted(action), so each action has a call site of its own.
+      r = action==='direction_fill' ? await hosted('direction_fill', body) : await hosted('board_search', body);
+      // A fill the server declined (done before, or today's limit): nothing to show.
+      if(r && r.skipped){ busy=false; STOP=null; render(); return; }
     }catch(e){
       if(!pre||e.message==='NEEDAPIFY') throw e;
       PAID_OFFER={trackId:trk.id, where, since_days};
@@ -5784,6 +5808,7 @@ async function finishOnb(){
   DB.current=id; VIEW='app';
   ONB=blankOnb();
   await save(); render();
+  fillDirection();                    // not awaited: it runs like a search the person can watch
 }
 
 /* ═══════════════ MAIN APP ═══════════════ */
@@ -6725,7 +6750,7 @@ function renderApp(){
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
   hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
-  $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); };
+  $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); fillDirection(); };
   $('#btnProfile').onclick=showProfile;
   $('#btnAddTrack').onclick=addTrackDialog;
   if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
@@ -8058,6 +8083,8 @@ async function afterAuth(){
     checkMail(true);                    // not awaited: news must not hold up the app
     { const pr=Object.values(DB.profiles||{}).filter(usable);
       track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
+    // Directions in use before fills existed get theirs on the next visit.
+    if(VIEW==='app') fillDirection();
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.

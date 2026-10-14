@@ -438,6 +438,8 @@ const SCRAPE_ROWS = 30;
    somewhere; a thin read is recoverable, a blind spot is not. */
 const PROBE_ROWS = 8;
 const MIN_WINDOW_DAYS = 7;
+// direction_fill: how many new directions one person can have filled in a day.
+const FILL_PER_DAY = 6;
 /* The default ceiling on one scraper run. It is a CAP, not a spend: the actor
    bills what it bills and this stops it running away. Apify rejects a run whose
    cap is below the actor's own minimum, which is how naukri failed every run
@@ -545,11 +547,12 @@ const SCRAPERS: Record<string, {
 // linkedin is gone (see SCRAPERS). pricing.html must not promise it.
 const FREE_SCRAPERS = ["indeed", "naukri"];
 
-async function startScrapers(user: string, c: Ctx, only?: string[]) {
+async function startScrapers(user: string, c: Ctx, only?: string[], maxRows?: number) {
   const errors: string[] = [];
   const started = await Promise.all(Object.entries(SCRAPERS)
     .map(([source, s]) => [source, s,
-      (!s.india || c.cc === "in") && (!only || only.includes(source)) ? rowsFor(s.modes, c.mode) : 0] as const)
+      (!s.india || c.cc === "in") && (!only || only.includes(source))
+        ? Math.min(rowsFor(s.modes, c.mode), maxRows ?? Infinity) : 0] as const)
     // rows 0 = wrong country, a site this track's mode has nothing to find on,
     // or a free search. Not an error and not a failed source: it was never asked.
     .filter(([, , rows]) => rows > 0)
@@ -1294,6 +1297,67 @@ async function handle(req: Request): Promise<Response> {
          latest-jd feed is same-day -- so the paid path still exists for the
          freshest rows and for sources with no free index. This is the cheap
          first look that should happen before anyone spends anything. */
+      /* A new direction gets jobs before anyone has searched for it.
+
+         The corpus grows towards a kind of work only after somebody asks for
+         it, so the first person in a new field found the free index empty --
+         a filmmaker on 2026-10-13 had nothing to see. The app calls this once
+         per direction, the first time that direction is in use: the free API
+         sources, ONE scraper (Naukri in India, else Indeed at half rows) and
+         the capped Google run over the direction's specialist boards,
+         deposited into the shared corpus like any search, and returned in
+         board_search's shape so the app runs it through the same path.
+
+         Free to the person -- no search credit. What bounds our cost instead:
+         once per (person, direction), and at most FILL_PER_DAY a day per
+         person, both read back from usage_events where every fill is logged.
+         About INR 3-5 each at today's prices. */
+      case "direction_fill": {
+        const key = String(b.track_key || "").trim().slice(0, 80);
+        const list = (v: unknown, n: number) => (Array.isArray(v) ? v : []).map((x) => String(x).trim()).filter(Boolean).slice(0, n);
+        const titles = list(b.titles, MAX_TITLES);
+        if (!key || !titles.length) throw new Http(400, "a direction and its titles");
+        const { data: prior } = await admin.from("usage_events").select("note,created_at")
+          .eq("user_id", user).eq("kind", "api").eq("source", "fill").limit(200);
+        const today = new Date().toISOString().slice(0, 10);
+        if ((prior || []).some((r) => r.note === key)) return json({ skipped: "already filled", jobs: [], scrapers: [] });
+        if ((prior || []).filter((r) => String(r.created_at).slice(0, 10) === today).length >= FILL_PER_DAY)
+          return json({ skipped: "daily limit", jobs: [], scrapers: [] });
+        const where = String(b.where || ""), country = String(b.country || "");
+        const ctx: Ctx = { titles, skills: list(b.skills, 6), since: 30, mode: String(b.mode || ""),
+          city: /^remote$/i.test(where) ? "" : where.split(",")[0].trim(), cc: countryCode(country) };
+        const searchId = crypto.randomUUID();
+        // Logged first, so two taps cannot both get through the check above.
+        await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "fill", units: 0, cost_inr: 0, note: key }]);
+        const india = ctx.cc === "in";
+        const [{ jobs, errors, requests }, { scrapers, errors: scrapeErrors }] = await Promise.all([
+          searchAll(titles, where, country, 30, req),
+          startScrapers(user, ctx, [india ? "naukri" : "indeed"], india ? SCRAPE_ROWS : Math.ceil(SCRAPE_ROWS / 2)),
+        ]);
+        errors.push(...scrapeErrors);
+        await logUsage(errors.slice(0, 20).map((e) => ({ user_id: user, search_id: searchId, kind: "error",
+          source: e.split(":")[0].trim().slice(0, 40), units: 0, note: e.slice(0, 300) })));
+        await logUsage(Object.entries(requests).map(([source, units]) =>
+          ({ user_id: user, search_id: searchId, kind: "api", source, units, cost_inr: inr(units * (PRICE_USD[source] || 0)) })));
+        /* The direction's own specialist boards, through the same capped Google
+           run a free search makes. For a niche direction this is where the jobs
+           are: on 2026-10-15 a festival-programming fill in Kolkata got 2
+           postings from Naukri, neither a match. About INR 2. */
+        const queries = String(b.queries || "").split("\n").map((q) => q.trim()).filter(Boolean).slice(0, FREE_REGISTRY_QUERIES);
+        const run = queries.length
+          ? await apify(`/acts/${ACTOR}/runs?timeout=660`, {
+              method: "POST",
+              body: JSON.stringify({ queries: queries.join("\n"), countryCode: country.toLowerCase(), languageCode: "en", maxPagesPerQuery: 1, resultsPerPage: 10, mobileResults: false }),
+            }).then((r) => (r.ok ? r.json() : null)).then((d) => d?.data || null).catch(() => null)
+          : null;
+        if (run?.id) {
+          await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "google" });
+          await logUsage([{ user_id: user, search_id: searchId, kind: "api", source: "google", units: queries.length, cost_inr: inr(queries.length * PRICE_USD.google) }]);
+        }
+        await depositIndex(jobs);
+        return json({ jobs, runId: run?.id || null, queries: run?.id ? queries : [], scrapers, searchId, since: 30, free: true, fill: true, sourceErrors: errors });
+      }
+
       case "index_search": {
         const titles = (Array.isArray(b.titles) ? b.titles : [])
           .map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, MAX_TITLES);
