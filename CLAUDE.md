@@ -3,7 +3,8 @@
 Guidance for working on this codebase, and for importing Figma designs through the
 Figma MCP server. Every claim below was checked against the files on
 2026-09-15, §§1, 2, 7 and 8 again on 2026-09-18, §§7 and 8 again on
-2026-09-24, and the counts in §§3, 6 and 7 on 2026-10-08; file:line
+2026-09-24, the counts in §§3, 6 and 7 on 2026-10-08, and the palette, the
+rail and §5 on 2026-10-14; file:line
 references are the authority, not this summary.
 
 Two of those counts had gone stale by a wide margin and are worth knowing as a
@@ -22,13 +23,16 @@ stale file has the more obvious name and sits at the repository root.
 
 | Palette | Ground | Where it lives | Status |
 | --- | --- | --- | --- |
-| **v2 "go/due/closing/awaiting"** | `#18211C` | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css`, `icon.svg`, `manifest.json` | **SHIPPED — use this** |
+| **v2 "go/due/closing/awaiting"** | `#111315` (night) / `#F6F6F2` (paper) | `design/jobtriage.tokens.json`, `ui-kit/src/v2/tokens.css`, `index.html` `:root`, `legal.css`, `icon.svg`, `manifest.json` | **SHIPPED — use this** |
 | v1 "signal/good/live/warn" | `#0E1411` | `job-triage.tokens.json` (repo root), `*.dc.html` at repo root | Superseded |
 
 (A third, pre-v1 blue-grey ground `#131A21` survived in `icon.svg` and
 `manifest.json` until 2026-09-15, when both were brought onto v2.)
 
-Verified: `index.html:30` sets `--ink:#18211C`, matching `design/jobtriage.tokens.json`.
+Verified: `index.html:34` sets `--ink:#111315`, matching `design/jobtriage.tokens.json`.
+(The v2 ground was a green near-black, `#18211C`, until 2026-10-14; the names
+and the law did not change, only the values. An artboard on that ground is
+out of date, not the code.)
 The root `job-triage.tokens.json` says `#0E1411`. They disagree on **17 of the 41
 tokens they share** (`ink`, `panel`, `panel2`, `line`, `text`, `muted`, `dim`, all
 three shadows, in both themes).
@@ -43,10 +47,10 @@ answering "what colour is X".
 `index.html:42-61` keeps the v1 names defined, pointed at v2 values:
 
 ```css
---go:#56C88A;      /* v2 */
---signal:#56C88A;  /* v1 alias — same hue */
---warn:#E2685C;    /* == --due */
---live:#56C88A;    /* == --go */
+--go:#4CC76B;      /* v2 */
+--signal:#4CC76B;  /* v1 alias — same hue */
+--warn:#FF7A70;    /* == --due */
+--live:#4CC76B;    /* == --go */
 ```
 
 The comment at `index.html:25-27` states the intent: *"The older names below
@@ -135,45 +139,29 @@ Every accent is also used as **text on its own tint** — that is what `.pill2`,
 `.callout` and `.btn2.outline` do — so each pair has to clear WCAG AA (4.5:1;
 the type is 11-13px, so the 3:1 large-text threshold does not apply).
 
-Five of the eight pairs did not, and nothing noticed until 2026-09-18: light
-`--go` 4.25, light `--due` 4.34, dark `--closing` 4.18, dark `--awaiting` 3.78,
-dark `--due` 3.08.
+Five of the eight pairs once did not, and nothing noticed until 2026-09-18.
+That is why `scripts/selfcheck-tokens.js` asserts **all sixteen** pairs: each
+accent as text on its chip and on its row, in both themes. On the palette
+adopted 2026-10-14 every tint is **opaque** in both themes, so a chip no longer
+depends on the surface under it, and the rows are plain cards (`-row` equals
+`--panel`). The measured floor is paper `--due` on its tint at **4.61:1**;
+paper `--go` on its tint is 5.15 and everything at night clears 5.8. Treat the
+paper red as the one with no room: lighten `--due-tint` or brighten `--due`
+and it fails.
 
-There are two ways to fix such a pair, and which one is right differs:
+Two ways to fix a failing pair, and which is right differs: **move the accent**
+(hold hue and saturation, shift lightness — keeps the meaning) or **move the
+wash** (when the accent cannot move without changing colour). Run the check
+after either.
 
-- **Move the accent.** Holding hue and saturation and shifting only lightness
-  keeps the meaning. Light `--go` and `--due` moved ~1% this way,
-  imperceptibly; dark `--closing` and `--awaiting` moved a few percent and are
-  slightly lighter than they were.
-- **Move the wash.** Dark `--due` is the case where the accent could not move
-  far enough to matter without going pink — it measured only 3.59:1 against
-  `--panel2` even with *no* tint, because a translucent wash *lightens* the
-  chip and a red that dark needs a dark background. So its wash became
-  **opaque** (`--due-tint: #372018`) and the accent stayed `#E2685C`. Being
-  opaque also makes that chip independent of whatever surface it sits on,
-  which is stricter than the other three, not looser.
+### The surfaces are neutral, and paper's line is black
 
-That is why `--due-tint` is the one dark tint that is not an `rgba()`. Its chip
-is visibly darker than its three siblings (L≈0.019 against L≈0.050) — an
-unavoidable consequence of carrying a red that deep at AA, and the reason not
-to "tidy" it back into a translucent value.
-
-`scripts/selfcheck-tokens.js` asserts **all sixteen** pairs: each accent as
-text on its chip and on its whole-row wash, in both themes. The chip is
-measured against the lightest surface it can land on (`--panel2` in dark) since
-`StatusPill` is documented safe anywhere (§2); the row only ever sits on the
-page, so it is measured against `--ink`. Two pairs have almost no margin —
-dark `--go` on its tint at **4.50** and dark `--due` on its row at **4.53** —
-so treat both as floors.
-
-### The dark surface ramp is tuned, not arbitrary
-
-`--ink → --panel → --panel2 → --line` are spaced to be visibly distinct while
-keeping `--muted` (`#93A597`) at AA body contrast on every surface that carries
-text. `--panel2` sits exactly on that ceiling at **4.55:1** — lighten it and
-muted text fails; darken the set and the app flattens back into one plane, which
-is what it did before 2026-09-15 (every surface was then within a 1.55:1 band).
-If you need more separation than this, lighten `--muted` first, then re-solve.
+`--ink → --panel → --panel2` carry no hue in either theme. `--muted`
+(`#AEB4BA` at night) clears AA body contrast on all three: 8.90 on `--ink`,
+8.08 on `--panel`, 7.18 on `--panel2`. On paper `--line` is `#14181A` — the same
+value as `--text` — which is what draws every card and button with a true
+outline; at night it is a mid grey (`#59616A`), because a white outline on
+charcoal would shout. Do not "fix" the two themes to match.
 
 ### Token vocabulary
 
@@ -197,17 +185,17 @@ Four accents, one instruction each (`index.html:13-23`, `design/README.md`):
 
 | Token | Dark | Light | Means |
 | --- | --- | --- | --- |
-| `--go` | `#56C88A` | `#147A3F` | Do this now. The only fill-weight button. |
-| `--due` | `#E2685C` | `#BE3A2D` | Overdue — past the follow-up date. |
-| `--closing` | `#DEAF57` | `#8A6314` | Posting old enough to be filled soon. |
-| `--awaiting` | `#75BDD3` | `#1E6C86` | Sent; the next move is theirs. |
-| `--closed` | `#3E4F44` | `#B6C4BC` | Grey = the absence of an instruction. |
+| `--go` | `#4CC76B` | `#13733A` | Do this now. The only fill-weight button. |
+| `--due` | `#FF7A70` | `#C4302B` | Overdue — past the follow-up date. |
+| `--closing` | `#F5B700` | `#8A5A00` | Posting old enough to be filled soon. |
+| `--awaiting` | `#8FA2FF` | `#2449C9` | Sent; the next move is theirs. |
+| `--closed` | `#4A5058` | `#B4B4AC` | Grey = the absence of an instruction. |
 
 Three rules a Figma import must not violate:
 
 1. **A row carries at most one accent.** Both closing and overdue → nearer deadline wins, the other becomes plain text.
 2. **A score is never an accent.** Colour says what to do; the number says how good it is. Reachability stays grey — a second axis, not a verdict.
-3. **Both themes tint the cell; dark states the edge as well.** Light washes the row at full weight (`--go-row: #E9F4ED`); dark washes it at roughly a quarter of that (`--go-row: rgba(86,200,138,.075)`, `index.html:39`), because the same tint reads far louder on a near-black ground than on paper. Dark additionally carries the accent as a 5px edge. Until 2026-09-15 dark set every `--*-row` to `transparent` and relied on the edge alone; if you see that in an older artboard, the artboard is out of date, not the code.
+3. **The accent is on the row's edge; the card stays plain.** A row is a white (or charcoal) card with a 1.5px outline and a solid 5px edge in its accent, in both themes. Every `--*-row` equals `--panel`. Rows were tinted until 2026-10-14; an artboard that washes the whole cell is out of date, not the code.
 
 If a Figma frame colours a score, or stacks two accents on one row, **flag it
 rather than implementing it.**
@@ -310,7 +298,7 @@ This repo contains **three separate runtimes**. Do not carry conventions across 
 
 ### The app has no build step
 
-`index.html` is ~6,750 lines: markup, CSS and application JS in one file. `README.md`
+`index.html` is ~8,240 lines: markup, CSS and application JS in one file. `README.md`
 states it plainly: *"Open `index.html`. That's the whole install."* No bundler, no
 transpiler, no `package.json` at the root, no framework.
 
@@ -371,16 +359,51 @@ there are almost no icons.
   Two constraints on its geometry, both easy to undo by accident:
   - **The rim is load-bearing.** The ground is 1.27:1 against a black home screen and 1.03:1 against iOS dark, so without a `--line` rim the tile has no edge and dissolves into the wallpaper. Do not remove it. Inverting to a light ground is not the fix — it fails on a white background in exactly the same way.
   - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off. Measured: the scaled axes reach **203.7 against the 204.8 limit — a margin of 1.1px in 512**. Treat that as a floor, not as headroom; `selfcheck-icon.js` flags it even while passing.
-- Four inline `<svg>` in `index.html`: three 13×13 theme-toggle glyphs (`index.html:3451-3454`) and one `viewBox="0 0 640 420"` data plot (`index.html:3587`).
+- The rail's icons: one `IC` map of path data in `index.html` and one `ic(name)` that wraps a path in the convention below. Thirteen today (`tools compass check clock glass send list command inbox chat moon coin exit`). To add one, add a path to `IC`.
+- One `viewBox="0 0 640 420"` data plot.
+- `CAST`, the three people and their car as one static inline SVG (see below).
 
-The convention for the glyphs, if you add one:
+The convention, which `ic()` applies so nobody has to retype it:
 
 ```html
-<svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-     stroke="currentColor" stroke-width="2" style="vertical-align:-2px">…</svg>
+<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+     stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">…</svg>
 ```
 
 24×24 viewBox, `currentColor` stroke so it inherits the token colour, no fill.
+
+### The rail replaced the top bar
+
+Everything the top bar held is in `<nav class="rail" id="rail">`, down the
+left edge: 68px of icons with count badges, 296px with words when opened.
+
+- **Every control kept its id** (`tbOpen`, `trackSel`, `btnPal`, `btnTheme`, `btnFeedback`, `btnCredits`, `btnSignOut`, and `btnReplies` when inbound mail is live), because the command palette dispatches by clicking them. Do not rename or duplicate one.
+- **Open pushes, it does not cover** — `.rail.open ~ .wrap` takes a 296px margin at ≥1200px. Below that there is no room, so it lies over the queue.
+- **On a phone (≤900px) it is a strip along the bottom** that pulls up into a sheet, by its handle (`#railGrab`) or a swipe. It replaced `#toolbar`.
+- **Open is remembered** (`localStorage` `triage:rail`) on a wide screen only; on a phone open is a sheet, and a sheet must not be the first thing a page shows.
+- **The avatar is neutral, the badges carry the accents.** A badge is a count of rows in that state, so its colour means what the row's edge means.
+- **Closed, the direction picker is the compass**: the native `<select>` lies invisibly over the icon, so one click opens the list with no scripted menu.
+
+### The selected row blows up
+
+A selected row (`.qitem.sel`) keeps exactly two things: the job's name, large,
+and its one button. Rank, scores, Read and the ⋯ menu are hidden on that row,
+because the pane beside it already shows all of them. `primaryAct(j,i)` is the
+single source of that button — the row leads with it, the blown-up row keeps
+only it, and on a small screen the sheet's header (`.pane-pri`) repeats it.
+If a state's primary action changes, change it there and nowhere else.
+
+That row and the sign-in card are the **only two hard offset shadows**
+(`5px 5px 0 var(--hard)`) in the app. A third stops meaning "this one".
+
+### The people
+
+`CAST` is the three job seekers and their car, built from rules rather than
+drawn: circle heads, capsule limbs, one stroke weight, flat fills, three skin
+tones. They stand at the foot of the open rail on a light tile (`--tile`) in
+**both** themes, since they are ink on paper. Their colours are hard-coded in
+the SVG and are not tokens: a yellow shirt says nothing about a closing job.
+`--brand` (purple) is the one brand colour and is likewise not an accent.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
 or `ui-kit`. Inline the one path you need.
@@ -395,7 +418,7 @@ background, the lined ground is the floor, and signing in is a sign planted in i
 - **It adds no image file.** Everything is inline SVG — the people (`AU_PEOPLE`),
   two pattern-filled backgrounds, a shared wobble filter — plus the Google mark
   that was already there. §4's "zero `<img>`, zero `data:image`" still holds, and
-  the "four inline `<svg>`" count above describes the app proper, not this screen.
+  the icon list above describes the app proper, not this screen.
 - **Its inks are not tokens and must stay scoped.** `--au-yl`, `--au-rd`, `--au-bl`,
   `--au-gr` and the rest live on `.au-scene`, never on `:root`. Yellow, blue, red
   and green each mean one thing wherever a job row can be seen (§1); no row is
@@ -463,7 +486,7 @@ No CSS framework grid. Layout is flex and `grid-template-columns`.
 ## 7. Project structure
 
 ```
-index.html              The entire app — markup, CSS, JS. ~6,750 lines, no build.
+index.html              The entire app — markup, CSS, JS. ~8,240 lines, no build.
 config.js               Supabase URL + anon key. Empty = local-only mode.
 legal.css               Shared by the five public pages.
 STATUS.md               Where this stands: what is live, what drifted, what is measured. The gap-tracking document.

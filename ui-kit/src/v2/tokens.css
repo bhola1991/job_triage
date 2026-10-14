@@ -5,24 +5,24 @@
 
 [data-palette="v2"] {
   color-scheme: dark;
-  --ink: #18211C; --panel: #25332C; --panel2: #2B3B32; --line: #3D5448; --hair: #232E27;
-  --text: #EDF3EF; --muted: #93A597; --dim: #8A9C8E;
+  --ink: #111315; --panel: #1A1D21; --panel2: #23272C; --line: #59616A; --hair: #2C3137;
+  --text: #ECECE8; --muted: #AEB4BA; --dim: #8D949B;
 
-  --go: #56C88A; --on-go: #0A1B0F; --go-line: #2C5540; --go-tint: rgba(86,200,138,.12);
-  --due: #E2685C; --on-due: #1A0A08; --due-line: #5A2E2A; --due-tint: #372018;
-  --closing: #DEAF57; --closing-line: #5A4620; --closing-tint: rgba(217,164,65,.13);
-  --awaiting: #75BDD3; --awaiting-line: #2C4F5C; --awaiting-tint: rgba(87,174,201,.13);
-  --closed: #3E4F44;
+  --go: #4CC76B; --on-go: #0E1410; --go-line: #2B6B3C; --go-tint: #17301F;
+  --due: #FF7A70; --on-due: #1A0A08; --due-line: #7A3A35; --due-tint: #3C1F1D;
+  --closing: #F5B700; --closing-line: #6B5410; --closing-tint: #3A3110;
+  --awaiting: #8FA2FF; --awaiting-line: #3B4A99; --awaiting-tint: #1F2850;
+  --closed: #4A5058;
 
   /* The whole-row wash, at roughly a quarter of the light theme's weight: the
      same tint reads far louder on a near-black ground. It sits behind the 5px
      accent edge, not instead of it. */
-  --go-row: rgba(86,200,138,.075); --due-row: rgba(226,104,92,.085);
-  --closing-row: rgba(217,164,65,.075); --awaiting-row: rgba(87,174,201,.075);
+  --go-row: #1A1D21; --due-row: #1A1D21;
+  --closing-row: #1A1D21; --awaiting-row: #1A1D21;
 
   --shadow: 0 1px 2px rgba(0,0,0,.3);
-  --shadow-md: 0 10px 30px rgba(0,0,0,.5);
-  --shadow-lg: 0 20px 60px rgba(0,0,0,.55);
+  --shadow-md: 0 6px 18px rgba(0,0,0,.4);
+  --shadow-lg: 0 14px 40px rgba(0,0,0,.5);
 
   --disp: system-ui,-apple-system,'Segoe UI',sans-serif;
   --mono: ui-monospace,'Cascadia Mono',Consolas,monospace;
@@ -30,24 +30,24 @@
 
 [data-palette="v2"][data-theme="light"] {
   color-scheme: light;
-  --ink: #F1F5F2; --panel: #FFFFFF; --panel2: #E9EFEB; --line: #D5DFD8; --hair: #E6ECE8;
-  --text: #18211C; --muted: #4F5E56; --dim: #5C6B63;
+  --ink: #F6F6F2; --panel: #FFFFFF; --panel2: #EEEEE8; --line: #14181A; --hair: #E0E0D9;
+  --text: #14181A; --muted: #51585C; --dim: #6B7276;
 
-  --go: #147A3F; --on-go: #FFFFFF; --go-line: #A8D8BC; --go-chip: #DCF0E4; --go-row: #E9F4ED;
-  --due: #BE3A2D; --on-due: #FFFFFF; --due-line: #EEBAB4; --due-chip: #FBE4E1; --due-row: #FBECEA;
-  --closing: #8A6314; --closing-line: #E0C98F; --closing-chip: #F7EBD2; --closing-row: #FAF1DF;
-  --awaiting: #1E6C86; --awaiting-line: #A9D3E0; --awaiting-chip: #DCEFF5; --awaiting-row: #E6F2F7;
+  --go: #13733A; --on-go: #FFFFFF; --go-line: #13733A; --go-chip: #E3F3E8; --go-row: #FFFFFF;
+  --due: #C4302B; --on-due: #FFFFFF; --due-line: #C4302B; --due-chip: #FBE6E4; --due-row: #FFFFFF;
+  --closing: #8A5A00; --closing-line: #8A5A00; --closing-chip: #FBF0CC; --closing-row: #FFFFFF;
+  --awaiting: #2449C9; --awaiting-line: #2449C9; --awaiting-chip: #E4EAFB; --awaiting-row: #FFFFFF;
 
   /* The tokens above are named -chip after the source of truth; components.css
      reads -tint, which is what index.html calls the same light value. Without
      these four the -tint names fell through to their DARK definitions, so every
      pill, outline button and callout rendered a translucent dark wash on white.
      Same values as the chips -- one name per consumer, not two colours. */
-  --go-tint: #DCF0E4; --due-tint: #FBE4E1;
-  --closing-tint: #F7EBD2; --awaiting-tint: #DCEFF5;
-  --closed: #B6C4BC;
+  --go-tint: #E3F3E8; --due-tint: #FBE6E4;
+  --closing-tint: #FBF0CC; --awaiting-tint: #E4EAFB;
+  --closed: #B4B4AC;
 
-  --shadow: 0 1px 2px rgba(24,33,28,.07);
-  --shadow-md: 0 8px 24px rgba(24,33,28,.12);
-  --shadow-lg: 0 18px 50px rgba(24,33,28,.24);
+  --shadow: 0 1px 2px rgba(20,24,26,.06);
+  --shadow-md: 0 6px 18px rgba(20,24,26,.10);
+  --shadow-lg: 0 14px 40px rgba(20,24,26,.16);
 }

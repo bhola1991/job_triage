@@ -3,7 +3,7 @@
 <title>Job Triage</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<meta name="theme-color" content="#18211C">
+<meta name="theme-color" content="#111315">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.58.0/dist/umd/supabase.js"></script>
@@ -11,15 +11,16 @@
 
 <style>
   /* ═══ colour ═══
-     A green near-black ground and four accents, each meaning one thing:
+     A neutral ground -- charcoal at night, paper by day -- and four accents,
+     each meaning one thing:
        go        do this now, your move, nothing blocking
        due       overdue: past the follow-up date
        closing   the posting is old enough to be filled soon
        awaiting  sent, and the next move is theirs
      Grey is only ever the absence of an instruction. Three rules keep it honest:
      a row carries at most one accent (the nearer deadline wins); a score is never
-     an accent (colour says what to do, the number says how good it is); dark
-     states the accent on the row's edge, light tints the whole cell.
+     an accent (colour says what to do, the number says how good it is); the
+     accent is stated on the row's edge, and the card behind it stays plain.
      Reachability stays grey -- a second axis, not a verdict.
 
      The older names below (signal, warn, posted, live...) are kept so nothing
@@ -27,92 +28,93 @@
      the file still goes through this block. */
   :root{
     color-scheme:dark;
-    --ink:#18211C; --panel:#25332C; --panel2:#2B3B32; --line:#3D5448; --hair:#232E27;
-    --text:#EDF3EF; --muted:#93A597; --dim:#8A9C8E;
+    /* The app's own, not in the tokens file: the one brand colour, the hard
+       offset shadow, and the light tile the drawn people stand on. */
+    --brand:#A98BFF; --hard:#000000; --tile:#EFEFEA; --gnd:#C9C9C0;
+    --ink:#111315; --panel:#1A1D21; --panel2:#23272C; --line:#59616A; --hair:#2C3137;
+    --text:#ECECE8; --muted:#AEB4BA; --dim:#8D949B;
 
-    --go:#56C88A;       --on-go:#0A1B0F;  --go-line:#2C5540;       --go-tint:rgba(86,200,138,.12);
-    --due:#E2685C;      --on-due:#1A0A08; --due-line:#5A2E2A;      --due-tint:#372018;
-    --closing:#DEAF57;  --closing-line:#5A4620;  --closing-tint:rgba(217,164,65,.13);
-    --awaiting:#75BDD3; --awaiting-line:#2C4F5C; --awaiting-tint:rgba(87,174,201,.13);
-    --closed:#3E4F44;
-    /* Dark states the accent on the row's edge AND washes the cell behind it.
-       The wash is a quarter the weight of the light theme's, because a tint on
-       a near-black ground reads far louder than the same tint on paper: enough
-       to tell four sections apart down the page, not enough to compete with
-       the edge or to make the text sit on colour. */
-    --go-row:rgba(86,200,138,.075); --due-row:rgba(226,104,92,.085);
-    --closing-row:rgba(217,164,65,.075); --awaiting-row:rgba(87,174,201,.075);
+    --go:#4CC76B;       --on-go:#0E1410;  --go-line:#2B6B3C;       --go-tint:#17301F;
+    --due:#FF7A70;      --on-due:#1A0A08; --due-line:#7A3A35;      --due-tint:#3C1F1D;
+    --closing:#F5B700;  --closing-line:#6B5410;  --closing-tint:#3A3110;
+    --awaiting:#8FA2FF; --awaiting-line:#3B4A99; --awaiting-tint:#1F2850;
+    --closed:#4A5058;
+    /* A row is a plain card with its accent on the edge, in both themes, so
+       every -row value is simply the card's own surface. The names stay
+       because the tokens file and the kit carry them. */
+    --go-row:#1A1D21; --due-row:#1A1D21;
+    --closing-row:#1A1D21; --awaiting-row:#1A1D21;
     --row-pad:10px;
 
-    --signal:#56C88A; --signal-hi:#6FD79D; --on-signal:#0A1B0F;
-    --cool:#4FB58C;
-    --warn:#E2685C;   --warn-line:#5A2E2A;
-    --good:#6FD79D;   --good-line:#2C5540;
+    --signal:#4CC76B; --signal-hi:#63D37F; --on-signal:#0E1410;
+    --cool:#4CC76B;
+    --warn:#FF7A70;   --warn-line:#7A3A35;
+    --good:#4CC76B;   --good-line:#2B6B3C;
 
-    --posted:#56C88A; --posted-dim:#23392B;
-    --cold:#A9BCB1;   --cold-dim:#2A372F;
-    --neutral:#86988D; --neutral-line:#3A4A40;
-    --live:#56C88A;   --live-line:#2C5540;
-    --stale-line:#232E27;
+    --posted:#4CC76B; --posted-dim:#17301F;
+    --cold:#AEB4BA;   --cold-dim:#23272C;
+    --neutral:#8D949B; --neutral-line:#59616A;
+    --live:#4CC76B;   --live-line:#2B6B3C;
+    --stale-line:#2C3137;
 
     /* tints and washes -- the same names in both themes, different weights */
-    --glow1:rgba(86,200,138,.05); --glow2:rgba(237,243,239,.03);
-    --signal-tint:rgba(86,200,138,.12); --signal-tint2:rgba(86,200,138,.03);
-    --signal-glow:rgba(86,200,138,.28);
-    --good-tint:rgba(111,215,157,.10);
-    --warn-tint:#372018; --warn-chip:#4A2A25;
-    --live-tint:rgba(86,200,138,.07);
-    --plot-fade:#44574B;
-    --veil:rgba(10,15,12,.82); --veil-lite:rgba(10,15,12,.6);
+    --glow1:transparent; --glow2:transparent;
+    --signal-tint:#17301F; --signal-tint2:rgba(76,199,107,.04);
+    --signal-glow:transparent;
+    --good-tint:#17301F;
+    --warn-tint:#3C1F1D; --warn-chip:#4A2623;
+    --live-tint:#17301F;
+    --plot-fade:#4A5058;
+    --veil:rgba(0,0,0,.68); --veil-lite:rgba(0,0,0,.5);
     --shadow:0 1px 2px rgba(0,0,0,.3);
-    --shadow-md:0 10px 30px rgba(0,0,0,.5);
-    --shadow-lg:0 20px 60px rgba(0,0,0,.55);
+    --shadow-md:0 6px 18px rgba(0,0,0,.4);
+    --shadow-lg:0 14px 40px rgba(0,0,0,.5);
 
     --disp:system-ui,-apple-system,'Segoe UI',sans-serif;
     --mono:ui-monospace,'Cascadia Mono',Consolas,monospace;
   }
 
-  /* The light theme is the same hue turned inside out: the dark ground becomes
-     the ink. Accents darken to hold contrast on white, and state the instruction
-     across the whole row rather than only its edge. Shadows lose most of their
-     weight -- a heavy shadow on white reads as dirt rather than as depth. */
+  /* Paper. The ground becomes the ink and --line becomes a true black outline,
+     which is what gives this theme its drawn look. Accents darken to hold
+     contrast on white. Shadows lose most of their weight -- a heavy shadow on
+     white reads as dirt rather than as depth. */
   :root[data-theme="light"]{
     color-scheme:light;
-    --ink:#F1F5F2; --panel:#FFFFFF; --panel2:#E9EFEB; --line:#D5DFD8; --hair:#E6ECE8;
-    --text:#18211C; --muted:#4F5E56; --dim:#5C6B63;
+    --brand:#6A41C6; --hard:#14181A; --tile:#EEEEE8; --gnd:#C9C9C0;
+    --ink:#F6F6F2; --panel:#FFFFFF; --panel2:#EEEEE8; --line:#14181A; --hair:#E0E0D9;
+    --text:#14181A; --muted:#51585C; --dim:#6B7276;
 
-    --go:#147A3F;       --on-go:#FFFFFF;  --go-line:#A8D8BC;       --go-tint:#DCF0E4;
-    --due:#BE3A2D;      --on-due:#FFFFFF; --due-line:#EEBAB4;      --due-tint:#FBE4E1;
-    --closing:#8A6314;  --closing-line:#E0C98F;  --closing-tint:#F7EBD2;
-    --awaiting:#1E6C86; --awaiting-line:#A9D3E0; --awaiting-tint:#DCEFF5;
-    --closed:#B6C4BC;
-    --go-row:#E9F4ED; --due-row:#FBECEA; --closing-row:#FAF1DF; --awaiting-row:#E6F2F7;
+    --go:#13733A;       --on-go:#FFFFFF;  --go-line:#13733A;       --go-tint:#E3F3E8;
+    --due:#C4302B;      --on-due:#FFFFFF; --due-line:#C4302B;      --due-tint:#FBE6E4;
+    --closing:#8A5A00;  --closing-line:#8A5A00;  --closing-tint:#FBF0CC;
+    --awaiting:#2449C9; --awaiting-line:#2449C9; --awaiting-tint:#E4EAFB;
+    --closed:#B4B4AC;
+    --go-row:#FFFFFF; --due-row:#FFFFFF; --closing-row:#FFFFFF; --awaiting-row:#FFFFFF;
     --row-pad:10px;
 
-    --signal:#147A3F; --signal-hi:#0F6635; --on-signal:#FFFFFF;
-    --cool:#177A47;
-    --warn:#BE3A2D;   --warn-line:#EEBAB4;
-    --good:#147A3F;   --good-line:#A8D8BC;
+    --signal:#13733A; --signal-hi:#0F5E2F; --on-signal:#FFFFFF;
+    --cool:#13733A;
+    --warn:#C4302B;   --warn-line:#C4302B;
+    --good:#13733A;   --good-line:#13733A;
 
-    --posted:#147A3F; --posted-dim:#DCF0E4;
-    --cold:#55665C;   --cold-dim:#E6EDE8;
-    --neutral:#65756B; --neutral-line:#C6D3CB;
-    --live:#147A3F;   --live-line:#A8D8BC;
-    --stale-line:#E6ECE8;
+    --posted:#13733A; --posted-dim:#E3F3E8;
+    --cold:#51585C;   --cold-dim:#EEEEE8;
+    --neutral:#6B7276; --neutral-line:#14181A;
+    --live:#13733A;   --live-line:#13733A;
+    --stale-line:#E0E0D9;
 
-    --glow1:rgba(21,127,66,.07); --glow2:rgba(19,28,23,.03);
-    --signal-tint:rgba(21,127,66,.11); --signal-tint2:rgba(21,127,66,.03);
-    --signal-glow:rgba(21,127,66,.24);
-    --good-tint:rgba(21,127,66,.10);
-    --warn-tint:rgba(195,59,46,.10); --warn-chip:#FBE4E1;
-    --live-tint:rgba(11,61,34,.07);
-    --plot-fade:#B4C4BA;
-    --veil:rgba(19,28,23,.42); --veil-lite:rgba(19,28,23,.3);
-    /* The shadow colour is --text/--ink (24,33,28), per the tokens file. These
-       three had drifted to (19,28,23) with a lighter shadow-lg. */
-    --shadow:0 1px 2px rgba(24,33,28,.07);
-    --shadow-md:0 8px 24px rgba(24,33,28,.12);
-    --shadow-lg:0 18px 50px rgba(24,33,28,.24);
+    --glow1:transparent; --glow2:transparent;
+    --signal-tint:#E3F3E8; --signal-tint2:rgba(19,115,58,.03);
+    --signal-glow:transparent;
+    --good-tint:#E3F3E8;
+    --warn-tint:#FBE6E4; --warn-chip:#FBE6E4;
+    --live-tint:#E3F3E8;
+    --plot-fade:#B4B4AC;
+    --veil:rgba(20,24,26,.45); --veil-lite:rgba(20,24,26,.28);
+    /* The shadow colour is --text (20,24,26), per the tokens file. */
+    --shadow:0 1px 2px rgba(20,24,26,.06);
+    --shadow-md:0 6px 18px rgba(20,24,26,.10);
+    --shadow-lg:0 14px 40px rgba(20,24,26,.16);
   }
   *{box-sizing:border-box}
   #app{background:
@@ -405,7 +407,7 @@
      Docked as a third column while there is room for all three. Below that it
      overlays as a sheet, on the same pattern and the same z-index family as
      the sidebar already uses when it stops being a column.
-     The ladder, bottom to top: #scrim 43, #toolbar 44, .side 45,
+     The ladder, bottom to top: #scrim 43, .rail 44 (phone), .side 45,
      #panescrim 46, .pane 47, .palscrim 48, .palbox 49, .modal 50. */
   .wrap.paned{grid-template-columns:minmax(0,1fr) 400px}
   .pane{border-left:1px solid var(--line);background:var(--panel);min-width:0;
@@ -472,13 +474,6 @@
      unnecessary rather than merely wrong. */
   /* Below the sheet, above everything else. Toasts sit at 40 and the modal
      layer at 50, so an open sheet never covers a dialog it opened. */
-  #toolbar{display:none;position:fixed;left:0;right:0;bottom:0;z-index:44;
-    gap:10px;align-items:center;
-    padding:10px 14px calc(10px + env(safe-area-inset-bottom));
-    border-top:1px solid var(--line);
-    background:linear-gradient(180deg,var(--panel),var(--panel2));
-    box-shadow:var(--shadow-md)}
-  #toolbar button{min-height:44px}
   #scrim{display:none;position:fixed;inset:0;z-index:43;background:var(--veil-lite)}
 
   /* Turned on below, after the base rules above -- a media query carries no
@@ -503,10 +498,7 @@
     /* Everything in an open panel is a touch target too, not just the sidebar. */
     .qd button{min-height:44px}
     .qacts .rowmenu>summary,.rowmenu-pop .btn-sm{min-height:44px}
-    #toolbar{display:flex}
     #scrim.on{display:block}
-    /* #toolbar already offers this, full width and under the thumb. */
-    #tbOpen{display:none}
     /* No keyboard at this width, so naming two keys is just noise in a header
        that is already doing well to fit. */
     .pane-head .hint{display:none}
@@ -859,6 +851,154 @@
     border-top-color:var(--signal);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
   @keyframes sp{to{transform:rotate(360deg)}}
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+
+  /* The clean direction. One thin even line on everything, plain cards with a
+     solid status edge, and exactly two hard offset shadows in the whole app:
+     the selected job and the sign-in card. Written as one block after the
+     rules it changes, so the older reasoning above still reads in order. */
+  /* The page had the browser's own 8px margin and canvas colour until the
+     rail needed a true left edge to sit on. */
+  body{margin:0;background:var(--ink)}
+  button{border-width:1.5px;border-color:var(--line);border-radius:8px;font-weight:600;background:var(--panel)}
+  button:hover:not(:disabled){border-color:var(--text);color:var(--text);transform:none;background:var(--panel2)}
+  .btn-go,.btn-go:hover:not(:disabled){background:var(--go);color:var(--on-go);border-color:var(--go);box-shadow:none}
+  .btn-due,.btn-due:hover:not(:disabled){border-color:var(--due)}
+  select,input[type=text],textarea{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
+  .segs{border:1.5px solid var(--line);border-radius:8px}
+  .seg,.seg:hover:not(:disabled){border:0;background:transparent}
+  .seg.on,.seg.on:hover:not(:disabled){background:var(--text);color:var(--ink)}
+  .tabs{border-bottom:1.5px solid var(--hair)}
+  .tab.on{color:var(--text);border-bottom:3px solid var(--text);font-weight:650}
+  .rowmenu>summary{border:1.5px solid var(--line);color:var(--text);background:var(--panel)}
+  .rowmenu-pop{border:1.5px solid var(--line)}
+  /* Headings: black type over a short straight stroke in the section's colour. */
+  .qsec-h{border-bottom:0;padding-bottom:10px}
+  .qsec-h h3{font-size:15px;font-weight:700;padding-bottom:4px;border-bottom:3px solid var(--text)}
+  .qsec.go h3,.qsec.due h3,.qsec.closing h3,.qsec.awaiting h3{color:var(--text)}
+  .qsec.go .qsec-h h3{border-bottom-color:var(--go)} .qsec.due .qsec-h h3{border-bottom-color:var(--due)}
+  .qsec.closing .qsec-h h3{border-bottom-color:var(--closing)} .qsec.awaiting .qsec-h h3{border-bottom-color:var(--awaiting)}
+  /* Rows: a card each. The facts sit under the title at every width now, so
+     the row is the same shape whether or not the rail and the pane are open. */
+  .qitem{border-bottom:0;margin-top:8px}
+  .qrow{border:1.5px solid var(--line);border-radius:10px;background:var(--panel);
+    grid-template-columns:5px 38px minmax(0,1fr) auto;transition:padding .16s ease,box-shadow .16s ease}
+  .qbar{grid-row:1 / span 2;border-radius:3px}
+  .qfacts{display:flex;gap:26px;grid-column:3;grid-row:2;margin-top:8px}
+  .qacts{grid-column:4;grid-row:1 / span 2}
+  .qt{font-weight:650}
+  @media(hover:hover){.qitem .qrow:hover{transform:none;box-shadow:var(--shadow-md);background:var(--panel)}}
+  /* The selected row, blown up to its name and its one button. Everything else
+     about it is in the pane beside it, so the row stops repeating it. */
+  .qitem.sel .qrow{grid-template-columns:6px minmax(0,1fr) auto;align-items:center;gap:0 20px;
+    padding:26px 24px 26px 14px;border-width:2px;border-color:var(--text);box-shadow:5px 5px 0 var(--hard);
+    background:var(--panel);transform:none}
+  .qitem.sel .qbar{grid-row:auto;align-self:stretch;min-height:56px;box-shadow:none}
+  .qitem.sel .qrank,.qitem.sel .qfacts,.qitem.sel .qs{display:none}
+  .qitem.sel .qt{font-size:25px;line-height:1.15;font-weight:750;letter-spacing:-.02em;white-space:normal}
+  .qitem.sel .qacts{grid-column:auto;grid-row:auto}
+  .qitem.sel .qacts>*:not(.act-primary){display:none}
+  .qitem.sel .qacts button,.pane-pri button{font-size:16px;padding:12px 22px;border-radius:10px}
+  .next,.next.calm,.next.warn{border:1.5px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:none}
+  .next .nh{font-size:16px;font-weight:700}
+  .fold{border-width:1.5px;border-radius:10px;background:var(--panel)}
+  .pane{top:0;max-height:100vh;border-left:1.5px solid var(--line)}
+  .qd-rail{border:1.5px solid var(--hair);border-radius:10px;background:var(--ink)}
+  .side{border-right:1.5px solid var(--line)}
+  .palbox{border:1.5px solid var(--line)}
+  .task{border:1.5px solid var(--line);border-left:5px solid var(--go)}
+
+  /* The rail. Everything the top bar held, down the left edge: icons at 68px,
+     icons and words at 296px. Every control keeps the id it had in the bar,
+     because the command palette dispatches by clicking them. */
+  .rail{position:fixed;left:0;top:0;bottom:0;width:68px;z-index:12;background:var(--panel);
+    border-right:1.5px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:12px 10px;
+    overflow:hidden auto;scrollbar-width:none;font-family:var(--disp);transition:width .18s ease}
+  .rail .r-it,.rail .r-it:hover:not(:disabled){display:flex;align-items:center;gap:12px;padding:4px 2px;min-height:48px;
+    flex:0 0 auto;width:100%;border:0;border-radius:0;background:none;color:var(--text);text-align:left;
+    white-space:nowrap;position:relative;font-weight:400}
+  .rail .r-it[hidden]{display:none}
+  .r-ic{flex:0 0 42px;width:42px;height:42px;display:grid;place-items:center;position:relative;color:var(--text);
+    border:1.5px solid var(--line);border-radius:11px;background:var(--panel)}
+  button.r-it:hover .r-ic,.r-dir:hover .r-ic{background:var(--panel2);border-color:var(--text)}
+  .r-it.primary .r-ic,button.r-it.primary:hover .r-ic{background:var(--go);border-color:var(--go);color:var(--on-go)}
+  /* Neutral on purpose: an accent here would be an instruction about nothing. */
+  .r-ic.r-av{background:var(--panel2);border-radius:50%;font:700 13px var(--mono)}
+  .r-ic.r-jt{background:var(--brand);border-color:var(--brand);color:var(--panel);font:800 14px var(--disp);letter-spacing:-.02em}
+  .r-lb{font-size:13.5px;font-weight:650;line-height:1.25;display:none;min-width:0}
+  .r-lb small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
+  .r-bd{position:absolute;right:-8px;top:-8px;min-width:19px;height:19px;border-radius:10px;border:1.5px solid var(--panel);
+    font:700 10px var(--mono);display:grid;place-items:center;padding:0 4px;background:var(--text);color:var(--ink)}
+  .r-bd.go{background:var(--go);color:var(--on-go)} .r-bd.due{background:var(--due);color:var(--on-due)}
+  .r-bd.closing{background:var(--closing)} .r-bd.awaiting{background:var(--awaiting)}
+  .r-sep{flex:0 0 1.5px;background:var(--hair);margin:6px 4px}
+  /* Direction, closed: the picker lies invisibly over its icon, so one click
+     on the compass opens the native list. Open, it is an ordinary select. */
+  .r-dir select.trkbar{position:absolute;left:2px;top:4px;width:42px;height:42px;opacity:0;cursor:pointer;max-width:none}
+  .rail.open .r-dir select.trkbar{position:static;opacity:1;width:auto;height:auto;flex:1 1 0;min-width:0}
+  /* The three of them and the car, on a light tile in both themes: they are
+     drawn in ink, so the page under them stays paper even at night. */
+  .r-foot{display:none;margin-top:auto;position:relative;flex:0 0 118px;margin-inline:-10px;margin-bottom:-12px;
+    background:var(--tile);border-top:1.5px solid var(--line)}
+  .r-foot::after{content:"";position:absolute;left:0;right:0;bottom:0;height:20px;
+    background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
+  .r-cast{position:absolute;left:50%;bottom:6px;transform:translateX(-50%);width:230px;height:auto;z-index:1}
+  .r-grab{display:none}
+  .rail.open{width:296px}
+  .rail.open .r-lb{display:block;white-space:normal}
+  .rail.open .r-foot{display:block}
+  #syncInfo{margin:0 22px}
+  .rail ~ .wrap{margin-left:68px;transition:margin-left .18s ease}
+  .rail ~ #syncInfo{margin-left:90px}
+  /* Open, the rail pushes the workspace across instead of covering it -- while
+     there is room. Below that it lies over the queue, like the drawer does. */
+  @media(min-width:1200px){
+    .rail.open ~ .wrap{margin-left:296px}
+    .rail.open ~ #syncInfo{margin-left:318px}
+  }
+  @media(max-width:1199px){ .rail.open{box-shadow:var(--shadow-lg)} }
+  @media(prefers-reduced-motion:reduce){ .rail,.rail ~ .wrap{transition:none} }
+
+  /* A job open on a small screen: the sheet leads with the name and the one
+     button, the same two things the blown-up row keeps on a wide one. */
+  .pane-pri{display:none}
+  @media(max-width:1199px){
+    .pane-pri{display:flex;align-items:center;gap:14px;justify-content:space-between;flex-wrap:wrap;
+      margin:2px 0 14px;padding-bottom:14px;border-bottom:1.5px solid var(--hair)}
+    .pane-pri .t{font-size:22px;line-height:1.15;font-weight:750;letter-spacing:-.02em;flex:1 1 180px}
+    .pane{border-left:0;border-top:1.5px solid var(--line)}
+  }
+  /* Phone: the rail is a strip along the bottom, under the thumb, and pulls up
+     into a sheet -- by its handle, or by a swipe. */
+  @media(max-width:900px){
+    .rail{left:0;right:0;top:auto;bottom:0;width:auto;height:calc(84px + env(safe-area-inset-bottom));flex-direction:row;
+      align-items:flex-start;justify-content:space-around;border-right:0;border-top:1.5px solid var(--line);
+      border-radius:18px 18px 0 0;padding:24px 12px 0;gap:4px;z-index:44;transition:none;overflow:hidden}
+    .r-grab,.rail .r-grab:hover:not(:disabled){display:block;position:absolute;left:0;right:0;top:0;height:22px;
+      min-height:0;padding:0;border:0;border-radius:0;background:none}
+    .r-grab::before{content:"";position:absolute;top:8px;left:50%;transform:translateX(-50%);width:46px;height:5px;
+      border-radius:3px;background:var(--dim)}
+    .r-sep,.rail .r-it.r-x2{display:none}
+    .rail .r-it,.rail .r-it:hover:not(:disabled){padding:0;min-height:0;width:auto}
+    .r-ic{flex-basis:46px;width:46px;height:46px}
+    .rail.open{width:auto;height:auto;max-height:88vh;flex-direction:column;align-items:stretch;justify-content:flex-start;
+      gap:0;padding:26px 14px 0;overflow:hidden auto}
+    .rail.open .r-it,.rail.open .r-it.r-x2,.rail.open .r-it:hover:not(:disabled){display:flex;padding:2px 3px;min-height:46px;width:100%}
+    .rail.open .r-it[hidden]{display:none}
+    .rail.open .r-ic{flex-basis:38px;width:38px;height:38px}
+    .rail.open .r-sep{display:block;margin:3px 6px}
+    .rail.open .r-foot{flex-basis:108px;margin-inline:-14px;margin-bottom:0}
+    .r-dir select.trkbar{width:38px;height:38px}
+    .rail ~ .wrap,.rail ~ #syncInfo{margin-left:0}
+    .rail.open ~ #scrim{display:block}
+    .main{padding-bottom:120px}
+    #fb{bottom:calc(100px + env(safe-area-inset-bottom))}
+    #app:has(.rail.open) #fb{display:none}
+    .qrow{grid-template-columns:5px 32px minmax(0,1fr)} .qbar{grid-row:1 / span 3}
+    .qfacts{grid-column:3} .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
+    .qitem.sel .qrow{grid-template-columns:6px minmax(0,1fr);padding:20px 16px 20px 12px}
+    .qitem.sel .qacts{margin-top:12px}
+    .qitem.sel .qt{font-size:21px}
+  }
 </style>
 
 <div id="app"><div id="root"></div><div id="fb"><div id="tasks"></div></div><div id="palette"></div></div>
@@ -1096,7 +1236,7 @@ function applyTheme(){
   // The browser paints its own chrome from this on mobile; leaving it on the
   // old dark value puts a black bar above a white page.
   const m=document.querySelector('meta[name="theme-color"]');
-  if(m) m.setAttribute('content', CV('--ink') || '#18211C');
+  if(m) m.setAttribute('content', CV('--ink') || '#111315');
 }
 /* Before the first paint, and synchronously -- everything else here is async,
    and a single frame of the wrong theme is the one theming bug people notice. */
@@ -2121,7 +2261,7 @@ function showCredits(w){
   if(typeof w.free_tier==='boolean') FREE_TIER=w.free_tier;
   if(typeof w.unlimited==='boolean') UNLIMITED=w.unlimited;
   if(typeof w.tester==='boolean') TESTER=w.tester;
-  const e=$('#btnCredits'); if(e) e.textContent=creditsLabel();
+  const e=$('#btnCredits .r-lb'); if(e) e.textContent=creditsLabel();
   fbGate(); trackReady();
 }
 async function loadCredits(){
@@ -5975,6 +6115,49 @@ function jobDetail(j,i,acc){
    one. Actions: whatever advances the pipeline, then Details, then the one
    primary move furthest right. Close is not here: it is the one destructive
    move, and it lives in the stage row inside the panel. */
+/* The rail's icons. One convention for all of them: 24x24, stroke only, in
+   the colour of whatever they sit in. Paths only -- no icon library. */
+const IC = {
+  tools:'<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18"/>',
+  compass:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
+  check:'<circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.8 2.8 5.4-5.6"/>',
+  clock:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>',
+  glass:'<path d="M7 3h10M7 21h10M8 3v3.2l4 5.8-4 5.8V21M16 3v3.2l-4 5.8 4 5.8V21"/>',
+  send:'<path d="M21 3L3 10.5l7 2.6 2.6 7z"/><path d="M10 13.1l4.4-4.4"/>',
+  list:'<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  command:'<path d="M5 8l4 4-4 4M12.5 16H19"/>',
+  inbox:'<path d="M3 13l3-8h12l3 8v6H3z"/><path d="M3 13h5l1 3h6l1-3h5"/>',
+  chat:'<path d="M4 5h16v11H9.5L4 20z"/>',
+  moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/>',
+  coin:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M14.6 9.6c-.5-.9-1.5-1.4-2.6-1.4-1.5 0-2.7.8-2.7 2s1 1.7 2.7 1.9 2.7.8 2.7 2-1.2 2-2.7 2c-1.200 0-2.200-.5-2.700-1.400"/>',
+  exit:'<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>'
+};
+const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
+/* The three people the app is for, and their car. Built from rules rather than
+   drawn: circle heads, capsule limbs, one stroke weight, flat fills. Their
+   colours are ink on a drawing, not tokens, and mean nothing about a job. */
+const CAST = '<svg class="r-cast" viewBox="0 0 540 250" role="img" aria-label="The three job seekers and their car"><g><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L91.1 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L91.1 138.4" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="91.1" cy="138.4" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#F2B79C" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#F2B79C" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M38.5 42 A21.5 21.5 0 0 1 81.5 42 Q60 27 38.5 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="45" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="62" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M58 45 H62" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(96 25) scale(.9)"><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L106.6 40.2" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L106.6 40.2" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="106.6" cy="40.2" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#8E5B3D" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="41.2" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="48.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="60.0" cy="22.0" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="71.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="78.8" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="2.2" fill="#14181A"/><circle cx="68" cy="46" r="2.2" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(188 0)"><rect x="35" y="24" width="50" height="78" rx="23" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M51.0 178.0 L51.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M51.0 178.0 L51.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><rect x="42" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="60" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M40 128 H80 L90 180 H30 Z" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="62" rx="14" fill="#1F9D55" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L91.1 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L91.1 138.4" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="91.1" cy="138.4" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#C98A68" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#C98A68" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M39 42 A21 21 0 0 1 81 42 Q60 32 39 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="68" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="52" cy="46" r="1.8" fill="#14181A"/><circle cx="68" cy="46" r="1.8" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(300 119) scale(.9)"><path d="M52 72 Q58 22 130 22 Q202 22 208 72 Z" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="10" y="70" width="240" height="46" rx="16" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M72 64 Q78 36 124 34 V64 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M136 34 Q182 36 188 64 H136 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M130 70 V114 M22 92 H34" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g></svg>';
+/* Whether the rail is open. Remembered on a wide screen, where open is a
+   layout; never on a phone, where open is a sheet over the page. */
+let RAIL = false;
+try{ RAIL = window.innerWidth>900 && localStorage.getItem('triage:rail')==='1'; }catch(e){}
+
+/* The one button a job's state calls for. The row leads with it, the selected
+   row keeps nothing else, and the sheet on a small screen repeats it -- one
+   source, so the three cannot disagree. Labels are escaped where they carry
+   anything from a job record: follow_up_date arrives from CSV and backups. */
+function primaryAct(j,i){
+  const st=stOf(j);
+  const b=(act,label,cls)=>`<button class="btn-sm act-primary ${cls}" data-act="${act}" data-i="${i}">${label}</button>`;
+  if(st==='new') return chOf(j)==='cold' ? b('pitch','Write the DM','btn-go')
+    : httpUrl(String(j.url||'').trim()) ? b('apply','Apply \u2197','btn-go') : b('sent','Mark applied','btn-go');
+  if(st==='sent'){
+    const on=esc(mmdd(followUpOn(j)));
+    return isDue(j) ? b('chase','Write the chase','btn-due') : b('chase', on?`Chase on ${on}`:'Chase', 'btn-await');
+  }
+  return st==='live' ? b('note','Log a note','btn-go') : b('reopen','Reopen','');
+}
+
 function jobCard(j,i){
   const f=fitOf(j), r=reachOf(j), ch=chOf(j), st=stOf(j), due=isDue(j), acc=accentOf(j);
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
@@ -5986,9 +6169,7 @@ function jobCard(j,i){
      own job, and a button saying "Hide" about content sitting in another
      column would be lying about where that content is. */
   const details=btn('open','Read');
-  // btn() interpolates its label raw, so anything from a job record is escaped
-  // before it gets there. follow_up_date arrives from CSV import and backups.
-  const chaseOn = esc(mmdd(followUpOn(j)));
+  const pri=primaryAct(j,i);
   /* The posting, in the slot the eye reaches first. Every other thing the app
      does -- two scores rather than one, the ranking, the sections -- exists to
      produce this one click, and it used to be a text link folded inside the
@@ -6004,21 +6185,17 @@ function jobCard(j,i){
       st==='new'  ? (ch==='cold'
                       /* A cold row has no posting to open, so the one thing to
                          do is write to a person. The accent stays on that. */
-                      ? btn('pitch','Write the DM','btn-go') + details
+                      ? pri + details
                         + more([btn('sent','Mark contacted'),
                                 btn('hrfind','Find contacts'),
                                 btn('close','Not interested')])
-                      : (url ? btn('apply','Apply \u2197','btn-go')
-                             : btn('sent','Mark applied','btn-go')) + details
+                      : pri + details
                         + more([url?btn('sent','Mark applied without opening'):'',
                                 btn('pitch','Draft outreach'),
                                 btn('hrfind','Find contacts'),
                                 btn('close','Not interested')]))
-    : st==='sent' ? btn('live','They replied') + details
-                    + (due ? btn('chase','Write the chase','btn-due')
-                           : btn('chase', chaseOn?`Chase on ${chaseOn}`:'Chase', 'btn-await'))
-    : st==='live' ? details + btn('note','Log a note','btn-go')
-    : details + btn('reopen','Reopen');
+    : st==='sent' ? btn('live','They replied') + details + pri
+    : details + pri;
 
   const fact=(k,v,cls)=>`<div class="qfact"><div class="eyebrow">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
   /* Gone from the index it was found in -- public.job_checks saw it yesterday
@@ -6346,40 +6523,46 @@ function renderApp(){
   const selJob = selIdx>=0 ? p.jobs[selIdx] : null;
 
   $('#root').innerHTML=`
-  <div class="topbar">
-    <h1>Job Triage</h1>
-    <button class="btn-sm" id="tbOpen">Find work &amp; tools</button>
-    <div class="who"><div class="av">${esc(initials)}</div>
-      <div><div class="nm">${esc(prof.name)}</div><div class="lc">${esc(prof.location||'')}</div></div></div>
+  <nav class="rail${RAIL?' open':''}" id="rail" aria-label="Job Triage">
+    <button class="r-grab" id="railGrab" aria-label="Pull up everything"></button>
+    <button class="r-it r-x2" id="railTog" title="Open or close the rail" aria-expanded="${RAIL}">
+      <span class="r-ic r-jt">JT</span><span class="r-lb">Job Triage</span></button>
+    <button class="r-it primary" id="tbOpen" title="Find work &amp; tools">
+      <span class="r-ic">${ic('tools')}</span><span class="r-lb">Find work &amp; tools<small>search, scoring, keys</small></span></button>
+    <div class="r-it r-x2"><span class="r-ic r-av">${esc(initials)}</span>
+      <span class="r-lb">${esc(prof.name)}<small>${esc(prof.location||'')}</small></span></div>
     <!-- Changing direction re-ranks every job in the app. That is a lens over
          the whole tool, not a tool in a drawer, so it reads and changes from
-         the bar rather than from inside the thing it reorders. -->
-    <select id="trackSel" class="trkbar" title="Direction — changing it re-ranks everything">${(prof.tracks||[]).map(t=>
-      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select>
-    <div class="floor${doneToday>=DAY_FLOOR?' met':''}" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
-      <span class="fdots">${Array.from({length:DAY_FLOOR},(_,k)=>
-        `<i class="fdot${k<doneToday?' on':''}"></i>`).join('')}</span>
-      <span class="flab">${doneToday>=DAY_FLOOR
-        ? `${doneToday} today · floor cleared`
-        : `${doneToday} of ${DAY_FLOOR} today`}</span></div>
-    <div class="spacer"></div>
-    ${law.due?`<span class="pill due">${law.due} overdue</span>`:''}
-    ${law.closing?`<span class="pill closing">${law.closing} closing</span>`:''}
-    ${law.awaiting?`<span class="pill awaiting">${law.awaiting} awaiting</span>`:''}
-    <span class="pill">${p.jobs.length} jobs</span>
-    <button class="btn-sm" id="btnTheme" title="Theme: ${THEME}. Click to change.">${
-      THEME==='auto'
-        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px"><circle cx="12" cy="12" r="9"/><path d="M12 3v18" /><path d="M12 3a9 9 0 0 1 0 18" fill="currentColor" stroke="none"/></svg> Auto'
-        : THEME==='light'
-        ? '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="vertical-align:-2px"><circle cx="12" cy="12" r="4.2"/><path d="M12 2v2.4M12 19.6V22M4.2 4.2l1.7 1.7M18.1 18.1l1.7 1.7M2 12h2.4M19.6 12H22M4.2 19.8l1.7-1.7M18.1 5.9l1.7-1.7"/></svg> Light'
-        : '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" style="vertical-align:-2px"><path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/></svg> Dark'
-    }</button>
-    <button class="btn-sm" id="btnPal" title="Every command in one list — ⌘K, or /">Commands</button>
-    <button class="btn-sm" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>Feedback</button>
-    ${CLOUD&&USER?`<button class="btn-sm" id="btnCredits">${esc(creditsLabel())}</button>
-    <button class="btn-sm" id="btnSignOut" title="${esc(userName())}">Sign out</button>`:''}
-  </div>
-  <div id="syncInfo" class="err" style="display:none;margin:0 22px"></div>
+         the rail rather than from inside the thing it reorders. -->
+    <label class="r-it r-x2 r-dir" title="Direction — changing it re-ranks everything"><span class="r-ic">${ic('compass')}</span>
+      <select id="trackSel" class="trkbar" aria-label="Direction">${(prof.tracks||[]).map(t=>
+      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select></label>
+    <div class="r-it" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
+      <span class="r-ic">${ic('check')}<b class="r-bd${doneToday>=DAY_FLOOR?' go':''}">${doneToday}/${DAY_FLOOR}</b></span>
+      <span class="r-lb">${doneToday>=DAY_FLOOR ? `${doneToday} today · floor cleared` : `${doneToday} of ${DAY_FLOOR} sent today`}<small>the day's floor</small></span></div>
+    <div class="r-sep"></div>
+    ${law.due?`<div class="r-it" title="${law.due} overdue"><span class="r-ic">${ic('clock')}<b class="r-bd due">${law.due}</b></span>
+      <span class="r-lb">${law.due} overdue<small>past the follow-up date</small></span></div>`:''}
+    ${law.closing?`<div class="r-it" title="${law.closing} closing"><span class="r-ic">${ic('glass')}<b class="r-bd closing">${law.closing}</b></span>
+      <span class="r-lb">${law.closing} closing<small>old enough to be filled soon</small></span></div>`:''}
+    ${law.awaiting?`<div class="r-it" title="${law.awaiting} awaiting"><span class="r-ic">${ic('send')}<b class="r-bd awaiting">${law.awaiting}</b></span>
+      <span class="r-lb">${law.awaiting} awaiting<small>sent; the next move is theirs</small></span></div>`:''}
+    <div class="r-it r-x2" title="${p.jobs.length} jobs"><span class="r-ic">${ic('list')}<b class="r-bd">${p.jobs.length}</b></span>
+      <span class="r-lb">${p.jobs.length} jobs held</span></div>
+    <div class="r-sep"></div>
+    <button class="r-it" id="btnPal" title="Every command in one list — ⌘K, or /">
+      <span class="r-ic">${ic('command')}</span><span class="r-lb">Commands<small>every action, typed</small></span></button>
+    <button class="r-it r-x2" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>
+      <span class="r-ic">${ic('chat')}</span><span class="r-lb">Feedback<small>tell us what broke</small></span></button>
+    <button class="r-it r-x2" id="btnTheme" title="Theme: ${THEME}. Click to change.">
+      <span class="r-ic">${ic('moon')}</span><span class="r-lb">Theme<small>${THEME==='auto'?'follows this device':THEME==='light'?'paper':'night'}</small></span></button>
+    ${CLOUD&&USER?`<button class="r-it r-x2" id="btnCredits" title="Credits">
+      <span class="r-ic">${ic('coin')}</span><span class="r-lb">${esc(creditsLabel())}</span></button>
+    <button class="r-it r-x2" id="btnSignOut" title="${esc(userName())}">
+      <span class="r-ic">${ic('exit')}</span><span class="r-lb">Sign out<small>${esc(userName())}</small></span></button>`:''}
+    <div class="r-foot" aria-hidden="true">${CAST}</div>
+  </nav>
+  <div id="syncInfo" class="err" style="display:none"></div>
   <div class="wrap${selJob?' paned':''}">
     <div class="side ${TOOLS?'open':''}">
       <div class="sheet-head">
@@ -6531,14 +6714,13 @@ function renderApp(){
         <div class="spacer"></div>
         <button class="btn-sm" data-act="unsel" data-i="${selIdx}">Close</button>
       </div>
+      <div class="pane-pri"><div class="t">${esc(selJob.title||'(untitled)')}</div>${primaryAct(selJob,selIdx)}</div>
       ${jobDetail(selJob,selIdx,accentOf(selJob))}
     </aside>`:''}
   </div>
   <div id="scrim" class="${TOOLS?'on':''}"></div>
   ${selJob?'<div id="panescrim"></div>':''}
-  <div id="toolbar">
-    <button class="btn-go" id="tbTools" style="flex:1">${TOOLS?'Close':'Find work &amp; tools'}</button>
-  </div>`;
+`;
 
   document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
@@ -6645,8 +6827,9 @@ function renderApp(){
     const bar=$('#btnPal');
     if(bar && !$('#btnReplies')){
       const b=document.createElement('button');
-      b.className='btn-sm'; b.id='btnReplies'; b.title='Let replies mark themselves';
-      b.textContent='Replies'; b.onclick=replyInboxDialog;
+      b.className='r-it r-x2'; b.id='btnReplies'; b.title='Let replies mark themselves';
+      b.innerHTML=`<span class="r-ic">${ic('inbox')}</span><span class="r-lb">Replies<small>mail that came back</small></span>`;
+      b.onclick=replyInboxDialog;
       bar.after(b);
     }
   }
@@ -6662,14 +6845,36 @@ function renderApp(){
     const o=PAID_OFFER; if(!o) return;
     runPaidBoards(trk, o.where, o.since_days);
   };
-  const toggleTools=()=>{ TOOLS=!TOOLS; render(); };
+  /* On a phone the drawer and the pulled-up rail are both sheets from the
+     bottom; opening one puts the other away. */
+  const toggleTools=()=>{ TOOLS=!TOOLS; if(window.innerWidth<=900) RAIL=false; render(); };
+  /* Toggled on the live node rather than by a re-render, so the width and the
+     workspace's margin animate instead of jumping. render() reads RAIL too, so
+     the next re-render agrees with it. */
+  const toggleRail=()=>{
+    RAIL=!RAIL;
+    try{ if(window.innerWidth>900) localStorage.setItem('triage:rail', RAIL?'1':'0'); }catch(e){}
+    const r=$('#rail'); r.classList.toggle('open',RAIL);
+    $('#railTog').setAttribute('aria-expanded', RAIL);
+  };
+  $('#railTog').onclick=toggleRail;
+  $('#railGrab').onclick=toggleRail;
+  { /* The pull: a swipe up on the strip opens it, a swipe down on the sheet's
+       top closes it. Vertical only, and only where the rail is a strip. */
+    const r=$('#rail'); let y0=null;
+    r.addEventListener('touchstart',e=>{ y0=(!RAIL||r.scrollTop<=0)?e.touches[0].clientY:null; },{passive:true});
+    r.addEventListener('touchend',e=>{
+      if(y0===null || window.innerWidth>900) return;
+      const d=e.changedTouches[0].clientY-y0; y0=null;
+      if(Math.abs(d)>30 && (d<0)!==RAIL) toggleRail();
+    },{passive:true});
+  }
   // Three ways in and out, because the drawer is now the only route to any of
-  // this: the bar at every width, the thumb bar on a phone, and its own Close.
+  // this: the rail at every width (a bottom strip on a phone), and its own Close.
   if($('#tbOpen'))  $('#tbOpen').onclick=toggleTools;
-  if($('#tbTools')) $('#tbTools').onclick=toggleTools;
   if($('#tbClose')) $('#tbClose').onclick=toggleTools;
   // Tapping the dimmed page behind the sheet is the gesture everyone tries first.
-  if($('#scrim')) $('#scrim').onclick=()=>{ TOOLS=false; render(); };
+  if($('#scrim')) $('#scrim').onclick=()=>{ TOOLS=false; if(window.innerWidth<=900) RAIL=false; render(); };
   // Only ever visible at the widths where the pane overlays the queue; docked,
   // CSS hides it, because there is nothing behind the pane to dismiss it onto.
   if($('#panescrim')) $('#panescrim').onclick=()=>{ SEL_JOB=null; render(); };
