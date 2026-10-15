@@ -6,7 +6,7 @@
      had drifted on three of the seven: --ink #F6F8F6, --line #D5DED8 and
      --muted #56655A, so the public pages read slightly off-palette beside the
      app. Nothing checks this file against the tokens -- diff it by hand. */
-  :root{ color-scheme:light; --ink:#F6F6F2; --panel:#FFFFFF; --line:#14181A; --text:#14181A; --muted:#51585C; --go:#13733A; --due:#C4302B; }
+  :root{ color-scheme:light; --ink:#F4E1D2; --panel:#FCF1E7; --line:#2B211C; --text:#211A16; --muted:#5A4A40; --go:#1C6B38; --due:#B02E2A; }
 }
 *{ box-sizing:border-box; }
 body{ margin:0; background:var(--ink); color:var(--text); font:15px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }

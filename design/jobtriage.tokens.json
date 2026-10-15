@@ -276,47 +276,47 @@
   "light": {
     "color": {
       "ink": {
-        "value": "#F6F6F2",
+        "value": "#F4E1D2",
         "type": "color",
         "description": "Page ground"
       },
       "panel": {
-        "value": "#FFFFFF",
+        "value": "#FCF1E7",
         "type": "color",
         "description": "Chrome: header, sidebar, sheets"
       },
       "panel2": {
-        "value": "#EEEEE8",
+        "value": "#EBD3C1",
         "type": "color",
         "description": "Inset surfaces, secondary buttons"
       },
       "line": {
-        "value": "#14181A",
+        "value": "#2B211C",
         "type": "color",
         "description": "Structural rule"
       },
       "hair": {
-        "value": "#E0E0D9",
+        "value": "#E0C6B3",
         "type": "color",
         "description": "Row rule inside a list"
       },
       "text": {
-        "value": "#14181A",
+        "value": "#211A16",
         "type": "color",
         "description": "Body text. The dark ground, used as ink"
       },
       "muted": {
-        "value": "#51585C",
+        "value": "#5A4A40",
         "type": "color",
         "description": "Secondary text"
       },
       "dim": {
-        "value": "#6B7276",
+        "value": "#6F5E53",
         "type": "color",
         "description": "Hints and eyebrow labels"
       },
       "go": {
-        "value": "#13733A",
+        "value": "#1C6B38",
         "type": "color",
         "description": "Do this now. The only filled button"
       },
@@ -326,22 +326,22 @@
         "description": "Text on a go fill"
       },
       "go-line": {
-        "value": "#13733A",
+        "value": "#1C6B38",
         "type": "color",
         "description": "Border for go chips"
       },
       "go-chip": {
-        "value": "#E3F3E8",
+        "value": "#E1E8D2",
         "type": "color",
         "description": "Go chip fill"
       },
       "go-row": {
-        "value": "#FFFFFF",
+        "value": "#FCF1E7",
         "type": "color",
         "description": "Whole-row tint for a go row"
       },
       "due": {
-        "value": "#C4302B",
+        "value": "#B02E2A",
         "type": "color",
         "description": "Overdue: past the follow-up date"
       },
@@ -351,77 +351,77 @@
         "description": "Text on a due fill"
       },
       "due-line": {
-        "value": "#C4302B",
+        "value": "#B02E2A",
         "type": "color",
         "description": "Border for due chips"
       },
       "due-chip": {
-        "value": "#FBE6E4",
+        "value": "#F5D6CE",
         "type": "color",
         "description": "Due chip fill"
       },
       "due-row": {
-        "value": "#FFFFFF",
+        "value": "#FCF1E7",
         "type": "color",
         "description": "Whole-row tint for a due row"
       },
       "closing": {
-        "value": "#8A5A00",
+        "value": "#7A5000",
         "type": "color",
         "description": "Closing: posting about to be filled"
       },
       "closing-line": {
-        "value": "#8A5A00",
+        "value": "#7A5000",
         "type": "color",
         "description": "Border for closing chips"
       },
       "closing-chip": {
-        "value": "#FBF0CC",
+        "value": "#F3DFBE",
         "type": "color",
         "description": "Closing chip fill"
       },
       "closing-row": {
-        "value": "#FFFFFF",
+        "value": "#FCF1E7",
         "type": "color",
         "description": "Whole-row tint for a closing row"
       },
       "awaiting": {
-        "value": "#2449C9",
+        "value": "#2A45AC",
         "type": "color",
         "description": "Sent, and their move"
       },
       "awaiting-line": {
-        "value": "#2449C9",
+        "value": "#2A45AC",
         "type": "color",
         "description": "Border for awaiting chips"
       },
       "awaiting-chip": {
-        "value": "#E4EAFB",
+        "value": "#E2DCE6",
         "type": "color",
         "description": "Awaiting chip fill"
       },
       "awaiting-row": {
-        "value": "#FFFFFF",
+        "value": "#FCF1E7",
         "type": "color",
         "description": "Whole-row tint for an awaiting row"
       },
       "closed": {
-        "value": "#B4B4AC",
+        "value": "#BFAEA2",
         "type": "color",
         "description": "Closed, or out of selection"
       },
       "shadow": {
-        "value": "0 1px 2px rgba(20,24,26,.06)",
+        "value": "0 1px 2px rgba(43,33,28,.07)",
         "type": "boxShadow",
         "description": "Elevation"
       },
       "shadow-md": {
-        "value": "0 6px 18px rgba(20,24,26,.10)",
+        "value": "0 6px 18px rgba(43,33,28,.12)",
         "type": "boxShadow",
         "description": "Elevation: a lifted row or a hovered card"
       },
       "shadow-lg": {
-        "value": "0 14px 40px rgba(20,24,26,.16)",
+        "value": "0 14px 40px rgba(43,33,28,.18)",
         "type": "boxShadow",
         "description": "Elevation"
       }
