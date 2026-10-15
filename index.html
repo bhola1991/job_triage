@@ -3248,6 +3248,8 @@ ${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}
 Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
 
 THE DIRECTION THEY ARE PURSUING: ${trk.label||'general'}${trk.why?` — ${trk.why}`:''}
+${styleWords(prof).length?`HOW THEY LIKE TO WORK: ${styleWords(prof).join('; ')}
+Weight this as heavily as skills: a small-team person belongs at startups, agencies and small nonprofits; a larger-organisation person at established employers; mission versus commercial decides between nonprofits, foundations and social enterprises and ordinary companies. Say in "why" how the place works, where you know it.`:''}
 ${(()=>{ const net=networkCompanies(loadConns(), trk, new Set()).slice(0,30); return net.length
   ? `COMPANIES WHERE THEY ALREADY KNOW SOMEONE: ${net.map(g=>g.name).join('; ')}\nInclude any of these that genuinely fit -- a warm introduction beats any cold approach -- but never one that does not fit.` : ''; })()}
 ${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
@@ -5666,6 +5668,10 @@ function renderOnb(){
         ${card('strict','3',String(st),'Only strong matches','A short list you could work through in a sitting.')}
       </div>
 
+      <div class="eyebrow" style="margin-top:22px">How you like to work</div>
+      <p class="say" style="margin:0 0 8px">Not what you can do &mdash; where you would do it best. It decides which companies we suggest.</p>
+      <div id="onbStyle">${styleBlock(p,'onb')}</div>
+
       <div class="eyebrow" style="margin-top:22px">Kind of work, per direction</div>
       <p class="say" style="margin:0 0 8px">We guessed from your CV. Correcting it changes which sites we pay to search.</p>
       ${(p.tracks||[]).map((t,i)=>`<div class="pfact" style="align-items:center">
@@ -5797,6 +5803,8 @@ function renderOnb(){
       const ex=$('#onbExemplar'); if(ex) p.exemplar=ex.value.trim();
     };
     document.querySelectorAll('#onbIntent input, #onbStrict input').forEach(el=>el.onchange=()=>{ commit(); render(); });
+    document.querySelectorAll('[data-style^="onb:"]').forEach(el=>el.onclick=()=>{
+      const [,k,v]=el.dataset.style.split(':'); commit(); p.style=Object.assign(styleOf(p),{[k]:v}); render(); });
     document.querySelectorAll('[data-mode],[data-avoid],#limRelocate,#limOnsite').forEach(el=>el.onchange=commit);
     $('#limPay').onblur=commit;
     if($('#onbExemplar')) $('#onbExemplar').onblur=commit;
@@ -7116,6 +7124,31 @@ function addTrackDialog(){
    other people's names, and nothing about them is uploaded or shared.
    ponytail: per browser, so a second device needs the file again; keep it in
    the account only if people ask for that. */
+/* How a person likes to work. Matching on keywords finds the job; this is
+   about whether they would thrive in the place. Four axes, each with "either"
+   as a real answer -- most people have strong views on one or two only.
+   Stored on the profile (profile.style), which the row sync carries in extras. */
+const STYLE_AXES = [
+  { k:'team', h:'Team size', o:[['small','A small team','Everyone does a bit of everything'],['large','A larger organisation','A defined role, more structure around it']] },
+  { k:'pace', h:'Pace', o:[['fast','Fast','Things change week to week'],['steady','Steady','Room to do things properly']] },
+  { k:'structure', h:'How work arrives', o:[['clear','Clear process','Known goals, a way things are done'],['open','Open-ended','Figure out what needs doing']] },
+  { k:'purpose', h:'What drives the place', o:[['mission','A mission','A cause, a public good, a craft'],['commercial','Commercial','Growth, customers, revenue']] },
+];
+const styleOf = pr => { const st=(pr&&pr.style&&typeof pr.style==='object')?pr.style:{};
+  const o={}; STYLE_AXES.forEach(a=>{ o[a.k]=a.o.some(x=>x[0]===st[a.k])?st[a.k]:'any'; }); return o; };
+const styleSet = pr => !!(pr && pr.style && typeof pr.style==='object');
+let STYLE_EDIT = false;   // the Companies tab's "change": reopen the choices without losing them
+const styleWords = pr => { const st=styleOf(pr); return STYLE_AXES.filter(a=>st[a.k]!=='any')
+  .map(a=>a.h.toLowerCase()+': '+a.o.find(x=>x[0]===st[a.k])[1].toLowerCase()); };
+/* The four choices as one block, used in onboarding and in the Companies tab. */
+function styleBlock(pr, prefix){
+  const st=styleOf(pr);
+  return STYLE_AXES.map(a=>`<div class="pfact" style="align-items:center;flex-wrap:wrap;gap:6px">
+    <b style="flex:0 0 150px">${esc(a.h)}</b>
+    <div class="segs">${a.o.concat([['any','Either','']]).map(([v,lab,sub])=>
+      `<button type="button" class="seg ${st[a.k]===v?'on':''}" data-style="${prefix}:${a.k}:${v}" title="${esc(sub)}">${esc(lab)}</button>`).join('')}</div></div>`).join('');
+}
+
 const connKey = () => 'triage:conns:' + ((USER && USER.id) || 'local');
 function loadConns(){ try{ return JSON.parse(localStorage.getItem(connKey())||'[]'); }catch(e){ return []; } }
 function saveConns(list){ try{ localStorage.setItem(connKey(), JSON.stringify(list)); return true; }catch(e){ return false; } }
@@ -7174,6 +7207,11 @@ function renderCompanies(){
       <button class="btn-go btn-sm" id="coSuggest" ${busy?'disabled':''}>Suggest companies for ${esc(trk.label||'me')}</button>
       <button class="btn-sm" id="coConns">${conns.length?`Your network: ${conns.length} connections — update`:'Add your LinkedIn connections'}</button>
       <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
+    ${styleSet(prof) && !STYLE_EDIT
+      ? `<p class="hint" style="margin:-6px 0 12px">Suggesting for how you like to work: ${esc(styleWords(prof).join(' · ')||'no strong preference')} · <a href="#" class="lnk" id="coStyleEdit">change</a></p>`
+      : `<div class="callout" style="margin:0 0 14px"><b>How do you like to work?</b> Four taps &mdash; it decides which companies are worth your time.
+          <div style="margin-top:8px">${styleBlock(prof,'co')}</div>
+          <div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="coStyleSave">Save</button></div></div>`}
     ${conns.length?'':`<p class="hint" style="margin:-6px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
     ${targets.length?`<div class="eyebrow" style="margin:4px 0 6px">Companies to approach · ${targets.length}${targets.some(t=>t.warm.length)?` · ${targets.filter(t=>t.warm.length).length} where you know someone`:''}</div>
       ${targets.map(card).join('')}`
@@ -7206,6 +7244,13 @@ function bindCompanies(){
     addJobs([j]); track('network_company_added'); await save(); render();
   });
   document.querySelectorAll('[data-intro]').forEach(x=>x.onclick=()=>introDialog(+x.dataset.intro));
+  // The style choices: picked in place, saved together.
+  let pick=styleOf(prof);
+  document.querySelectorAll('[data-style^="co:"]').forEach(el=>el.onclick=()=>{
+    const [,k,v]=el.dataset.style.split(':'); pick[k]=v;
+    el.parentNode.querySelectorAll('.seg').forEach(x=>x.classList.toggle('on', x===el)); });
+  const ss=$('#coStyleSave'); if(ss) ss.onclick=async()=>{ prof.style=pick; STYLE_EDIT=false; track('style_set',pick); await save(); render(); };
+  const se=$('#coStyleEdit'); if(se) se.onclick=e=>{ e.preventDefault(); STYLE_EDIT=true; render(); };
 }
 
 /* Asking someone you know is a different message from a cold approach: short,
