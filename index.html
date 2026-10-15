@@ -533,6 +533,7 @@
      its one instruction on its edge, and every fact on it is a label over a
      value, in columns that line up down the page. */
   .qsec{margin-bottom:28px}
+  .deck{display:none}
   /* A wrapper for the phone carousel; on a wide screen it is not there at all. */
   .qcar{display:contents}
   .qsec-h{display:flex;align-items:baseline;gap:10px;padding-bottom:9px;border-bottom:1px solid var(--line)}
@@ -1007,6 +1008,39 @@
     .qcar>.qitem{flex:0 0 86%;scroll-snap-align:start;margin-top:0;display:flex}
     .qcar>.qitem:only-child{flex-basis:100%}
     .qcar>.qitem>.qrow{flex:1}
+    /* The deck replaces the bands on a phone; the folds and Saved stay. */
+    .bands{display:none}
+    .deck{display:grid;gap:14px;margin:4px 0 28px}
+    .deck-meta{display:flex;align-items:center;justify-content:space-between;min-height:30px;
+      font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+    .deck-stack{display:grid}
+    .dcard{grid-area:1/1;position:relative;display:grid;gap:10px;align-content:start;min-height:290px;
+      background:var(--panel);border:1.5px solid var(--line);border-left:6px solid var(--closed);border-radius:16px;
+      padding:20px 20px 18px;touch-action:pan-y;user-select:none;-webkit-user-select:none;
+      transition:transform .2s cubic-bezier(.16,1,.3,1)}
+    .dcard.go{border-left-color:var(--go)} .dcard.due{border-left-color:var(--due)}
+    .dcard.closing{border-left-color:var(--closing)} .dcard.awaiting{border-left-color:var(--awaiting)}
+    .dcard:not(.top){transform:translateY(12px) scale(.95);opacity:.65}
+    .dcard.top{z-index:1;box-shadow:var(--shadow-md)}
+    .dc-band{font:600 11px var(--mono);letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    #app .dcard h3{margin:0;font-size:24px;line-height:1.15;font-weight:750;letter-spacing:-.02em;color:var(--text)}
+    .dc-co{margin:0;color:var(--muted)}
+    .dc-facts{display:flex;gap:28px}
+    .dc-facts b{display:block;margin-top:3px;font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+    .dc-why{margin:0;font-size:14.5px;line-height:1.5}
+    .dcard .btn-sm{justify-self:start}
+    /* The stamp while the card leans: words, not a fifth accent. */
+    .dcard[data-lean="keep"]::after,.dcard[data-lean="pass"]::after{position:absolute;top:18px;padding:2px 9px;
+      font:800 17px var(--disp);letter-spacing:.12em;color:var(--text);border:2.5px solid var(--text);border-radius:6px}
+    .dcard[data-lean="keep"]::after{content:"SAVE";right:18px;transform:rotate(10deg)}
+    .dcard[data-lean="pass"]::after{content:"PASS";right:18px;transform:rotate(-10deg)}
+    .deck-btns{display:flex;align-items:center;justify-content:center;gap:16px}
+    .deck-b{width:58px;height:58px;padding:0;border-radius:50%;display:grid;place-items:center}
+    .deck-btns .act-primary{font-size:16px;padding:13px 22px;border-radius:12px}
+    .deck-hint{margin:0;text-align:center;font-size:12px;color:var(--muted)}
+    /* Saved reads as a list on a phone, all of it at once, not another carousel. */
+    .saved .qcar{display:block;margin:0;padding:0}
+    .saved .qcar>.qitem{margin-top:8px}
   }
 </style>
 
@@ -6158,6 +6192,8 @@ function jobDetail(j,i,acc){
 /* The rail's icons. One convention for all of them: 24x24, stroke only, in
    the colour of whatever they sit in. Paths only -- no icon library. */
 const IC = {
+  x:'<path d="M6 6l12 12M18 6L6 18"/>',
+  heart:'<path d="M12 20s-7.5-4.6-7.5-10.2A4.2 4.2 0 0 1 12 7.2a4.2 4.2 0 0 1 7.5 2.6C19.5 15.4 12 20 12 20z"/>',
   tools:'<rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 13h18"/>',
   compass:'<circle cx="12" cy="12" r="9"/><path d="M15.5 8.5l-2 5-5 2 2-5z"/>',
   check:'<circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.8 2.8 5.4-5.6"/>',
@@ -6181,6 +6217,64 @@ const CAST = '<svg class="r-cast" viewBox="0 0 540 250" role="img" aria-label="T
    layout; never on a phone, where open is a sheet over the page. */
 let RAIL = false;
 try{ RAIL = window.innerWidth>900 && localStorage.getItem('triage:rail')==='1'; }catch(e){}
+
+/* Saved for later: a right swipe on the phone deck, or "Save for later" in a
+   row's menu. Kept as an event in the job's own history rather than a new
+   column, so it syncs with the row, shows in its timeline, undoes through
+   snapRow like every other action, and counts as history -- a saved job is
+   never cleared as untouched. */
+const isSaved = j => listOf(j,'events').some(e=>e.kind==='saved');
+function toggleSaved(j){
+  if(isSaved(j)){ setList(j,'events', listOf(j,'events').filter(e=>e.kind!=='saved')); j.last_touch=today(); }
+  else logEvent(j,'saved','saved for later');
+}
+/* Passed: a left swipe. Nothing about the job changes -- it only leaves the
+   deck, and stays in every list -- so it is remembered on this device only,
+   per profile, until "Go through them again" clears it. */
+let PASSED = null;
+const passedKey = () => 'triage:passed:'+(DB.current||'');
+function passedSet(){
+  if(!PASSED || PASSED.pid!==DB.current){
+    let a=[]; try{ a=JSON.parse(localStorage.getItem(passedKey())||'[]'); }catch(e){}
+    PASSED={ pid:DB.current, keys:new Set(Array.isArray(a)?a:[]), last:[] };
+  }
+  return PASSED;
+}
+function keepPassed(){ try{ localStorage.setItem(passedKey(), JSON.stringify([...passedSet().keys])); }catch(e){} }
+
+/* The phone's Unapplied tab: one job at a time, in the queue's own order,
+   swiped like a dating app. Right saves it, left passes it, and the filled
+   button between the two still does the job's one action. */
+function deckHTML(order){
+  const p=P(), ps=passedSet();
+  const left=order.filter(x=>!ps.keys.has(keyOf(x.j)));
+  const back=ps.last.length ? p.jobs.findIndex(j=>keyOf(j)===ps.last[ps.last.length-1]) : -1;
+  const backBtn=back>=0 ? `<button class="btn-sm" data-act="unpass" data-i="${back}">Back</button>` : '';
+  if(!left.length) return `<div class="deck"><div class="empty"><b>You have been through all ${order.length}</b>
+    The ones you saved are below.${ps.keys.size?`<div class="btn-row" style="margin-top:12px;justify-content:center">
+      <button class="btn-sm" id="deckAgain">Go through the ${ps.keys.size} you passed again</button></div>`:''}</div></div>`;
+  const card=(x,top)=>{ const j=x.j, f=fitOf(j), r=reachOf(j), age=ageOf(j);
+    return `<article class="dcard ${accentOf(j)}${top?' top':''}"${top?' id="deckTop"':' aria-hidden="true"'}>
+      <div class="dc-band">${x.band}</div>
+      <h3>${esc(j.title||'(untitled)')}</h3>
+      <p class="dc-co">${esc([j.company,j.location].filter(Boolean).join(' \u00b7 ')||'\u2014')}</p>
+      <div class="dc-facts"><div><span class="eyebrow">fit / reach</span><b>${f} \u00b7 ${r}</b></div>
+        <div><span class="eyebrow">posted</span><b>${age===null?'unknown':esc(ageLabel(j))}</b></div></div>
+      <p class="dc-why">${esc(String(j.ai_reason||j.description||'').slice(0,240))}</p>
+      ${top?`<button class="btn-sm" data-act="open" data-i="${x.i}">Read the whole posting</button>`:''}
+    </article>`; };
+  const top=left[0];
+  return `<div class="deck">
+    <div class="deck-meta"><span>${order.length-left.length+1} of ${order.length}</span>${backBtn}</div>
+    <div class="deck-stack">${left[1]?card(left[1],false):''}${card(top,true)}</div>
+    <div class="deck-btns">
+      <button class="deck-b pass" data-act="pass" data-i="${top.i}" aria-label="Pass for now" title="Pass for now">${ic('x')}</button>
+      ${primaryAct(top.j, top.i)}
+      <button class="deck-b keep" data-act="save" data-i="${top.i}" aria-label="Save for later" title="Save for later">${ic('heart')}</button>
+    </div>
+    <p class="deck-hint">Swipe right to save, left to pass. Passing keeps the job; it only leaves this stack.</p>
+  </div>`;
+}
 
 /* The one button a job's state calls for. The row leads with it, the selected
    row keeps nothing else, and the sheet on a small screen repeats it -- one
@@ -6226,11 +6320,13 @@ function jobCard(j,i){
                       /* A cold row has no posting to open, so the one thing to
                          do is write to a person. The accent stays on that. */
                       ? pri + details
-                        + more([btn('sent','Mark contacted'),
+                        + more([btn('save', isSaved(j)?'Take off saved':'Save for later'),
+                                btn('sent','Mark contacted'),
                                 btn('hrfind','Find contacts'),
                                 btn('close','Not interested')])
                       : pri + details
-                        + more([url?btn('sent','Mark applied without opening'):'',
+                        + more([btn('save', isSaved(j)?'Take off saved':'Save for later'),
+                                url?btn('sent','Mark applied without opening'):'',
                                 btn('pitch','Draft outreach'),
                                 btn('hrfind','Find contacts'),
                                 btn('close','Not interested')]))
@@ -6380,8 +6476,10 @@ function renderUnapplied(){
   if(!mine.length) return `<div class="empty"><b>Nothing waiting</b>
     Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>`;
 
-  const scored=mine.filter(x=>isScored(x.j));
-  const unscored=mine.filter(x=>!isScored(x.j));
+  // Saved jobs move to the front, in their own section, and out of the bands.
+  const saved=sortList(mine.filter(x=>isSaved(x.j)));
+  const scored=mine.filter(x=>isScored(x.j)&&!isSaved(x.j));
+  const unscored=mine.filter(x=>!isScored(x.j)&&!isSaved(x.j));
   // Closing wins over strong: the nearer deadline beats the better opportunity.
   /* The bands the person asked for. `strict` shifts these and nothing else:
      every row above is still in the list, so turning the dial down brings them
@@ -6405,11 +6503,16 @@ function renderUnapplied(){
         <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Recently added</button>
       </div>
     </div>
+    ${deckHTML([...strong.map(x=>({...x,band:'Do these first'})), ...closing.map(x=>({...x,band:'Closing soon'})),
+                ...worth.map(x=>({...x,band:'Worth a shot'})), ...below.map(x=>({...x,band:'Below the bar'}))])}
+    ${saved.length?`<div class="saved">${sect('','Saved for later','Swiped right, or saved from a row\u2019s menu. Still to do; just kept at the front.',saved)}</div>`:''}
+    <div class="bands">
     ${sect('go','Do these first',`Fit ${bars.strongFit}+ and reachability ${bars.strongReach}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
     ${sect('closing','Closing soon',`Worth doing, but posted ${CLOSING_DAYS}+ days ago. Old postings get filled, not withdrawn \u2014 apply today or let it go.`,closing)}
     ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
     ${(!strong.length&&!worth.length&&!closing.length)?`<div class="empty"><b>Nothing clears the bar</b>
       ${scored.length?`${scored.length} scored here, none at fit ${bars.workFit}+ and reachability ${bars.workReach}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
+    </div>
     ${foldSect('below','Below the bar',`Scored under fit ${bars.workFit} or reachability ${bars.workReach}. Kept, because a score is a judgement rather than a fact.`,below)}
     ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}`;
 }
@@ -6927,6 +7030,26 @@ function renderApp(){
       c.scrollLeft+=sel.getBoundingClientRect().left-c.getBoundingClientRect().left-22;
     c.addEventListener('scroll',()=>{ CAR[k]=c.scrollLeft; },{passive:true});
   });
+  { /* The swipe. Horizontal drags only -- the card is touch-action:pan-y, so a
+       vertical drag still scrolls the page. Past 90px it flies off and presses
+       the matching button, so a swipe and a tap take the same path. */
+    const c=$('#deckTop');
+    if(c){
+      let x0=null, dx=0;
+      c.addEventListener('pointerdown',e=>{ if(e.target.closest('button,a')) return;
+        x0=e.clientX; dx=0; try{ c.setPointerCapture(e.pointerId); }catch(_){} c.style.transition='none'; });
+      c.addEventListener('pointermove',e=>{ if(x0===null) return; dx=e.clientX-x0;
+        c.style.transform=`translateX(${dx}px) rotate(${dx/18}deg)`;
+        c.dataset.lean = dx>40 ? 'keep' : dx<-40 ? 'pass' : ''; });
+      const end=()=>{ if(x0===null) return; x0=null; c.style.transition='';
+        if(Math.abs(dx)>90){
+          c.style.transform=`translateX(${dx>0?640:-640}px) rotate(${dx>0?22:-22}deg)`;
+          setTimeout(()=>{ const b=document.querySelector(dx>0?'.deck-b.keep':'.deck-b.pass'); if(b) b.click(); }, 170);
+        } else { c.style.transform=''; c.dataset.lean=''; } };
+      c.addEventListener('pointerup',end); c.addEventListener('pointercancel',end);
+    }
+    if($('#deckAgain')) $('#deckAgain').onclick=()=>{ const ps=passedSet(); ps.keys.clear(); ps.last=[]; keepPassed(); render(); };
+  }
   $('#btnAts').onclick=atsDialog;
   $('#btnSuggest').onclick=suggestDialog;
   bindPlot();
@@ -7707,6 +7830,12 @@ document.addEventListener('click',async e=>{
   if(a==='open'){ SEL_JOB = keyOf(j); track('job_open',{ stage:stOf(j), score:+j.ai_score||null }); return render(); }
   if(a==='unsel'){ SEL_JOB = null; return render(); }
   if(a==='goto') return showJob(i);
+  if(a==='pass'){ const ps=passedSet(); ps.keys.add(keyOf(j)); ps.last.push(keyOf(j)); keepPassed(); return render(); }
+  if(a==='unpass'){ const ps=passedSet(); ps.keys.delete(keyOf(j)); ps.last.pop(); keepPassed(); return render(); }
+  if(a==='save'){
+    const undo=snapRow(j); toggleSaved(j);
+    undoToast(j, undo, isSaved(j)?'Saved for later':'Taken off saved');
+  }
   if(a==='pitch')  return draftPitch(i,false);
   if(a==='chase')  return draftPitch(i,true);
   if(a==='note')   return noteDialog(i);
