@@ -117,23 +117,24 @@
     --shadow-md:0 6px 18px rgba(43,33,28,.12);
     --shadow-lg:0 14px 40px rgba(43,33,28,.18);
   }
-  /* Blush: the second paper. Same law, same accents a shade deeper, on a pink
-     ground a little darker than salmon. App-only -- the tokens file carries one
+  /* Blush: the second paper, a mid-tone dusty rose about halfway between
+     salmon and night. Cards stay lighter than the page, so text always sits on
+     a light surface; the accents are deeper to clear AA on the darker ground. App-only -- the tokens file carries one
      light set, and this rides on top of it as data-paper="blush", so every
      rule written for the light theme still applies. */
   :root[data-theme="light"][data-paper="blush"]{
-    --ink:#EBD9D5; --panel:#F7EEEB; --panel2:#E2CDC8; --line:#2A2022; --hair:#D6BFBA;
-    --text:#21191B; --muted:#574749; --dim:#695A5C;
-    --go:#1C6B38; --go-line:#1C6B38; --go-tint:#DCE6D4; --go-row:#F7EEEB;
-    --due:#AC2C31; --due-line:#AC2C31; --due-tint:#F2D3D2; --due-row:#F7EEEB;
-    --closing:#774E00; --closing-line:#774E00; --closing-tint:#EFDCC0; --closing-row:#F7EEEB;
-    --awaiting:#2D44AA; --awaiting-line:#2D44AA; --awaiting-tint:#DDDAEA; --awaiting-row:#F7EEEB;
-    --closed:#C2AFAB; --plot-fade:#C2AFAB;
-    --signal:#1C6B38; --cool:#1C6B38; --good:#1C6B38; --good-line:#1C6B38; --posted:#1C6B38; --live:#1C6B38; --live-line:#1C6B38;
-    --posted-dim:#DCE6D4; --signal-tint:#DCE6D4; --good-tint:#DCE6D4; --live-tint:#DCE6D4;
-    --warn:#AC2C31; --warn-line:#AC2C31; --warn-tint:#F2D3D2; --warn-chip:#F2D3D2;
-    --cold:#574749; --cold-dim:#E2CDC8; --neutral:#695A5C; --neutral-line:#2A2022; --stale-line:#D6BFBA;
-    --hard:#2A2022; --tile:#E2CDC8; --gnd:#C9AFA9;
+    --ink:#C9A6A1; --panel:#E8D2CE; --panel2:#D8BCB7; --line:#2A1F21; --hair:#BE9C96;
+    --text:#1E1618; --muted:#4A3A3C; --dim:#4D3D3F;
+    --go:#114522; --go-line:#114522; --go-tint:#CFD9C2; --go-row:#E8D2CE;
+    --due:#7A1B22; --due-line:#7A1B22; --due-tint:#E6C3C1; --due-row:#E8D2CE;
+    --closing:#5A3B00; --closing-line:#5A3B00; --closing-tint:#E2CBAC; --closing-row:#E8D2CE;
+    --awaiting:#243890; --awaiting-line:#243890; --awaiting-tint:#CEC9DD; --awaiting-row:#E8D2CE;
+    --closed:#A88D88; --plot-fade:#A88D88;
+    --signal:#114522; --cool:#114522; --good:#114522; --good-line:#114522; --posted:#114522; --live:#114522; --live-line:#114522;
+    --posted-dim:#CFD9C2; --signal-tint:#CFD9C2; --good-tint:#CFD9C2; --live-tint:#CFD9C2;
+    --warn:#7A1B22; --warn-line:#7A1B22; --warn-tint:#E6C3C1; --warn-chip:#E6C3C1;
+    --cold:#4A3A3C; --cold-dim:#D8BCB7; --neutral:#4D3D3F; --neutral-line:#2A1F21; --stale-line:#BE9C96;
+    --hard:#2A1F21; --tile:#D8BCB7; --gnd:#A6857F;
   }
   *{box-sizing:border-box}
   #app{background:
