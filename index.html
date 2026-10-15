@@ -3248,6 +3248,8 @@ ${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}
 Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
 
 THE DIRECTION THEY ARE PURSUING: ${trk.label||'general'}${trk.why?` — ${trk.why}`:''}
+${(()=>{ const net=networkCompanies(loadConns(), trk, new Set()).slice(0,30); return net.length
+  ? `COMPANIES WHERE THEY ALREADY KNOW SOMEONE: ${net.map(g=>g.name).join('; ')}\nInclude any of these that genuinely fit -- a warm introduction beats any cold approach -- but never one that does not fit.` : ''; })()}
 ${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
 
 Return ONLY a JSON object, no preamble, no markdown fences:
@@ -6819,6 +6821,7 @@ function renderApp(){
         <button class="btn-go" id="btnNext" data-next="${esc(n.act)}" ${busy?'disabled':''}>${esc(n.b)}</button>
       </div>`:''; })()}
       <div class="tabs">
+        <div class="tab ${TAB==='companies'?'on':''}" data-tab="companies">Companies</div>
         <div class="tab ${TAB==='unapplied'?'on':''}" data-tab="unapplied">Unapplied${
           unappliedCount?` <span class="tabct">${unappliedCount}</span>`:''}</div>
         <div class="tab ${TAB==='applied'?'on':''}" data-tab="applied">Applied${
@@ -6848,6 +6851,7 @@ function renderApp(){
         ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
       </div>`}
+      ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div>${renderUnapplied()}</div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
@@ -6868,6 +6872,7 @@ function renderApp(){
 `;
 
   document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
+  if(TAB==='companies') bindCompanies();
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
   document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
   /* Two places render #showGated -- the list header and the all-gated empty
@@ -7098,6 +7103,141 @@ function addTrackDialog(){
   d.querySelector('#tGo').onclick=run;
   d.querySelector('#tIn').onkeydown=e=>{ if(e.key==='Enter') run(); };
   setTimeout(()=>d.querySelector('#tIn').focus(),50);
+}
+
+/* ═══ companies ═══
+   Work that is never advertised is reached through a company and, best of all,
+   through someone who already works there. This is the front door for it: the
+   companies worth approaching, with the warm path into each one first.
+
+   The person's own LinkedIn connections are the network. LinkedIn lets anyone
+   download them (Settings → Data privacy → Get a copy of your data →
+   Connections), and the file is read in THIS browser and kept here: those are
+   other people's names, and nothing about them is uploaded or shared.
+   ponytail: per browser, so a second device needs the file again; keep it in
+   the account only if people ask for that. */
+const connKey = () => 'triage:conns:' + ((USER && USER.id) || 'local');
+function loadConns(){ try{ return JSON.parse(localStorage.getItem(connKey())||'[]'); }catch(e){ return []; } }
+function saveConns(list){ try{ localStorage.setItem(connKey(), JSON.stringify(list)); return true; }catch(e){ return false; } }
+/* "Acme Technologies Pvt. Ltd." and "ACME" are one employer. */
+const CO_SUFFIX = /\b(pvt|private|ltd|limited|llp|llc|inc|corp|corporation|co|company|the|india|technologies|technology|tech|solutions|services|group|global|international|consulting)\b/g;
+const normCo = s => String(s||'').toLowerCase().replace(/&/g,' and ').replace(/[^a-z0-9]+/g,' ').replace(CO_SUFFIX,' ').replace(/\s+/g,' ').trim();
+/* LinkedIn's Connections.csv: a few lines of notes, then a header row with
+   First Name, Last Name, URL, Email Address, Company, Position, Connected On.
+   Email is dropped on purpose -- it is rarely there and never needed. */
+function parseConnections(text){
+  const rows = parseCSV(text);
+  const h = rows.findIndex(r => r.some(c=>/^\s*first name\s*$/i.test(c)) && r.some(c=>/^\s*company\s*$/i.test(c)));
+  if(h < 0) return null;
+  const col = n => rows[h].findIndex(c => c.trim().toLowerCase() === n);
+  const [fn, ln, url, co, pos, on] = ['first name','last name','url','company','position','connected on'].map(col);
+  return rows.slice(h+1).map(r => ({ n: [r[fn],r[ln]].filter(Boolean).join(' ').trim(), c: (r[co]||'').trim(),
+    p: (r[pos]||'').trim(), u: /^https?:\/\//.test(r[url]||'') ? r[url].trim() : '', d: (r[on]||'').trim() }))
+    .filter(x => x.n && x.c);
+}
+/* Who the person knows at a company. */
+function warmFor(company, conns){
+  const k = normCo(company); if(!k) return [];
+  return conns.filter(x => normCo(x.c) === k);
+}
+/* Companies in the network worth a look for this direction: more people there,
+   and people whose job titles share words with the direction, rank higher. */
+function networkCompanies(conns, trk, skip){
+  const words = new Set([].concat(trk.titles||[], [trk.label||'']).join(' ').toLowerCase().split(/[^a-z]+/).filter(w=>w.length>3));
+  const by = new Map();
+  conns.forEach(x => { const k = normCo(x.c); if(!k || skip.has(k)) return; if(!by.has(k)) by.set(k, { name:x.c, people:[] }); by.get(k).people.push(x); });
+  return [...by.values()].map(g => ({ ...g, score: g.people.length + 2*g.people.filter(x => String(x.p).toLowerCase().split(/[^a-z]+/).some(w => words.has(w))).length }))
+    .sort((a,b) => b.score - a.score);
+}
+
+function renderCompanies(){
+  const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const conns=loadConns();
+  const targets=p.jobs.map((j,i)=>({j,i})).filter(x => chOf(x.j)==='cold' && isOpen(x.j))
+    .map(x => ({ ...x, warm: warmFor(x.j.company, conns) }))
+    .sort((a,b) => (b.warm.length>0) - (a.warm.length>0) || rankOf(b.j) - rankOf(a.j));
+  const have=new Set(p.jobs.map(j=>normCo(j.company)));
+  const net=networkCompanies(conns, trk, have).slice(0,10);
+  const person=x=>`<div class="ct-meta">${esc(x.n)}${x.p?` — ${esc(x.p)}`:''}</div>`;
+  const card=({j,i,warm})=>`<div class="contact-row" style="align-items:flex-start;flex-wrap:wrap">
+      <div style="flex:1;min-width:220px">
+        <div class="ct-nm">${esc(j.company)} ${warm.length?`<span class="pill2 go">you know ${warm.length}</span>`:`<span class="pill2">cold</span>`}</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(String(j.description||'').slice(0,220))}</div>
+        ${warm.slice(0,3).map(person).join('')}
+      </div>
+      <div class="btn-row" style="gap:6px">
+        ${warm.length?`<button class="btn-go btn-sm" data-intro="${i}">Ask ${esc(warm[0].n.split(' ')[0])} for an intro</button>`:''}
+        <button class="btn-sm ${warm.length?'':'btn-go'}" data-act="pitch" data-i="${i}">Draft an approach</button>
+        <button class="btn-sm" data-act="goto" data-i="${i}">Open</button></div></div>`;
+  return `<div class="listhead"><span style="color:var(--muted);font-size:12px">Most work is never advertised. It is reached through a company — best of all through someone who already works there.</span></div>
+    <div class="btn-row" style="margin:10px 0 14px;gap:8px;flex-wrap:wrap">
+      <button class="btn-go btn-sm" id="coSuggest" ${busy?'disabled':''}>Suggest companies for ${esc(trk.label||'me')}</button>
+      <button class="btn-sm" id="coConns">${conns.length?`Your network: ${conns.length} connections — update`:'Add your LinkedIn connections'}</button>
+      <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
+    ${conns.length?'':`<p class="hint" style="margin:-6px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
+    ${targets.length?`<div class="eyebrow" style="margin:4px 0 6px">Companies to approach · ${targets.length}${targets.some(t=>t.warm.length)?` · ${targets.filter(t=>t.warm.length).length} where you know someone`:''}</div>
+      ${targets.map(card).join('')}`
+      :`<div class="empty"><b>No companies yet</b>Suggest some for this direction${conns.length?', or add one from your network below':', and add your LinkedIn connections to see where you already know someone'}.</div>`}
+    ${net.length?`<div class="eyebrow" style="margin:18px 0 6px">From your network — companies where you already know people</div>
+      ${net.map((g,k)=>`<div class="contact-row" style="align-items:flex-start">
+        <div style="flex:1;min-width:0"><div class="ct-nm">${esc(g.name)} <span class="pill2">${g.people.length} ${g.people.length===1?'person':'people'}</span></div>
+        ${g.people.slice(0,3).map(person).join('')}</div>
+        <button class="btn-sm" data-netadd="${k}">Add to approach</button></div>`).join('')}`:''}`;
+}
+
+function bindCompanies(){
+  const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const s=$('#coSuggest'); if(s) s.onclick=()=>{ track('companies_suggest'); suggestDialog(); };
+  const f=$('#coConnFile'), b=$('#coConns');
+  if(b && f){ b.onclick=()=>f.click(); f.onchange=e=>{ const file=e.target.files[0]; if(!file) return;
+    const r=new FileReader(); r.onload=()=>{
+      const list=parseConnections(String(r.result||''));
+      if(!list){ alert("That doesn't look like LinkedIn's Connections.csv — it needs the First Name and Company columns."); return; }
+      if(!saveConns(list)){ alert('This browser would not store the file (private window, or storage blocked).'); return; }
+      track('connections_added',{ n:list.length, companies:new Set(list.map(x=>normCo(x.c))).size });
+      render();
+    }; r.readAsText(file); f.value=''; }; }
+  const conns=loadConns(), have=new Set(p.jobs.map(j=>normCo(j.company)));
+  const net=networkCompanies(conns, trk, have).slice(0,10);
+  document.querySelectorAll('[data-netadd]').forEach(x=>x.onclick=async()=>{
+    const g=net[+x.dataset.netadd]; if(!g) return;
+    const j=blank(); j.company=g.name; j.title='Cold approach'; j.channel='cold'; j.stage='new'; j.source='Your network';
+    j.description='You know '+g.people.slice(0,3).map(q=>q.n+(q.p?' ('+q.p+')':'')).join(', ')+(g.people.length>3?` and ${g.people.length-3} more`:'')+' here.';
+    addJobs([j]); track('network_company_added'); await save(); render();
+  });
+  document.querySelectorAll('[data-intro]').forEach(x=>x.onclick=()=>introDialog(+x.dataset.intro));
+}
+
+/* Asking someone you know is a different message from a cold approach: short,
+   about advice or an introduction, never "give me a job". */
+function introDialog(i){
+  const p=P(), j=p.jobs[i]; if(!j) return;
+  const prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const warm=warmFor(j.company, loadConns()); let who=warm[0];
+  const d=modal(`<div class="eyebrow">Ask someone you know</div><h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
+    <label class="lab">Who</label><select id="inWho">${warm.map((x,k)=>`<option value="${k}">${esc(x.n)}${x.p?' — '+esc(x.p):''}</option>`).join('')}</select>
+    <div class="btn-row" style="margin-top:10px"><button class="btn-go btn-sm" id="inGo">Draft the message — 1 AI credit</button></div>
+    <div id="inOut"></div>`);
+  d.querySelector('#inWho').onchange=e=>{ who=warm[+e.target.value]; };
+  d.querySelector('#inGo').onclick=async()=>{
+    const out=d.querySelector('#inOut'); out.innerHTML='<p class="hint">Writing…</p>';
+    try{
+      const txt=await claude(`Write a short LinkedIn message from one person to someone they are already connected with.
+
+FROM: ${prof.name||'the sender'} — ${prof.headline||''}. What they do best: ${(prof.strengths||[]).slice(0,3).join('; ')}.
+They are looking for: ${trk.label||'new work'}${trk.mode?` (${trk.mode})`:''}.
+TO: ${who.n}, ${who.p||'works'} at ${j.company}.
+
+Rules: 4 sentences at most. Warm and plain, no flattery. Ask for one small thing -- 15 minutes of advice about ${j.company}, or who there would be the right person to talk to -- never for a job outright. Mention one concrete thing the sender has done that is relevant. Use ONLY the facts above. Return the message text only.`, 400);
+      out.innerHTML=`<textarea rows="7" style="margin-top:10px">${esc(String(txt||'').trim())}</textarea>
+        <div class="btn-row" style="margin-top:8px"><button class="btn-sm" id="inCopy">Copy</button>
+        ${who.u?`<a class="btn-sm" href="${esc(who.u)}" target="_blank" rel="noopener">Open ${esc(who.n.split(' ')[0])}'s LinkedIn ↗</a>`:''}
+        <button class="btn-sm" id="inSent">I sent it</button></div>`;
+      d.querySelector('#inCopy').onclick=()=>{ const t=d.querySelector('textarea'); t.select(); try{ navigator.clipboard.writeText(t.value); }catch(_){ document.execCommand('copy'); } };
+      d.querySelector('#inSent').onclick=async()=>{ logEvent(j,'contact','asked '+who.n+' for an intro'); track('intro_sent'); d.remove(); await save(); render(); };
+      track('intro_drafted');
+    }catch(e){ out.innerHTML='<p class="err">'+esc(e.message==='NEEDKEY'?'Add an AI key or sign in first.':e.message)+'</p>'; }
+  };
 }
 
 /* ═══ be found ═══

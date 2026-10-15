@@ -575,6 +575,7 @@ module.exports = {
       'public.set_tester': 'marks an account as a beta tester from the SQL editor; decides what the app shows, never what a job does',
     },
     'index.html section banners': {
+      'companies': 'who to approach and who the person knows there; the network file never leaves the browser, and nothing here acquires or scores a posting',
       'be found': 'advice on the person\'s own Naukri and LinkedIn profiles, read off the corpus; nothing here acquires, scores or stores a job',
       'colour': 'CSS tokens — see CLAUDE.md, not this map',
       'the queue': 'CSS',

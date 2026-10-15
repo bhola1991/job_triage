@@ -366,6 +366,31 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
      'now: the fresher posting leads instead');
  }
 
+ /* Companies: LinkedIn's own Connections.csv, matched to the companies to approach. */
+ {
+   const src3=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+   const g=re=>{ const m=re.exec(src3); if(!m) throw new Error('slice missing '+re); return m[0]; };
+   const code=g(/function parseCSV[\s\S]*?\n}\n/)+g(/const CO_SUFFIX = [\s\S]*?\nfunction networkCompanies[\s\S]*?\n}\n/);
+   const C=new Function(code+';return {parseConnections,warmFor,networkCompanies,normCo};')();
+   const csv='Notes:\n"When exporting your connection data, you may notice that some of the email addresses are missing."\n\n'
+     +'First Name,Last Name,URL,Email Address,Company,Position,Connected On\n'
+     +'Priya,Rao,https://www.linkedin.com/in/priya,,Acme Technologies Pvt. Ltd.,Head of Programmes,01 Jan 2024\n'
+     +'Arjun,Sen,https://www.linkedin.com/in/arjun,arjun@x.com,"SNEHA, Mumbai",Communications Manager,02 Feb 2024\n'
+     +'Mira,Das,https://www.linkedin.com/in/mira,,ACME,Engineer,03 Mar 2024\n'
+     +'No,Company,https://www.linkedin.com/in/nc,,,Student,04 Apr 2024\n';
+   const L=C.parseConnections(csv);
+   ok(L && L.length===3,'connections: notes skipped, header found, rows without a company dropped '+JSON.stringify(L));
+   ok(L && L.every(x=>!('e' in x) && !JSON.stringify(x).includes('arjun@x.com')),'connections: email addresses are never kept');
+   ok(L && L[1].c==='SNEHA, Mumbai','connections: a quoted company with a comma survives');
+   ok(C.warmFor('Acme',L).length===2,'connections: "Acme Technologies Pvt. Ltd." and "ACME" are the same employer');
+   ok(C.warmFor('Acmeco',L).length===0 && C.warmFor('',L).length===0,'connections: no loose or empty matches');
+   ok(C.parseConnections('name,phone\nx,1')===null,'connections: a file that is not LinkedIn\'s is refused');
+   const N=C.networkCompanies(L,{titles:['Communications Manager'],label:'Nonprofit communications'},new Set());
+   ok(N[0].name==='SNEHA, Mumbai' || N[0].name==='Acme Technologies Pvt. Ltd.','connections: network companies ranked '+N.map(n=>n.name+':'+n.score).join('|'));
+   ok(N.find(n=>n.name==='SNEHA, Mumbai').score > 1,'connections: someone whose title fits the direction counts for more');
+   ok(C.networkCompanies(L,{},new Set([C.normCo('Acme')])).every(n=>C.normCo(n.name)!=='acme'),'connections: companies already being approached are not suggested again');
+ }
+
  /* Be found: the phrases recruiters use, read off real postings. */
  {
    const src2=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
