@@ -366,6 +366,25 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
      'now: the fresher posting leads instead');
  }
 
+ /* Be found: the phrases recruiters use, read off real postings. */
+ {
+   const src2=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+   const code=/const TERM_STOP = [\s\S]*?\nfunction searchTerms[\s\S]*?\n}\n/.exec(src2)[0];
+   const {searchTerms, titleFits}=new Function(code+';return {searchTerms,titleFits};')();
+   const post=(t,d)=>({title:t, description:d});
+   const P=[1,2,3,4].map(i=>post('Video Editor','<ul><li>Edit in <b>Premiere Pro</b> and After Effects.</li></ul> Motion graphics a plus. Fast paced, end to end ownership. Originally posted on Himalayas.'))
+     .concat([post('Senior Video Editor - Remote','Premiere Pro daily; colour grading in DaVinci Resolve.')]);
+   const st=searchTerms(P,'I edit documentaries in Adobe Premiere and Pro Tools.');
+   const T=st.terms.map(t=>t.term);
+   ok(T.includes('premiere pro') && T.includes('motion graphics'),'be found: real skill phrases counted '+T.join('|'));
+   ok(!T.some(t=>/\b(li|ul|div)\b/.test(t)),'be found: no HTML leaks into the terms');
+   ok(!T.includes('end to end') && !T.includes('fast paced') && !T.some(t=>/originally|himalayas/.test(t)),'be found: boilerplate is dropped');
+   ok(st.terms.find(t=>t.term==='premiere pro').have===true,'be found: a phrase whose every word is in the CV counts as backed');
+   ok(st.terms.find(t=>t.term==='motion graphics').have===false,'be found: one that is not stays a gap');
+   ok(st.titles.length && st.titles[0].title==='video editor','be found: titles normalised, seniority and suffix stripped '+JSON.stringify(st.titles));
+   ok(titleFits('Senior Video Editor (Remote)',['Video Editor']) && !titleFits('Cook',['Film Festival Programmer']) && !titleFits('Arts teacher',['Film Festival Programmer']),'be found: only postings that fit the direction are read');
+ }
+
  /* Stopping a search keeps what is scored and starts nothing new. */
  {
    let calls=0;

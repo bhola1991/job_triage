@@ -6719,6 +6719,8 @@ function renderApp(){
           <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
         <div class="btn-row" style="margin-top:7px">
+          <button class="btn-sm" id="btnBeFound" style="width:100%">Be found by recruiters</button></div>
+        <div class="btn-row" style="margin-top:7px">
           <button class="btn-sm" id="btnSwitch" style="width:100%">Switch profile</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
       </div>
@@ -6883,6 +6885,7 @@ function renderApp(){
   $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); fillDirection(); };
   $('#btnProfile').onclick=showProfile;
   $('#btnAddTrack').onclick=addTrackDialog;
+  if($('#btnBeFound')) $('#btnBeFound').onclick=beFoundDialog;
   if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
     `<div class="eyebrow">Your assessment</div>${trackVerdict(trk)}
      <div class="btn-row" style="margin-top:16px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
@@ -7095,6 +7098,166 @@ function addTrackDialog(){
   d.querySelector('#tGo').onclick=run;
   d.querySelector('#tIn').onkeydown=e=>{ if(e.key==='Enter') run(); };
   setTimeout(()=>d.querySelector('#tIn').focus(),50);
+}
+
+/* ═══ be found ═══
+   Many roles are filled without a posting: a recruiter searches Naukri's CV
+   database or LinkedIn by keyword, location and experience, and calls whoever
+   comes up. So the person has to be FINDABLE, not only finding -- and the
+   words to be findable by are the ones recruiters use in their own adverts.
+
+   searchTerms reads real postings for a direction out of the shared corpus and
+   counts the two- and three-word phrases that recur across them, then checks
+   each against the person's own CV. Counted, not guessed: an AI never invents
+   the vocabulary, it only writes the headline afterwards, from these terms and
+   the CV. A term the CV does not back is shown as a gap, never as something to
+   claim. */
+const TERM_STOP = new Set(('a an the and or of to in on for with at by from as is are be will you your we our us this that these those it its '
+  + 'who what which when where how all any can may must should would could also not no more most other such than then there their them they '
+  + 'about across into over under within through per via etc including include includes based new well work working job jobs role roles team teams '
+  + 'experience years year ability able strong good excellent great skills skill knowledge understanding required requirement requirements '
+  + 'preferred plus nice candidate candidates position responsibilities responsibility qualifications qualification apply application applications '
+  + 'opportunity opportunities company organisation organization looking join help support ensure provide using use used make making take '
+  + 'equal employer employment gender race religion disability veteran status national origin regard without consideration please salary '
+  + 'benefits benefit day days time full part remote office location based hours one two three first high level highly per month annum lpa rs '
+  + 'pte ltd pvt llc inc ea ll ve re don li ul div class span br nbsp amp').split(/\s+/));
+/* Phrases every advert uses whatever the field. Counted, they top every list
+   and say nothing a recruiter would search for. */
+const TERM_DROP = new Set(['originally posted','posted on himalayas','end to end','cross functional','fast paced','track record','attention to detail',
+  'ad hoc','follow up','long term','short term','related field','subject matter','duties as assigned','only shortlisted','problem solving',
+  'communication skills','written and verbal','verbal communication','written communication','interpersonal skills','team player','self starter',
+  'go to market','day to day','best practices','key responsibilities','job description','job summary','what you','you will','we are',
+  'ea license','content intro','class content intro','fast paced environment','high quality','real time','well as','as well']);
+/* Is this posting really in the direction? search_index matches loosely --
+   "festival programmer" returned cooks and clinic staff -- so a posting counts
+   only when its title holds a whole direction title, or two of its words. */
+function titleFits(postTitle, titles){
+  const t=' '+String(postTitle||'').toLowerCase().replace(/[^a-z0-9+#\s]/g,' ').replace(/\s+/g,' ')+' ';
+  return titles.some(x=>{
+    const w=String(x||'').toLowerCase().replace(/[^a-z0-9+#\s]/g,' ').split(/\s+/).filter(v=>v.length>2 && !TERM_STOP.has(v));
+    if(!w.length) return false;
+    if(t.includes(' '+w.join(' ')+' ')) return true;
+    return w.length>1 && w.filter(v=>t.includes(' '+v+' ')).length>=2;
+  });
+}
+function searchTerms(postings, cvText, minShare){
+  const cv = ' ' + String(cvText||'').toLowerCase().replace(/[^a-z0-9+#.\s]/g,' ').replace(/\s+/g,' ') + ' ';
+  const n = postings.length, seen = new Map(), titles = new Map();
+  postings.forEach(p => {
+    const t = String(p.title||'').toLowerCase().replace(/&[a-z#0-9]+;/g,'/').replace(/\(.*?\)|[-–|,/].*$/g,'').replace(/\b(senior|sr|junior|jr|lead|principal|associate|assistant|intern|trainee|i{1,3})\b\.?/g,'').replace(/\s+/g,' ').trim();
+    if(t) titles.set(t, (titles.get(t)||0)+1);
+    /* Phrases never cross a sentence, a comma or a list item: run together,
+       "After Effects. Motion graphics" counted "effects motion graphics". */
+    const segs = String(p.description||'').replace(/<\/?(li|p|br|div|h\d|ul|ol|tr|td)[^>]*>/gi,' . ').replace(/<[^>]*>/g,' ')
+      .toLowerCase().replace(/&[a-z#0-9]+;/g,' ').split(/[.,;:!?()\n|•·]+(?=\s|$)|[,;:!?()\n|•·]+/);
+    const mine = new Set();
+    for(const seg of segs){
+    const words = seg.replace(/[^a-z0-9+#.\s]/g,' ').split(/\s+/).map(w=>w.replace(/^\.+|\.+$/g,'')).filter(Boolean);
+    for(let i=0;i<words.length;i++) for(const k of [2,3]){
+      const g = words.slice(i,i+k); if(g.length<k) continue;
+      if(TERM_STOP.has(g[0]) || TERM_STOP.has(g[k-1]) || g.some(w=>w.length<2 || /^\d+$/.test(w))) continue;
+      const gs=g.join(' '); if(!TERM_DROP.has(gs)) mine.add(gs);
+    }
+    }
+    mine.forEach(g => seen.set(g, (seen.get(g)||0)+1));
+  });
+  const floor = Math.max(3, Math.ceil(n*(minShare||0.12)));
+  let terms = [...seen].filter(([,c]) => c>=floor).sort((a,b)=>b[1]-a[1]);
+  /* A three-word phrase is kept only when it is one unit -- its two-word
+     halves almost never appear without it, as in "adobe premiere pro" -- and
+     then the halves go. Otherwise it is two phrases side by side, and goes. */
+  const cnt = new Map(terms), drop = new Set();
+  terms.forEach(([g,c]) => {
+    const w = g.split(' '); if(w.length!==3) return;
+    const halves = [w.slice(0,2).join(' '), w.slice(1).join(' ')];
+    if(halves.every(h => !cnt.has(h) || c >= 0.9*cnt.get(h))) halves.forEach(h => drop.add(h));
+    else drop.add(g);
+  });
+  terms = terms.filter(([g]) => !drop.has(g));
+  return {
+    postings: n,
+    // Backed when the CV has the phrase, or every word of it ("Adobe Premiere"
+    // and "edited in Premiere Pro" both back "premiere pro").
+    terms: terms.slice(0,18).map(([g,c]) => ({ term:g, share:Math.round(100*c/n),
+      have: cv.includes(' '+g+' ') || g.split(' ').every(w => cv.includes(' '+w+' ')) })),
+    // A bare "manager" or "admin" is not a title anyone searches for.
+    titles: [...titles].filter(([t]) => t.includes(' ')).sort((a,b)=>b[1]-a[1]).slice(0,6).map(([t,c]) => ({ title:t, n:c })),
+  };
+}
+
+async function beFoundDialog(){
+  const p=P(); if(!p) return;
+  const prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
+  const titles=(trk.titles||[]).slice(0,4);
+  track('befound_open');
+  const d=modal(`<div class="eyebrow">Be found by recruiters</div>
+    <h2 style="margin:6px 0 6px">${esc(trk.label||'This direction')}</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">Many roles are filled without an advert: recruiters search Naukri's CV database and LinkedIn by keyword and call whoever comes up. These are the words real postings in this direction use, checked against your CV.</p>
+    <div id="bfBody" style="font-size:12.5px">Reading postings…</div>`);
+  const body=d.querySelector('#bfBody');
+  if(!titles.length){ body.innerHTML='<span class="err">This direction has no job titles to read postings for.</span>'; return; }
+  let st;
+  try{
+    const r = cloudNow() ? await hosted('index_search',{titles, since_days:90, limit:200}) : { jobs:[] };
+    const full=(r.jobs||[]).filter(j=>String(j.description||'').length>200 && titleFits(j.title, titles));
+    st=searchTerms(full, [p.raw, (prof.hard_skills||[]).join(' , '), prof.headline].join(' '));
+  }catch(e){ body.innerHTML='<span class="err">Could not read postings: '+esc(e.message)+'</span>'; return; }
+  if(st.postings<8){
+    body.innerHTML=`<p>Only ${st.postings} posting${st.postings===1?'':'s'} with a full description in the index for this direction — too few to say what recruiters search for. It fills as searches run; try again in a few days.</p>`;
+    return;
+  }
+  const chip=t=>`<span class="pill2 ${t.have?'go':''}" title="${t.share}% of postings">${esc(t.term)} <span style="opacity:.7">${t.share}%</span>${t.have?' ✓':''}</span>`;
+  const have=st.terms.filter(t=>t.have), gaps=st.terms.filter(t=>!t.have);
+  body.innerHTML=`
+    <label class="lab">What recruiters in this field write — from ${st.postings} real postings</label>
+    <div style="display:flex;flex-wrap:wrap;gap:5px;margin:6px 0 4px">${st.terms.map(chip).join('')}</div>
+    <p class="hint" style="margin:0 0 10px">✓ = already in your CV, so use these exact words on your profiles. The rest are gaps — worth learning or evidencing, never worth claiming.</p>
+    <label class="lab">The titles they advertise under</label>
+    <p style="margin:4px 0 12px">${st.titles.map(t=>`${esc(t.title)} <span style="color:var(--dim)">(${t.n})</span>`).join(' · ')}</p>
+    <div id="bfOut"><button class="btn-go btn-sm" id="bfWrite">Write my Naukri and LinkedIn text — 1 AI credit</button></div>
+    <label class="lab" style="margin-top:14px">Check your current profile</label>
+    <textarea id="bfMine" rows="3" placeholder="Paste your current Naukri headline and key skills, or your LinkedIn headline"></textarea>
+    <div id="bfGap" class="hint"></div>`;
+  d.querySelector('#bfMine').oninput=e=>{
+    const t=' '+e.target.value.toLowerCase().replace(/[^a-z0-9+#.\s]/g,' ').replace(/\s+/g,' ')+' ';
+    const miss=have.filter(x=>!t.includes(' '+x.term+' '));
+    d.querySelector('#bfGap').innerHTML = !e.target.value.trim() ? ''
+      : miss.length ? `Missing, though your CV backs them: <b>${miss.map(x=>esc(x.term)).join(', ')}</b>` : 'It already uses every term your CV backs.';
+  };
+  d.querySelector('#bfWrite').onclick=async()=>{
+    const out=d.querySelector('#bfOut'); out.innerHTML='Writing…';
+    try{
+      const txt=await claude(`Write recruiter-searchable profile text for one person, for one direction.
+
+THE PERSON (use ONLY these facts -- invent nothing: no employer, title, number or skill that is not here)
+Location: ${prof.location||''} · Level: ${prof.seniority||''}${prof.years_experience?` · ~${prof.years_experience} years`:''}
+Headline: ${prof.headline||''}
+Strengths: ${(prof.strengths||[]).join('; ')}
+Skills: ${(prof.hard_skills||[]).join(', ')}
+What is rare about them: ${prof.unusual_combination||''}
+
+THE DIRECTION: ${trk.label||''}
+Titles recruiters advertise under: ${st.titles.map(t=>t.title).join(', ')}
+Search terms their CV backs (use these exact words): ${have.map(t=>t.term).join(', ')||'none'}
+
+Return ONLY JSON:
+{"naukri_headline":"max 250 chars, the exact advertised title first, then 3-5 backed terms, then city",
+ "linkedin_headline":"max 220 chars, title | 2-3 backed terms | what they are known for",
+ "designation":"the single advertised title that matches their real level and work",
+ "key_skills":["8-12 items, backed terms first, each something the person actually has"],
+ "summary":"max 600 chars, first person, plain, opens with what they do and for whom"}`, 900);
+      const j=grabJSON(txt);
+      const row=(lab,val,max)=>val?`<label class="lab" style="margin-top:10px">${lab}${max?` <span style="color:var(--dim)">(${String(val).length}/${max})</span>`:''}</label>
+        <div style="display:flex;gap:6px;align-items:flex-start"><textarea rows="${String(val).length>140?3:2}" readonly style="flex:1">${esc(val)}</textarea><button class="btn-sm" data-copy>Copy</button></div>`:'';
+      out.innerHTML = row('Naukri — resume headline', j.naukri_headline, 250) + row('LinkedIn — headline', j.linkedin_headline, 220)
+        + row('Current designation to use', j.designation) + row('Key skills', (j.key_skills||[]).join(', '))
+        + row('Summary / About', j.summary, 600)
+        + `<p class="hint" style="margin-top:10px">Paste these in yourself — Job Triage never logs in to Naukri or LinkedIn. Then update one line every week or so: recruiters often filter for recently active profiles.</p>`;
+      out.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{ const t=b.previousElementSibling; t.select();
+        (navigator.clipboard?navigator.clipboard.writeText(t.value):Promise.reject()).then(()=>{ b.textContent='Copied'; setTimeout(()=>b.textContent='Copy',1200); },()=>{ try{document.execCommand('copy');}catch(_){} }); });
+      track('befound_written');
+    }catch(e){ out.innerHTML='<span class="err">'+esc(e.message==='NEEDKEY'?'Add an AI key or sign in first.':e.message)+'</span>'; }
+  };
 }
 
 function showProfile(){
@@ -7456,6 +7619,7 @@ function commands(){
     ['Score','Rescore everything','#btnRescore'],
     ['Profile','My profile','#btnProfile'],
     ['Profile','Add a direction','#btnAddTrack'],
+    ['Profile','Be found by recruiters','#btnBeFound'],
     ['Profile','Switch profile','#btnSwitch'],
     ['Data', KEY?'Keys':'Set up keys','#btnKey'],
     ['Data','Backup & transfer','#btnData'],
