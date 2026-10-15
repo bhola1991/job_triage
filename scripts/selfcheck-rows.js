@@ -162,13 +162,13 @@ ok(T.coerceProfile(wire(T.profileRow('p_x', odd))).profile.favourite_colour === 
 const broken = { raw: 'x', jobs: [], created: '2026-01-01' };
 const b2 = T.coerceProfile(wire(T.profileRow('p_b', broken)));
 eq(b2, broken, 'a record with no .profile is stored verbatim and comes back broken, not fake-repaired');
-/* profile.style has no column of its own: it rides in extras, and must come
-   back as the same object, or the Companies tab asks the same four questions
-   on every load. */
-{ const withStyle = { profile: { name: 'S', tracks: [], style: { team: 'small', pace: 'any', structure: 'open', purpose: 'mission' } }, raw: '', track: '', jobs: [], created: '' };
-  const back = T.coerceProfile(wire(T.profileRow('p_s', withStyle)));
-  ok(back.profile.style && back.profile.style.team === 'small' && back.profile.style.purpose === 'mission',
-    'working style round-trips through the row: ' + JSON.stringify(back.profile.style)); }
+/* profile.work (the work model) has no column of its own: it rides in
+   extras, and must come back intact, or the Companies tab asks again on
+   every load and suggestions forget what the person said. */
+{ const work = { values: { top: ['purpose','autonomy','income'], bottom: ['recognition','variety'], must: ['income'] },
+                 culture: { caring: 'must', competitive: 'avoid', field: 'good' } };
+  const back = T.coerceProfile(wire(T.profileRow('p_w', { profile: { name: 'W', tracks: [], work }, raw: '', track: '', jobs: [], created: '' })));
+  ok(JSON.stringify(back.profile.work) === JSON.stringify(work), 'the work model round-trips through the row: ' + JSON.stringify(back.profile.work)); }
 /* profiles.limits is NOT NULL. A null here failed the insert, PostgREST refused
    the whole batch, and the real profile beside the broken one was never saved:
    a tester reloaded into an empty account on 2026-10-13. */

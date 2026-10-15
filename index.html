@@ -3248,8 +3248,9 @@ ${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}
 Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
 
 THE DIRECTION THEY ARE PURSUING: ${trk.label||'general'}${trk.why?` — ${trk.why}`:''}
-${styleWords(prof).length?`HOW THEY LIKE TO WORK: ${styleWords(prof).join('; ')}
-Weight this as heavily as skills: a small-team person belongs at startups, agencies and small nonprofits; a larger-organisation person at established employers; mission versus commercial decides between nonprofits, foundations and social enterprises and ordinary companies. Say in "why" how the place works, where you know it.`:''}
+${workSummary(prof).length?`WHAT MATTERS TO THEM AND WHERE THEY THRIVE (their own choices):
+${workSummary(prof).join('\n')}
+Weight this as heavily as skills. Never suggest a place that is known to be what they want to avoid, or that cannot meet a non-negotiable. Say in "why" how the place works, as far as you actually know it -- and say so when you do not.`:''}
 ${(()=>{ const net=networkCompanies(loadConns(), trk, new Set()).slice(0,30); return net.length
   ? `COMPANIES WHERE THEY ALREADY KNOW SOMEONE: ${net.map(g=>g.name).join('; ')}\nInclude any of these that genuinely fit -- a warm introduction beats any cold approach -- but never one that does not fit.` : ''; })()}
 ${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
@@ -5668,10 +5669,6 @@ function renderOnb(){
         ${card('strict','3',String(st),'Only strong matches','A short list you could work through in a sitting.')}
       </div>
 
-      <div class="eyebrow" style="margin-top:22px">How you like to work</div>
-      <p class="say" style="margin:0 0 8px">Not what you can do &mdash; where you would do it best. It decides which companies we suggest.</p>
-      <div id="onbStyle">${styleBlock(p,'onb')}</div>
-
       <div class="eyebrow" style="margin-top:22px">Kind of work, per direction</div>
       <p class="say" style="margin:0 0 8px">We guessed from your CV. Correcting it changes which sites we pay to search.</p>
       ${(p.tracks||[]).map((t,i)=>`<div class="pfact" style="align-items:center">
@@ -5803,8 +5800,6 @@ function renderOnb(){
       const ex=$('#onbExemplar'); if(ex) p.exemplar=ex.value.trim();
     };
     document.querySelectorAll('#onbIntent input, #onbStrict input').forEach(el=>el.onchange=()=>{ commit(); render(); });
-    document.querySelectorAll('[data-style^="onb:"]').forEach(el=>el.onclick=()=>{
-      const [,k,v]=el.dataset.style.split(':'); commit(); p.style=Object.assign(styleOf(p),{[k]:v}); render(); });
     document.querySelectorAll('[data-mode],[data-avoid],#limRelocate,#limOnsite').forEach(el=>el.onchange=commit);
     $('#limPay').onblur=commit;
     if($('#onbExemplar')) $('#onbExemplar').onblur=commit;
@@ -6729,7 +6724,8 @@ function renderApp(){
           <button class="btn-sm" id="btnProfile" style="flex:1">My profile</button>
           <button class="btn-sm" id="btnAddTrack" style="flex:1">+ Direction</button></div>
         <div class="btn-row" style="margin-top:7px">
-          <button class="btn-sm" id="btnBeFound" style="width:100%">Be found by recruiters</button></div>
+          <button class="btn-sm" id="btnBeFound" style="flex:1">Be found by recruiters</button>
+          <button class="btn-sm" id="btnWorkModel" style="flex:1">My work model</button></div>
         <div class="btn-row" style="margin-top:7px">
           <button class="btn-sm" id="btnSwitch" style="width:100%">Switch profile</button></div>
         ${trk.custom?`<button class="btn-sm" id="btnTrackInfo" style="width:100%;margin-top:7px">Why this rating</button>`:''}
@@ -6899,6 +6895,7 @@ function renderApp(){
   $('#btnProfile').onclick=showProfile;
   $('#btnAddTrack').onclick=addTrackDialog;
   if($('#btnBeFound')) $('#btnBeFound').onclick=beFoundDialog;
+  if($('#btnWorkModel')) $('#btnWorkModel').onclick=workModelDialog;
   if($('#btnTrackInfo')) $('#btnTrackInfo').onclick=()=>modal(
     `<div class="eyebrow">Your assessment</div>${trackVerdict(trk)}
      <div class="btn-row" style="margin-top:16px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
@@ -7113,6 +7110,115 @@ function addTrackDialog(){
   setTimeout(()=>d.querySelector('#tIn').focus(),50);
 }
 
+/* ═══ the work model ═══
+   What a person values at work and where they would thrive -- measured the way
+   the research says it can be, not as either/or labels:
+     1. Values: pick the 3 that matter most and the 2 that matter least, from 14.
+        Choosing, not rating 1-5, because on a scale everything comes out
+        "important" (Combrinck 2024; Chi et al. 2018 tie that flat profile to
+        career indecision, the very thing people come here with). A value can
+        be marked non-negotiable.
+     2. Culture: 18 plain descriptions of a workplace, each sorted into must
+        have / good / don't mind / avoid -- a profile, as in the Organizational
+        Culture Profile (O'Reilly, Chatman & Caldwell 1991), where fit is a
+        person's profile compared with the organisation's on the SAME items.
+        "Must have" is capped at 5 for the same reason as above.
+   Stored on the profile (profile.work), which the row sync carries in extras.
+   Only workSummary() -- plain sentences -- is ever sent to the AI; the raw
+   choices stay in the account. */
+const WORK_VALUES = [
+  ['income','Good pay'], ['security','Security and stability'], ['autonomy','Deciding how I work'],
+  ['challenge','Challenging work'], ['creativity','Room to create'], ['variety','Variety, not routine'],
+  ['people','Good people to work with'], ['manager','A supportive manager'], ['flexibility','Flexible hours or place'],
+  ['recognition','Recognition and status'], ['purpose','Work that does good'], ['learning','Learning and growing'],
+  ['achievement','Seeing what I achieved'], ['home','Staying close to home'],
+];
+const CULTURE_ITEMS = [
+  ['trust','You are trusted to decide things yourself'], ['careful','Careful, by-the-book work where details matter'],
+  ['caring','People look out for each other'], ['results','Results are what count'], ['new','Always trying something new'],
+  ['calm','Calm and predictable'], ['deadlines','Fast, with tight deadlines'], ['team','Working closely as a team'],
+  ['solo','Mostly working on your own'], ['roles','Clear roles and a clear boss'], ['flat','Flat: anyone can speak up'],
+  ['competitive','Competitive: the best get ahead'], ['fair','Fair, open pay and decisions'], ['mentor','Mentoring and room to learn'],
+  ['cause','The work serves a cause or a community'], ['field','Out in the field, travelling, meeting people'],
+  ['remote','Remote or flexible hours'], ['craft','Creative freedom: your own style shows'],
+];
+const CULTURE_SORTS = [['must','Must have'],['good','Good'],['','Don’t mind'],['avoid','Avoid']];
+const MUST_MAX = 5;
+function workOf(pr){
+  const w=(pr&&pr.work&&typeof pr.work==='object')?pr.work:{};
+  const ok=k=>WORK_VALUES.some(v=>v[0]===k), okC=k=>CULTURE_ITEMS.some(c=>c[0]===k);
+  const v=w.values||{};
+  return {
+    values: { top:(v.top||[]).filter(ok).slice(0,3), bottom:(v.bottom||[]).filter(ok).slice(0,2), must:(v.must||[]).filter(ok) },
+    culture: Object.fromEntries(Object.entries(w.culture||{}).filter(([k,s])=>okC(k)&&['must','good','avoid'].includes(s))),
+  };
+}
+const workSet = pr => { const w=workOf(pr); return w.values.top.length>0 || Object.keys(w.culture).length>0; };
+const labelOf = (list,k) => (list.find(x=>x[0]===k)||[k,k])[1];
+/* The plain sentences the person sees and the AI gets. */
+function workSummary(pr){
+  const lc=t=>t.charAt(0).toLowerCase()+t.slice(1);   // "Deciding how I work" -> "deciding how I work", not "i"
+  const w=workOf(pr), out=[], L=k=>lc(labelOf(WORK_VALUES,k)), C=k=>lc(labelOf(CULTURE_ITEMS,k));
+  if(w.values.top.length) out.push('Matters most: '+w.values.top.map(k=>L(k)+(w.values.must.includes(k)?' (non-negotiable)':'')).join(', '));
+  if(w.values.bottom.length) out.push('Matters least: '+w.values.bottom.map(L).join(', '));
+  const by=s=>Object.entries(w.culture).filter(([,x])=>x===s).map(([k])=>C(k));
+  if(by('must').length) out.push('Must have: '+by('must').join('; '));
+  if(by('good').length) out.push('Would like: '+by('good').join('; '));
+  if(by('avoid').length) out.push('Avoid: '+by('avoid').join('; '));
+  return out;
+}
+
+function workModelDialog(){
+  const p=P(); if(!p) return;
+  const prof=p.profile, w=workOf(prof);
+  track('workmodel_open');
+  const d=modal(`<div class="eyebrow">Your work model</div>
+    <h2 style="margin:6px 0 4px">What matters to you, and where you would thrive</h2>
+    <p style="color:var(--muted);font-size:12px;margin:0 0 12px">About two minutes. It decides which companies we suggest and how we explain them. Only a plain summary of it is ever sent to the AI.</p>
+    <div id="wmBody"></div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn-go btn-sm" id="wmSave">Save</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
+  const draw=()=>{
+    const stepTop=w.values.top.length<3;
+    d.querySelector('#wmBody').innerHTML=`
+      <div class="eyebrow">1 · ${stepTop?`Tap the 3 that matter most to you (${w.values.top.length}/3)`:`Now the 2 that matter least (${w.values.bottom.length}/2)`}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">${WORK_VALUES.map(([k,lab])=>{
+        const top=w.values.top.includes(k), bot=w.values.bottom.includes(k);
+        return `<button type="button" class="pill2 ${top?'go':bot?'due':''}" data-wv="${k}" style="cursor:pointer;padding:6px 10px">${esc(lab)}${top?' ↑':bot?' ↓':''}</button>`;
+      }).join('')}</div>
+      ${w.values.top.length?`<div class="hint" style="margin-bottom:6px">Any you could not do without? ${w.values.top.map(k=>
+        `<label style="margin-right:10px;cursor:pointer"><input type="checkbox" data-must="${k}" ${w.values.must.includes(k)?'checked':''}> ${esc(labelOf(WORK_VALUES,k))}</label>`).join('')}</div>`:''}
+      <div class="eyebrow" style="margin-top:16px">2 · Sort each one — "must have" at most ${MUST_MAX}</div>
+      <div style="margin-top:6px">${CULTURE_ITEMS.map(([k,lab])=>`<div class="pfact" style="align-items:center;flex-wrap:wrap;gap:6px">
+        <span style="flex:1 1 230px">${esc(lab)}</span>
+        <div class="segs">${CULTURE_SORTS.map(([s,sl])=>`<button type="button" class="seg ${(w.culture[k]||'')===s?'on':''}" data-cs="${k}:${s}">${esc(sl)}</button>`).join('')}</div></div>`).join('')}</div>
+      <div class="hint" id="wmMsg"></div>`;
+    d.querySelectorAll('[data-wv]').forEach(b=>b.onclick=()=>{
+      const k=b.dataset.wv, V=w.values;
+      if(V.top.includes(k)){ V.top=V.top.filter(x=>x!==k); V.must=V.must.filter(x=>x!==k); }
+      else if(V.bottom.includes(k)) V.bottom=V.bottom.filter(x=>x!==k);
+      else if(V.top.length<3) V.top.push(k);
+      else if(V.bottom.length<2) V.bottom.push(k);
+      draw();
+    });
+    d.querySelectorAll('[data-must]').forEach(c=>c.onchange=()=>{ const k=c.dataset.must;
+      w.values.must = c.checked ? [...new Set(w.values.must.concat(k))] : w.values.must.filter(x=>x!==k); });
+    d.querySelectorAll('[data-cs]').forEach(b=>b.onclick=()=>{
+      const [k,s]=b.dataset.cs.split(':');
+      if(s==='must' && w.culture[k]!=='must' && Object.values(w.culture).filter(x=>x==='must').length>=MUST_MAX){
+        d.querySelector('#wmMsg').textContent=`"Must have" is full at ${MUST_MAX} — move one to "Good" first. If everything is a must, nothing is.`; return; }
+      if(s) w.culture[k]=s; else delete w.culture[k];
+      draw();
+    });
+  };
+  draw();
+  d.querySelector('#wmSave').onclick=async()=>{
+    prof.work=w;
+    track('workmodel_saved',{ top:w.values.top.length, bottom:w.values.bottom.length, must:w.values.must.length, sorted:Object.keys(w.culture).length });
+    d.remove(); await save(); render();
+  };
+}
+
 /* ═══ companies ═══
    Work that is never advertised is reached through a company and, best of all,
    through someone who already works there. This is the front door for it: the
@@ -7124,31 +7230,6 @@ function addTrackDialog(){
    other people's names, and nothing about them is uploaded or shared.
    ponytail: per browser, so a second device needs the file again; keep it in
    the account only if people ask for that. */
-/* How a person likes to work. Matching on keywords finds the job; this is
-   about whether they would thrive in the place. Four axes, each with "either"
-   as a real answer -- most people have strong views on one or two only.
-   Stored on the profile (profile.style), which the row sync carries in extras. */
-const STYLE_AXES = [
-  { k:'team', h:'Team size', o:[['small','A small team','Everyone does a bit of everything'],['large','A larger organisation','A defined role, more structure around it']] },
-  { k:'pace', h:'Pace', o:[['fast','Fast','Things change week to week'],['steady','Steady','Room to do things properly']] },
-  { k:'structure', h:'How work arrives', o:[['clear','Clear process','Known goals, a way things are done'],['open','Open-ended','Figure out what needs doing']] },
-  { k:'purpose', h:'What drives the place', o:[['mission','A mission','A cause, a public good, a craft'],['commercial','Commercial','Growth, customers, revenue']] },
-];
-const styleOf = pr => { const st=(pr&&pr.style&&typeof pr.style==='object')?pr.style:{};
-  const o={}; STYLE_AXES.forEach(a=>{ o[a.k]=a.o.some(x=>x[0]===st[a.k])?st[a.k]:'any'; }); return o; };
-const styleSet = pr => !!(pr && pr.style && typeof pr.style==='object');
-let STYLE_EDIT = false;   // the Companies tab's "change": reopen the choices without losing them
-const styleWords = pr => { const st=styleOf(pr); return STYLE_AXES.filter(a=>st[a.k]!=='any')
-  .map(a=>a.h.toLowerCase()+': '+a.o.find(x=>x[0]===st[a.k])[1].toLowerCase()); };
-/* The four choices as one block, used in onboarding and in the Companies tab. */
-function styleBlock(pr, prefix){
-  const st=styleOf(pr);
-  return STYLE_AXES.map(a=>`<div class="pfact" style="align-items:center;flex-wrap:wrap;gap:6px">
-    <b style="flex:0 0 150px">${esc(a.h)}</b>
-    <div class="segs">${a.o.concat([['any','Either','']]).map(([v,lab,sub])=>
-      `<button type="button" class="seg ${st[a.k]===v?'on':''}" data-style="${prefix}:${a.k}:${v}" title="${esc(sub)}">${esc(lab)}</button>`).join('')}</div></div>`).join('');
-}
-
 const connKey = () => 'triage:conns:' + ((USER && USER.id) || 'local');
 function loadConns(){ try{ return JSON.parse(localStorage.getItem(connKey())||'[]'); }catch(e){ return []; } }
 function saveConns(list){ try{ localStorage.setItem(connKey(), JSON.stringify(list)); return true; }catch(e){ return false; } }
@@ -7207,11 +7288,10 @@ function renderCompanies(){
       <button class="btn-go btn-sm" id="coSuggest" ${busy?'disabled':''}>Suggest companies for ${esc(trk.label||'me')}</button>
       <button class="btn-sm" id="coConns">${conns.length?`Your network: ${conns.length} connections — update`:'Add your LinkedIn connections'}</button>
       <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
-    ${styleSet(prof) && !STYLE_EDIT
-      ? `<p class="hint" style="margin:-6px 0 12px">Suggesting for how you like to work: ${esc(styleWords(prof).join(' · ')||'no strong preference')} · <a href="#" class="lnk" id="coStyleEdit">change</a></p>`
-      : `<div class="callout" style="margin:0 0 14px"><b>How do you like to work?</b> Four taps &mdash; it decides which companies are worth your time.
-          <div style="margin-top:8px">${styleBlock(prof,'co')}</div>
-          <div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="coStyleSave">Save</button></div></div>`}
+    ${workSet(prof)
+      ? `<p class="hint" style="margin:-6px 0 12px">Suggesting for your work model: ${esc(workSummary(prof).slice(0,2).join(' · '))} · <a href="#" class="lnk" id="coWork">see or change</a></p>`
+      : `<div class="callout" style="margin:0 0 14px"><b>What matters to you at work?</b> Two minutes &mdash; it decides which companies are worth your time, and how we explain each one.
+          <div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="coWork">Build my work model</button></div></div>`}
     ${conns.length?'':`<p class="hint" style="margin:-6px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
     ${targets.length?`<div class="eyebrow" style="margin:4px 0 6px">Companies to approach · ${targets.length}${targets.some(t=>t.warm.length)?` · ${targets.filter(t=>t.warm.length).length} where you know someone`:''}</div>
       ${targets.map(card).join('')}`
@@ -7244,13 +7324,7 @@ function bindCompanies(){
     addJobs([j]); track('network_company_added'); await save(); render();
   });
   document.querySelectorAll('[data-intro]').forEach(x=>x.onclick=()=>introDialog(+x.dataset.intro));
-  // The style choices: picked in place, saved together.
-  let pick=styleOf(prof);
-  document.querySelectorAll('[data-style^="co:"]').forEach(el=>el.onclick=()=>{
-    const [,k,v]=el.dataset.style.split(':'); pick[k]=v;
-    el.parentNode.querySelectorAll('.seg').forEach(x=>x.classList.toggle('on', x===el)); });
-  const ss=$('#coStyleSave'); if(ss) ss.onclick=async()=>{ prof.style=pick; STYLE_EDIT=false; track('style_set',pick); await save(); render(); };
-  const se=$('#coStyleEdit'); if(se) se.onclick=e=>{ e.preventDefault(); STYLE_EDIT=true; render(); };
+  const wm=$('#coWork'); if(wm) wm.onclick=e=>{ e.preventDefault(); workModelDialog(); };
 }
 
 /* Asking someone you know is a different message from a cold approach: short,
@@ -7805,6 +7879,7 @@ function commands(){
     ['Profile','My profile','#btnProfile'],
     ['Profile','Add a direction','#btnAddTrack'],
     ['Profile','Be found by recruiters','#btnBeFound'],
+    ['Profile','My work model','#btnWorkModel'],
     ['Profile','Switch profile','#btnSwitch'],
     ['Data', KEY?'Keys':'Set up keys','#btnKey'],
     ['Data','Backup & transfer','#btnData'],

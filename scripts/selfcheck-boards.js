@@ -366,6 +366,24 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
      'now: the fresher posting leads instead');
  }
 
+ /* The work model: choices, not ratings, and only plain sentences leave. */
+ {
+   const src4=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
+   const code=/const WORK_VALUES = [\s\S]*?\nfunction workSummary[\s\S]*?\n}\n/.exec(src4)[0];
+   const W=new Function(code+';return {workOf,workSet,workSummary,MUST_MAX};')();
+   const pr={ work:{ values:{ top:['purpose','autonomy','income','variety'], bottom:['recognition'], must:['income','bogus'] },
+                     culture:{ caring:'must', competitive:'avoid', field:'good', nope:'must', calm:'meh' } } };
+   const w=W.workOf(pr);
+   ok(w.values.top.length===3 && !w.values.top.includes('variety'),'work model: at most three "matter most"');
+   ok(w.values.must.join()==='income','work model: unknown keys are dropped, not kept');
+   ok(!('nope' in w.culture) && !('calm' in w.culture),'work model: only known items and known sorts survive');
+   const S=W.workSummary(pr).join(' | ');
+   ok(/Matters most: work that does good, deciding how I work, good pay \(non-negotiable\)/.test(S),'work model: summary names the top values and the non-negotiable '+S);
+   ok(/Must have: people look out for each other/.test(S) && /Avoid: competitive/.test(S),'work model: summary carries must and avoid');
+   ok(!W.workSet({}) && W.workSet(pr),'work model: unset until something is chosen');
+   ok(W.MUST_MAX<=5,'work model: "must have" stays capped');
+ }
+
  /* Companies: LinkedIn's own Connections.csv, matched to the companies to approach. */
  {
    const src3=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8');
