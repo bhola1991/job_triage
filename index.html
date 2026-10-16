@@ -501,7 +501,7 @@
   .plotwrap{background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:14px;
     box-shadow:var(--shadow)}
   .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
-  svg.plot{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair}
+  svg.plot{display:block;width:100%;height:auto;max-height:58vh;touch-action:none;cursor:crosshair}
   /* Cold targets are drawn as unfilled squares, so without this only the 1.6px
      stroke is clickable. pointer-events makes the whole shape a target. */
   .dot{cursor:pointer;pointer-events:all}
@@ -1042,6 +1042,13 @@
     .saved .qcar{display:block;margin:0;padding:0}
     .saved .qcar>.qitem{margin-top:8px}
   }
+/* The map's trail, and the row selected from it. */
+.trail{ font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap }
+.trail b{ color:var(--text); font-weight:600 }
+.maprow.on{ outline:1.5px solid var(--text); border-radius:8px }
+/* The view's name, where the tab row used to be. */
+.viewh{ font-size:15px; font-weight:600; margin:2px 0 12px; color:var(--text) }
+.r-view.on{ background:var(--panel2); box-shadow:inset 3px 0 0 var(--text) }
 </style>
 
 <div id="app"><div id="root"></div><div id="fb"><div id="tasks"></div></div><div id="palette"></div></div>
@@ -1243,7 +1250,7 @@ let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'', editing:null });
 let ONB = blankOnb();
-let RANGE = null, TAB = 'unapplied', busy = false;
+let RANGE = null, TAB = 'map', busy = false;   // the map is home
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
@@ -5889,48 +5896,7 @@ async function finishOnb(){
 
 /* ═══════════════ MAIN APP ═══════════════ */
 const PL={x:56,y:20,w:544,h:340};
-const plotXY=(f,r)=>({ x:PL.x+(r/100)*PL.w, y:PL.y+(1-f/100)*PL.h });
-
-function plotSVG(){
-  const p=P(), scored=p.jobs.filter(isScored);
-  // Read once per draw rather than per element: this runs for every dot.
-  const cGrid=CV('--line'), cDim=CV('--dim'), cAxis=CV('--muted'),
-        cOn=CV('--signal'), cOff=CV('--plot-fade'), cCold=CV('--cold');
-  let g='';
-  for(let v=0;v<=100;v+=25){
-    const y=PL.y+(1-v/100)*PL.h, x=PL.x+(v/100)*PL.w, mid=v===50;
-    g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="${cGrid}" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
-    g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="${cGrid}" stroke-width="${mid?1:.5}" ${mid?'stroke-dasharray="3 3"':''}/>`;
-    g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${v}</text>`;
-    g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${v}</text>`;
-  }
-  g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+14}" text-anchor="end">APPLY TODAY</text>`;
-  g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
-  g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
-  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
-  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}">REACHABILITY</text>`;
-  if(RANGE){
-    const a=plotXY(RANGE.f1,RANGE.r1), b=plotXY(RANGE.f0,RANGE.r0);
-    g+=`<rect x="${Math.min(a.x,b.x)}" y="${Math.min(a.y,b.y)}" width="${Math.abs(b.x-a.x)}" height="${Math.abs(b.y-a.y)}" fill="${cOn}" fill-opacity=".07" stroke="${cOn}" stroke-width="1" stroke-dasharray="4 3"/>`;
-  }
-  scored.forEach(j=>{
-    const f=fitOf(j), r=reachOf(j), pt=plotXY(f,r), open=isOpen(j);
-    const inR=!RANGE||(f>=RANGE.f0&&f<=RANGE.f1&&r>=RANGE.r0&&r<=RANGE.r1);
-    const col=!open?cDim:(inR?(chOf(j)==='cold'?cCold:cOn):cOff), rad=!open?3:(inR?5.5:3.5);
-    // With a box drawn, everything outside it drops back hard so the selection
-    // reads as the answer rather than as one more thing on a busy chart.
-    const dim=RANGE&&!inR ? .28 : (inR&&open?.85:.5);
-    const tip=`<title>${esc(j.title)} — ${esc(j.company)}
-fit ${f} · reach ${r} · ${chOf(j)}</title>`;
-    // Posted roles are circles, cold targets squares. Same axes, different action:
-    // one you apply to, the other you have to start the conversation yourself.
-    g += chOf(j)==='cold'
-      ? `<rect class="dot" data-idx="${p.jobs.indexOf(j)}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${(rad*2).toFixed(1)}" height="${(rad*2).toFixed(1)}" fill="${col}" fill-opacity=".08" stroke="${col}" stroke-width="1.6" stroke-opacity="${RANGE&&!inR?.3:(inR&&open?.95:.5)}">${tip}</rect>`
-      : `<circle class="dot" data-idx="${p.jobs.indexOf(j)}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity="${dim}" stroke="${col}" stroke-width="1" stroke-opacity="${RANGE&&!inR?.3:1}">${tip}</circle>`;
-  });
-  if(!scored.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">Nothing scored yet</text>`;
-  return g;
-}
+const plotXY=(f,r)=>{ const D=DOMAIN(); return { x:PL.x+((r-D.r0)/(D.r1-D.r0))*PL.w, y:PL.y+(1-(f-D.f0)/(D.f1-D.f0))*PL.h }; };
 
 function inRange(j){
   if(CHFILT!=='all' && chOf(j)!==CHFILT) return false;
@@ -6221,7 +6187,10 @@ const IC = {
   chat:'<path d="M4 5h16v11H9.5L4 20z"/>',
   moon:'<path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a6.8 6.8 0 0 0 10.5 10.5z"/>',
   coin:'<circle cx="12" cy="12" r="9"/><path d="M12 7.5v9M14.6 9.6c-.5-.9-1.5-1.4-2.6-1.4-1.5 0-2.7.8-2.7 2s1 1.7 2.7 1.9 2.7.8 2.7 2-1.2 2-2.7 2c-1.200 0-2.200-.5-2.700-1.400"/>',
-  exit:'<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>'
+  exit:'<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
+  map:'<path d="M4 20V4M4 20h16"/><circle cx="9" cy="14" r="1.6"/><circle cx="13" cy="9" r="1.6"/><circle cx="17" cy="12" r="1.6"/><circle cx="16" cy="6" r="1.6"/>',
+  building:'<path d="M4 21V5l8-3v19M12 21V9l8 3v9M2 21h20M7.5 8h1M7.5 12h1M7.5 16h1M15.5 14h1M15.5 17h1"/>',
+  chart:'<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>'
 };
 const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 /* The three people the app is for, and their car. Built from rules rather than
@@ -6511,12 +6480,9 @@ function renderUnapplied(){
         title="${esc(gated.map(x=>x.gated).filter((v,i,a)=>a.indexOf(v)===i).slice(0,4).join(' · '))}">${
         SHOW_GATED?`hide the ${gated.length} your limits remove`:`${gated.length} removed by your limits`}</button>`:''}
       <div class="spacer"></div>
-      <span class="eyebrow">Sort</span>
-      <div class="segs">
-        <button class="seg ${SORT==='rank'?'on':''}" data-sort="rank">Best</button>
-        <button class="seg ${SORT==='posted'?'on':''}" data-sort="posted">Recently posted</button>
-        <button class="seg ${SORT==='new'?'on':''}" data-sort="new">Recently added</button>
-      </div>
+      <label class="hint" style="margin:0;display:flex;gap:6px;align-items:center">Sorted by
+        <select id="sortSel" class="sel" style="width:auto">${[['rank','best'],['posted','recently posted'],['new','recently added']]
+          .map(([v,l])=>`<option value="${v}" ${SORT===v?'selected':''}>${l}</option>`).join('')}</select></label>
     </div>
     ${deckHTML([...strong.map(x=>({...x,band:'Do these first'})), ...closing.map(x=>({...x,band:'Closing soon'})),
                 ...worth.map(x=>({...x,band:'Worth a shot'})), ...below.map(x=>({...x,band:'Below the bar'}))])}
@@ -6663,6 +6629,7 @@ function renderApp(){
   const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
+  const coldCount=p.jobs.filter(j=>isOpen(j)&&chOf(j)==='cold'&&stOf(j)==='new').length;
   // One pass through the law for the header pills and the sidebar key.
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
@@ -6705,8 +6672,19 @@ function renderApp(){
       <span class="r-lb">${law.closing} closing<small>old enough to be filled soon</small></span></div>`:''}
     ${law.awaiting?`<div class="r-it" title="${law.awaiting} awaiting"><span class="r-ic">${ic('send')}<b class="r-bd awaiting">${law.awaiting}</b></span>
       <span class="r-lb">${law.awaiting} awaiting<small>sent; the next move is theirs</small></span></div>`:''}
-    <div class="r-it r-x2" title="${p.jobs.length} jobs"><span class="r-ic">${ic('list')}<b class="r-bd">${p.jobs.length}</b></span>
-      <span class="r-lb">${p.jobs.length} jobs held</span></div>
+    <div class="r-sep"></div>
+    <!-- The views. They were a row of tabs above the list; here they are one
+         place to look, each with its own count, and the main area is just the
+         view. Ids kept stable for the command list. -->
+    ${[['map','viewMap','map','Map','where everything sits'],
+       ['companies','viewCompanies','building','Companies',`${coldCount} to approach`],
+       ['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting on you`],
+       ['applied','viewApplied','send','Applied',`${appliedCount} in play`],
+       ['dash','viewDash','chart','Dashboard','how it is going']].map(([t,id,icn,lab,sub])=>{
+      const n = t==='companies'?coldCount : t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
+      return `<button class="r-it r-view${TAB===t?' on':''}" id="${id}" data-tab="${t}" title="${lab}">
+        <span class="r-ic">${ic(icn)}${n?`<b class="r-bd${t==='applied'&&appliedDue?' due':''}">${n}</b>`:''}</span>
+        <span class="r-lb">${lab}<small>${esc(sub)}</small></span></button>`; }).join('')}
     <div class="r-sep"></div>
     <button class="r-it" id="btnPal" title="Every command in one list — ⌘K, or /">
       <span class="r-ic">${ic('command')}</span><span class="r-lb">Commands<small>every action, typed</small></span></button>
@@ -6834,37 +6812,8 @@ function renderApp(){
           <div class="ns">${esc(n.s)}</div></div>
         <button class="btn-go" id="btnNext" data-next="${esc(n.act)}" ${busy?'disabled':''}>${esc(n.b)}</button>
       </div>`:''; })()}
-      <div class="tabs">
-        <div class="tab ${TAB==='companies'?'on':''}" data-tab="companies">Companies</div>
-        <div class="tab ${TAB==='unapplied'?'on':''}" data-tab="unapplied">Unapplied${
-          unappliedCount?` <span class="tabct">${unappliedCount}</span>`:''}</div>
-        <div class="tab ${TAB==='applied'?'on':''}" data-tab="applied">Applied${
-          appliedCount?` <span class="tabct${appliedDue?' due':''}">${appliedCount}</span>`:''}</div>
-        <div class="tab ${TAB==='map'?'on':''}" data-tab="map">Map</div>
-        <div class="tab ${TAB==='dash'?'on':''}" data-tab="dash">Dashboard</div>
-        <div class="spacer"></div>
-        <!-- A different kind of control from the four above, so a different
-             shape: these filter what a view shows, they do not change the view. -->
-        <div class="segs" style="margin-bottom:7px">
-          <button class="seg ${CHFILT==='all'?'on':''}" data-ch="all">All</button>
-          <button class="seg ${CHFILT==='posted'?'on':''}" data-ch="posted">Posted ●</button>
-          <button class="seg ${CHFILT==='cold'?'on':''}" data-ch="cold">Cold □</button>
-        </div>
-      </div>
-      ${TAB!=='map'?'':`
-      <div>
-        <div class="plotwrap"><div class="plothead">
-          <span class="eyebrow">Drag a box to select · click a dot to open the posting</span><div class="spacer"></div>
-          <span class="num" style="font-size:11px;color:${RANGE?'var(--signal)':'var(--muted)'}">${RANGE
-            ? `${inr.length} of ${scored.length} selected · fit ${Math.round(RANGE.f0)}–${Math.round(RANGE.f1)} · reach ${Math.round(RANGE.r0)}–${Math.round(RANGE.r1)}`
-            : `showing all ${scored.length}`}</span>
-          <button class="btn-sm" id="btnReset" ${RANGE?'':'disabled'}>Reset range</button></div>
-          <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg></div>
-        <div class="stats">${[[p.jobs.length,'held'],[posted,'posted ●'],[cold,'cold □'],[inr.length,'in range'],[strong,'worth doing'],[applied,'actioned']]
-          .map(([k,l])=>`<div class="stat"><div class="k num">${k}</div><div class="l">${l}</div></div>`).join('')}</div>
-        ${scored.length?`<p style="color:var(--muted);font-size:12px;margin:0">Top-right is where to spend today: work you can do, at places likely to reply. A dot high on the left is a good job you probably won't win — worth one shot, not a week.</p>`
-          :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
-      </div>`}
+      <h2 class="viewh">${({map:'Map',companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
+      ${TAB!=='map'?'':`<div>${renderMap()}</div>`}
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div>${renderUnapplied()}</div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
@@ -6885,10 +6834,11 @@ function renderApp(){
   ${selJob?'<div id="panescrim"></div>':''}
 `;
 
-  document.querySelectorAll('.tab[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; render(); });
+  document.querySelectorAll('.tab[data-tab], .r-view[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SEL_JOB=null; render(); });
   if(TAB==='companies') bindCompanies();
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
   document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
+  if($('#sortSel')) $('#sortSel').onchange=e=>{ SORT=e.target.value; render(); };
   /* Two places render #showGated -- the list header and the all-gated empty
      state -- and only one is on screen at a time, so this is guarded rather
      than assumed. Binding a missing id throws and takes the render with it. */
@@ -6923,7 +6873,6 @@ function renderApp(){
   // Only rendered on the map tab. Unguarded, this threw on every other tab --
   // and because these bindings are one straight run, everything below it went
   // unbound too: export, trim, clear, the auto-score box, keys, search.
-  if($('#btnReset')) $('#btnReset').onclick=()=>{ RANGE=null; render(); };
   $('#btnExport').onclick=()=>{
     if(!P().jobs.length){ alert('Nothing to export yet.'); return; }
     downloadFile('job_tracker.csv', toCSV(P().jobs,COLS), 'text/csv'); };
@@ -7648,32 +7597,231 @@ function showProfile(){
     <div class="btn-row" style="margin-top:18px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
 }
 
-/* ═══ plot drag ═══ */
+/* ═══ the map ═══
+   Fit up, reachability across: where every job and company sits, and the
+   centre of the app. Three views of the same plane --
+     To decide  everything still waiting on the person,
+     Applied    what is in play, coloured by what it needs next,
+     Families   one bubble per kind of work (the occupation families), placed
+                at the average of what is in it; click one to go inside it.
+   Drag a box and the map BECOMES that box: the axes rescale to it, and the
+   step is added to the trail above the map. Click any step in the trail, or
+   the zoom-out button, to go back up -- a timeline, on two axes. A dot is a
+   decision: clicking it opens it in the pane beside the map, with its one
+   action. The list under the map is exactly what is in view. */
+let MAPVIEW = 'unapplied';      // 'unapplied' | 'applied' | 'families'
+let ZOOM = [];                  // the trail: [{f0,f1,r0,r1}], innermost last
+let FAMSEL = null;              // inside one family (families view)
+const FULL = { f0:0, f1:100, r0:0, r1:100 };
+/* With no zoom, the families view frames its own bubbles, which tend to sit
+   close together: shown on the full 0-100 plane they pile on top of each other. */
+const DOMAIN = () => ZOOM[ZOOM.length-1] || (MAPVIEW==='families' && !FAMSEL ? famFrame() : FULL);
+const isFull = D => D.f0===0 && D.f1===100 && D.r0===0 && D.r1===100;
+function famGroups(){
+  const by=new Map();
+  mapItems().forEach(x=>{ const k=familyOf(x.j); if(!by.has(k)) by.set(k,[]); by.get(k).push(x.j); });
+  return [...by].map(([k,js])=>({ k, js, f:js.reduce((s,j)=>s+fitOf(j),0)/js.length, r:js.reduce((s,j)=>s+reachOf(j),0)/js.length }))
+    .sort((a,b)=>b.js.length-a.js.length);
+}
+function famFrame(){
+  const G=famGroups(); if(!G.length) return FULL;
+  const pad=10, span=30, fs=G.map(g=>g.f), rs=G.map(g=>g.r);
+  const box=(lo,hi)=>{ let a=Math.max(0,lo-pad), b=Math.min(100,hi+pad); if(b-a<span){ const c=(a+b)/2; a=Math.max(0,c-span/2); b=Math.min(100,a+span); } return [a,b]; };
+  const [f0,f1]=box(Math.min(...fs),Math.max(...fs)), [r0,r1]=box(Math.min(...rs),Math.max(...rs));
+  return { f0, f1, r0, r1 };
+}
+
+/* The occupation families. First match wins, so the specific come before the
+   general. Matched on the title, and for a company on its reasons too. Each
+   pattern anchors only at the START of a word, so a stem ("fundrais",
+   "journalis") matches the longer words built on it. */
+const FAMILIES = [
+  ['journalism','Journalism and editorial',/\b(journalis|reporter|correspondent|sub.?editor|editorial|critic|newsroom)/],
+  ['film','Film, TV and video',/\b(film|video|editor|editing|post.?production|cinematograph|documentar|producer|director|motion|vfx|animator|animation)/],
+  ['fundraising','Fundraising, grants and CSR',/\b(fundrais|grant|csr|donor|philanthrop)/],
+  ['writing','Writing and content',/\b(content|copywrit|writer|writing|blog|technical writ|storytell)/],
+  ['design','Design and UX',/\b(designer|design|ux|ui|illustrat|art director|graphic)/],
+  ['arts','Arts, culture and festivals',/\b(curator|curatorial|gallery|museum|festival|arts?\b|programmer \(arts|cultural|theatre|music)/],
+  ['marketing','Marketing, brand and social',/\b(marketing|brand|seo|social media|community manager|growth|campaign|performance market)/],
+  ['comms','PR and communications',/\b(communications?|pr\b|public relations|media relations|spokes)/],
+  ['sales','Sales and business development',/\b(sales|business development|account (executive|manager)|bd\b|partnerships?)/],
+  ['support','Customer support and success',/\b(customer (support|success|service)|support executive|helpdesk)/],
+  ['nonprofit','Nonprofit programmes and development',/\b(programme|program officer|ngo|nonprofit|non.profit|development sector|m&e|monitoring|evaluation|field officer|community)/],
+  ['research','Research and policy',/\b(research|policy|analyst \(policy|social scien)/],
+  ['education','Education and teaching',/\b(teacher|teaching|lecturer|professor|faculty|tutor|curriculum|instructional|education|trainer|academic)/],
+  ['ops','Operations and administration',/\b(operations|ops\b|admin|office manager|executive assistant|coordinator|chief of staff)/],
+  ['people','HR and recruitment',/\b(hr\b|human resources|recruit|talent|people (partner|ops))/],
+  ['finance','Finance, accounting and banking',/\b(finance|financial|account(ant|ing)|audit|tax|bank|credit|insurance|treasury)/],
+  ['product','Product and project management',/\b(product (manager|owner)|project manager|program manager|scrum|pmo)/],
+  ['data','Data and AI',/\b(data|analytics|machine learning|ml\b|ai\b|artificial intelligence|automation|no.?code|llm)/],
+  ['software','Software and IT',/\b(engineer|developer|software|devops|sre|cloud|security|qa\b|test|it support|backend|frontend|full.?stack)/],
+  ['health','Health and care',/\b(nurse|doctor|medical|health|pharma|clinic|therap|counsel|psycholog|social worker)/],
+  ['supply','Supply chain and logistics',/\b(supply chain|logistics|procurement|warehouse|fleet)/],
+  ['engineering','Engineering and environment',/\b(civil|mechanical|electrical|manufactur|construction|architect|sustainab|environment|energy|agri|agro)/],
+  ['legal','Legal and compliance',/\b(legal|lawyer|counsel|compliance|company secretary|paralegal)/],
+];
+function familyOf(j){
+  const t=String((j.title||'')+' '+(chOf(j)==='cold'?(j.description||''):'')).toLowerCase();
+  for(const [k,,re] of FAMILIES) if(re.test(t)) return k;
+  return 'other';
+}
+const familyLabel = k => (FAMILIES.find(f=>f[0]===k)||[k,'Other'])[1];
+const familyShort = k => familyLabel(k).split(/[ ,]/)[0];   // "Film", "Nonprofit", "PR" -- for the map itself
+
+/* What a view shows, before zooming. */
+function mapItems(){
+  const p=P(); if(!p) return [];
+  let L=p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j));
+  if(MAPVIEW==='unapplied') L=L.filter(x=>isOpen(x.j)&&stOf(x.j)==='new');
+  else if(MAPVIEW==='applied') L=L.filter(x=>['sent','live'].includes(stOf(x.j)) || (stOf(x.j)==='closed'&&x.j.date_applied));
+  else L=L.filter(x=>isOpen(x.j));
+  if(MAPVIEW==='families' && FAMSEL) L=L.filter(x=>familyOf(x.j)===FAMSEL);
+  return L;
+}
+const inDomain = (j,D) => { const f=fitOf(j), r=reachOf(j); return f>=D.f0&&f<=D.f1&&r>=D.r0&&r<=D.r1; };
+/* A dot's colour says what it needs, by the colour law; on To decide that is
+   posted versus a company to approach. */
+function dotColour(j){
+  const st=stOf(j);
+  if(MAPVIEW!=='unapplied' && st!=='new') return st==='live'?CV('--go') : isDue(j)?CV('--due') : st==='sent'?CV('--awaiting') : CV('--closed');
+  return chOf(j)==='cold' ? CV('--cold') : CV('--signal');
+}
+/* Grid steps that read as round numbers at any zoom. */
+const niceStep = span => { const raw=span/4, p=Math.pow(10,Math.floor(Math.log10(raw))); const m=raw/p; return (m<1.5?1:m<3.5?2.5:m<7.5?5:10)*p; };
+
+function plotSVG(){
+  const D=DOMAIN(), items=mapItems();
+  const cGrid=CV('--line'), cDim=CV('--dim'), cAxis=CV('--muted'), cText=CV('--text');
+  let g='';
+  for(const [lo,hi,axis] of [[D.f0,D.f1,'f'],[D.r0,D.r1,'r']]){
+    const st=niceStep(hi-lo);
+    for(let v=Math.ceil(lo/st)*st; v<=hi+1e-9; v+=st){
+      const vv=+v.toFixed(2);
+      if(axis==='f'){ const y=plotXY(vv,D.r0).y;
+        g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="${cGrid}" stroke-width=".5"/>`;
+        g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${vv}</text>`; }
+      else { const x=plotXY(D.f0,vv).x;
+        g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="${cGrid}" stroke-width=".5"/>`;
+        g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${vv}</text>`; }
+    }
+  }
+  if(isFull(D)){
+    g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+14}" text-anchor="end">APPLY TODAY</text>`;
+    g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
+    g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
+  }
+  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
+  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}">REACHABILITY</text>`;
+  if(BOX){ const a=plotXY(BOX.f1,BOX.r0), b=plotXY(BOX.f0,BOX.r1);
+    g+=`<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="${cText}" fill-opacity=".06" stroke="${cText}" stroke-width="1" stroke-dasharray="4 3"/>`; }
+  if(MAPVIEW==='families' && !FAMSEL){
+    // One bubble per family, at the average of what is in it, sized by how
+    // much. A label is drawn only where it collides with none drawn before it
+    // (biggest first); every family is also in the list under the map.
+    const G=famGroups().filter(x=>inDomain({ai_score:x.f,ai_reachability:x.r},D))
+      .map(x=>({ ...x, pt:plotXY(x.f,x.r), rad:8+5*Math.sqrt(x.js.length) }));
+    // Every bubble is an obstacle before any label is placed.
+    const placed=G.map(x=>({ x0:x.pt.x-x.rad, x1:x.pt.x+x.rad, y0:x.pt.y-x.rad, y1:x.pt.y+x.rad }));
+    G.forEach(({k,js,f,r,pt,rad})=>{
+      const lab=`${familyShort(k)} · ${js.length}`, w=lab.length*6.2+4;
+      // Above the bubble, else below it, else no label (it is in the list).
+      const tries=[{y:pt.y-rad-4}, {y:pt.y+rad+12}].map(t=>({ ...t, box:{x0:pt.x-w/2, x1:pt.x+w/2, y0:t.y-11, y1:t.y+2} }));
+      const spot=tries.find(t=>!placed.some(q=>t.box.x0<q.x1&&t.box.x1>q.x0&&t.box.y0<q.y1&&t.box.y1>q.y0));
+      const fits=!!spot; if(fits) placed.push(spot.box);
+      g+=`<g class="fam" data-fam="${k}" style="cursor:pointer"><circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad.toFixed(1)}" fill="${CV('--signal')}" fill-opacity=".14" stroke="${CV('--signal')}" stroke-width="1.4"/>
+        ${fits?`<text x="${pt.x.toFixed(1)}" y="${spot.y.toFixed(1)}" text-anchor="middle" font-size="11" fill="${cText}">${esc(lab)}</text>`:''}
+        <title>${esc(familyLabel(k))}: ${js.length}, average fit ${Math.round(f)}, reach ${Math.round(r)} — click to go inside</title></g>`;
+    });
+  } else {
+    items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
+      const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
+      const tip=`<title>${esc(j.title)} — ${esc(j.company)}\nfit ${fitOf(j)} · reach ${reachOf(j)}</title>`;
+      g += chOf(j)==='cold'
+        ? `<rect class="dot" data-idx="${i}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}">${tip}</rect>`
+        : `<circle class="dot" data-idx="${i}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity=".85" stroke="${sel?cText:col}" stroke-width="${sel?2.4:1}">${tip}</circle>`;
+    });
+  }
+  if(!items.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">${
+    MAPVIEW==='applied'?'Nothing applied to yet':'Nothing scored yet'}</text>`;
+  return g;
+}
+
+/* The map's whole view: switcher, trail, plot, and what is in view. */
+function renderMap(){
+  const D=DOMAIN(), items=mapItems();
+  const inView=items.filter(x=>inDomain(x.j,D)).sort((a,b)=>rankOf(b.j)-rankOf(a.j));
+  const r=v=>Math.round(v);
+  const crumbs=[[MAPVIEW==='families'?'All kinds of work':'Everything', -1, true]]
+    .concat(FAMSEL?[[familyLabel(FAMSEL), 0, false]]:[])
+    .concat(ZOOM.map((z,k)=>[`fit ${r(z.f0)}–${r(z.f1)} · reach ${r(z.r0)}–${r(z.r1)}`, k+1, false]));
+  const showList = !(MAPVIEW==='families' && !FAMSEL);
+  return `<div class="plotwrap">
+    <div class="plothead" style="flex-wrap:wrap;gap:8px">
+      <div class="segs">${[['unapplied','To decide'],['applied','Applied'],['families','Families']].map(([v,l])=>
+        `<button class="seg ${MAPVIEW===v?'on':''}" data-mapview="${v}">${l}</button>`).join('')}</div>
+      <div class="spacer"></div>
+      <nav class="trail" aria-label="Where you are on the map">${crumbs.map(([t,k],n)=>
+        n===crumbs.length-1 ? `<b>${esc(t)}</b>` : `<a href="#" class="lnk" data-crumb="${k}">${esc(t)}</a> ›`).join(' ')}</nav>
+      <button class="btn-sm" id="mapOut" ${ZOOM.length||FAMSEL?'':'disabled'} title="Back up one step">Zoom out</button>
+    </div>
+    <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
+    <p class="hint" style="margin:6px 0 0">${MAPVIEW==='families'&&!FAMSEL ? 'Each bubble is a kind of work, placed at the average of what is in it. Click one to go inside.'
+      : 'Drag a box to zoom into it. Click a dot to decide on it.'}</p></div>
+    ${showList ? `<div class="eyebrow" style="margin:14px 0 6px">In view · ${inView.length}</div>
+      ${inView.slice(0,30).map(({j,i})=>`<div class="contact-row maprow${SEL_JOB===keyOf(j)?' on':''}" data-mapsel="${i}" style="cursor:pointer;align-items:center">
+        <span class="num" style="width:58px;color:var(--muted)">${fitOf(j)} · ${reachOf(j)}</span>
+        <span style="flex:1;min-width:0"><b>${esc(j.title)}</b> <span style="color:var(--muted)">· ${esc(j.company)}</span></span>
+        ${primaryAct(j,i)}</div>`).join('')}
+      ${inView.length>30?`<p class="hint">and ${inView.length-30} more — zoom in to narrow it.</p>`:''}
+      ${!inView.length&&items.length?'<p class="hint">Nothing in this part of the map. Zoom out.</p>':''}`
+    : `<div class="eyebrow" style="margin:14px 0 6px">Kinds of work · ${famGroups().length}</div>
+      ${famGroups().map(g=>`<div class="contact-row maprow" data-famrow="${g.k}" style="cursor:pointer;align-items:center">
+        <span class="num" style="width:58px;color:var(--muted)">${Math.round(g.f)} · ${Math.round(g.r)}</span>
+        <span style="flex:1"><b>${esc(familyLabel(g.k))}</b> <span style="color:var(--muted)">· ${g.js.length}</span></span>
+        <span class="hint" style="margin:0">go inside ›</span></div>`).join('')}`}`;
+}
+
+let BOX = null;   // the box being dragged, in plot units
 function bindPlot(){
+  document.querySelectorAll('[data-mapview]').forEach(b=>b.onclick=()=>{ MAPVIEW=b.dataset.mapview; ZOOM=[]; FAMSEL=null; render(); });
+  document.querySelectorAll('[data-crumb]').forEach(a=>a.onclick=e=>{ e.preventDefault(); const k=+a.dataset.crumb;
+    if(k<0){ ZOOM=[]; FAMSEL=null; } else ZOOM=ZOOM.slice(0,k); render(); });
+  const out=$('#mapOut'); if(out) out.onclick=()=>{ if(ZOOM.length) ZOOM.pop(); else FAMSEL=null; render(); };
+  document.querySelectorAll('[data-famrow]').forEach(r=>r.onclick=()=>{
+    const fam=document.querySelector(`#plot .fam[data-fam="${r.dataset.famrow}"]`);
+    if(fam) fam.dispatchEvent(new MouseEvent('click',{bubbles:true})); else { FAMSEL=r.dataset.famrow; ZOOM=[]; render(); } });
+  document.querySelectorAll('[data-mapsel]').forEach(r=>r.onclick=e=>{ if(e.target.closest('button')) return;
+    const j=P().jobs[+r.dataset.mapsel]; if(j){ SEL_JOB=keyOf(j); render(); } });
   const svg=$('#plot'); if(!svg) return;
   let start=null;
-  const toPlot=ev=>{ const pt=svg.createSVGPoint(); const t=ev.touches?ev.touches[0]:ev;
+  const toPlot=ev=>{ const pt=svg.createSVGPoint(); const t=ev.touches?ev.touches[0]:(ev.changedTouches?ev.changedTouches[0]:ev);
     pt.x=t.clientX; pt.y=t.clientY; const m=svg.getScreenCTM(); if(!m) return null;
-    const q=pt.matrixTransform(m.inverse());
-    return { r:Math.max(0,Math.min(100,(q.x-PL.x)/PL.w*100)), f:Math.max(0,Math.min(100,(1-(q.y-PL.y)/PL.h)*100)) }; };
-  const down=ev=>{ if(ev.target.classList.contains('dot')) return;
-    const p=toPlot(ev); if(!p) return; start=p; ev.preventDefault(); };
+    const q=pt.matrixTransform(m.inverse()), D=DOMAIN();
+    const rx=Math.max(0,Math.min(1,(q.x-PL.x)/PL.w)), fy=Math.max(0,Math.min(1,1-(q.y-PL.y)/PL.h));
+    return { r:D.r0+rx*(D.r1-D.r0), f:D.f0+fy*(D.f1-D.f0) }; };
+  const down=ev=>{ if(ev.target.closest('.dot,.fam')) return; const p=toPlot(ev); if(!p) return; start=p; ev.preventDefault(); };
   const move=ev=>{ if(!start) return; const p=toPlot(ev); if(!p) return;
-    RANGE={f0:Math.min(start.f,p.f),f1:Math.max(start.f,p.f),r0:Math.min(start.r,p.r),r1:Math.max(start.r,p.r)};
-    svg.innerHTML=plotSVG(); };
-  const up=()=>{ if(start&&RANGE&&(RANGE.f1-RANGE.f0<4||RANGE.r1-RANGE.r0<4)) RANGE=null;
-    if(start){ start=null; render(); } start=null; };
+    BOX={f0:Math.min(start.f,p.f),f1:Math.max(start.f,p.f),r0:Math.min(start.r,p.r),r1:Math.max(start.r,p.r)}; svg.innerHTML=plotSVG(); };
+  const up=()=>{ if(!start) return; start=null;
+    const D=DOMAIN(), b=BOX; BOX=null;
+    // A box too small to mean anything is a click on empty map, not a zoom.
+    if(b && (b.f1-b.f0)>(D.f1-D.f0)*0.06 && (b.r1-b.r0)>(D.r1-D.r0)*0.06){ ZOOM.push(b); track('map_zoom',{ depth:ZOOM.length, view:MAPVIEW }); }
+    render(); };
   svg.addEventListener('mousedown',down); svg.addEventListener('touchstart',down,{passive:false});
-  window.addEventListener('mousemove',move); window.addEventListener('touchmove',move,{passive:false});
-  window.addEventListener('mouseup',up); window.addEventListener('touchend',up);
-  // A dot is the job, so clicking it goes to the posting. Cold targets have no
-  // posting to open, and neither do rows added by hand, so those fall back to
-  // the detail view rather than doing nothing.
+  window.onmousemove=move; window.onmouseup=up;
+  svg.addEventListener('touchmove',move,{passive:false}); svg.addEventListener('touchend',up);
+  svg.addEventListener('dblclick',ev=>{ if(ev.target.closest('.dot,.fam')) return; if(ZOOM.length){ ZOOM.pop(); render(); } });
   svg.addEventListener('click',ev=>{
+    const fam=ev.target.closest('.fam');
+    if(fam){ FAMSEL=fam.dataset.fam; ZOOM=[];
+      // Go inside: the map becomes the family's own spread, padded a little.
+      const js=mapItems().map(x=>x.j);
+      if(js.length>1){ const fs=js.map(fitOf), rs=js.map(reachOf), pad=6;
+        ZOOM=[{ f0:Math.max(0,Math.min(...fs)-pad), f1:Math.min(100,Math.max(...fs)+pad), r0:Math.max(0,Math.min(...rs)-pad), r1:Math.min(100,Math.max(...rs)+pad) }]; }
+      track('map_family',{ fam:FAMSEL }); render(); return; }
     if(!ev.target.classList.contains('dot')) return;
-    const idx=parseInt(ev.target.dataset.idx,10), j=P().jobs[idx];
-    if(j && httpUrl(j.url)){ remindApplied(j); window.open(j.url,'_blank','noopener'); }
-    else showJob(idx);
+    const j=P().jobs[parseInt(ev.target.dataset.idx,10)]; if(!j) return;
+    SEL_JOB=keyOf(j); track('map_pick',{ view:MAPVIEW }); render();
   });
 }
 
@@ -7980,6 +8128,8 @@ let PAL = null;   // null closed, else { q, sel }
 
 function commands(){
   const list=[
+    ['Go','Map','#viewMap'], ['Go','Companies','#viewCompanies'], ['Go','To decide','#viewDecide'],
+    ['Go','Applied','#viewApplied'], ['Go','Dashboard','#viewDash'],
     ['Find work', 'Search the job boards','#btnBoards'],
     /* Only exists while an offer is live, so most of the time this resolves to
        nothing -- which runCommand already answers honestly rather than failing

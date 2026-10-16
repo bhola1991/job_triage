@@ -578,6 +578,7 @@ module.exports = {
       'public.set_tester': 'marks an account as a beta tester from the SQL editor; decides what the app shows, never what a job does',
     },
     'index.html section banners': {
+      'the map': 'the fit x reachability plane the person works from: views, families, zoom and the in-view list; it reads jobs already scored and changes none',
       'the work model': 'what the person values and where they would thrive, asked by choosing and sorting; only a plain summary of it reaches the AI, and nothing here touches a job',
       'companies': 'who to approach and who the person knows there; the network file never leaves the browser, and nothing here acquires or scores a posting',
       'be found': 'advice on the person\'s own Naukri and LinkedIn profiles, read off the corpus; nothing here acquires, scores or stores a job',
@@ -604,7 +605,6 @@ module.exports = {
       'Applied — review': 'after the application, past the pipeline this map covers',
       'reply tracking: a forwarding address, not a mailbox': 'also after the application. The decision lives in src/reply-match.mjs and the write in the Email Worker, neither of which this map covers; this banner is only the panel that issues the address. Gated by INBOX_LIVE, on since 2026-10-09.',
       'Dashboard': 'a view over jobs that already arrived',
-      'plot drag': 'a UI gesture',
       'the command surface': 'a second way to reach controls that are already on the map under the sidebar — it dispatches by clicking them, so nothing flows through it',
       'shared bits': 'dialog helpers',
       'sign in': 'auth, drawn as the server auth gate',
