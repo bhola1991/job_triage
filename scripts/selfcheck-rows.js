@@ -162,6 +162,12 @@ ok(T.coerceProfile(wire(T.profileRow('p_x', odd))).profile.favourite_colour === 
 const broken = { raw: 'x', jobs: [], created: '2026-01-01' };
 const b2 = T.coerceProfile(wire(T.profileRow('p_b', broken)));
 eq(b2, broken, 'a record with no .profile is stored verbatim and comes back broken, not fake-repaired');
+/* A company's website and what was read about it ride in extras on the job
+   row; dropped, every company would need reading again after each reload. */
+{ const pulse = JSON.stringify({ at: '2026-10-17', now: [{ what: 'Hiring in Kolkata' }] });
+  const j = Object.assign({}, T.blank ? T.blank() : {}, { title: 'Cold approach', company: 'Pratham', url: '', site: 'pratham.org', pulse });
+  const back = T.coerceJob(wire(T.jobRow(j)));
+  ok(back.site === 'pratham.org' && back.pulse === pulse, 'a company row keeps its website and pulse through the row: ' + JSON.stringify({ site: back.site, pulse: back.pulse })); }
 /* profile.work (the work model) has no column of its own: it rides in
    extras, and must come back intact, or the Companies tab asks again on
    every load and suggestions forget what the person said. */

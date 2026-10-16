@@ -1677,6 +1677,9 @@ function jobRow(j){
   JOB_INT .forEach(c => { r[c] = intOut (j[c], extras, c); });
   JOB_DATE.forEach(c => { r[c] = dateOut(j[c], extras, c); });
   JOB_JSON.forEach(c => { r[c] = jsonOut(j[c], extras, c); });
+  // A company's website and what was last read about it (Companies tab):
+  // no column of their own, so they ride in extras, which the read side restores.
+  ['site','pulse'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
   r.extras = extras;
   return r;
 }
@@ -3262,7 +3265,8 @@ Return ONLY a JSON object, no preamble, no markdown fences:
   "stage":"seed|series-a|series-b|series-c|growth|public|agency|nonprofit|university|government",
   "why":"one sentence, max 22 words: why THIS person specifically, not a generic candidate",
   "overlap":"the single concrete thing in their background that this company would care about",
-  "odds":"strong|fair|longshot"
+  "odds":"strong|fair|longshot",
+  "website":"the official website domain, e.g. example.org -- or empty if you are not sure; never guess"
 }]}
 
 Give 16 to 24 companies. Rules that matter:
@@ -3352,6 +3356,7 @@ async function addSuggested(list, checkHiring){
       .filter(Boolean).join(' — ');
     j.source='Suggested'; j.channel='cold'; j.stage='new';
     j.notes=c.odds?('Odds: '+c.odds):'';
+    if(c.website && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(String(c.website).replace(/^https?:\/\//,'').replace(/\/.*$/,''))) j.site=String(c.website).replace(/^https?:\/\//,'').replace(/\/.*$/,'');
     return j;
   });
   let added=addJobs(cold);
@@ -7264,12 +7269,100 @@ function networkCompanies(conns, trk, skip){
     .sort((a,b) => b.score - a.score);
 }
 
+/* What a company is doing now and how it works, from what it publishes.
+   The server fetches the public pages (company_pulse); one AI call here reads
+   them. Two rules keep it honest:
+     - a "how they work" item is kept only if its quote is really in the text
+       that was fetched -- a model that invents a quote loses the item;
+     - nothing is read that is not free and allowed (no LinkedIn, X, Facebook).
+   Kept on the company row as j.pulse (text) and j.site, which jobRow carries in
+   extras. Weekly is often enough: a company's news does not move daily. */
+const PULSE_STALE_DAYS = 7;
+/* Output limits on these calls are deliberately generous. The model's hidden
+   reasoning is counted against the same limit as its reply, so a "short
+   answer" call capped at 40 or 700 tokens came back with no reply at all
+   (measured 2026-10-17: 40 failed, 400 answered). Only tokens actually
+   produced are charged, so a high cap costs nothing extra. */
+const pulseOf = j => { try{ return j && j.pulse ? JSON.parse(j.pulse) : null; }catch(e){ return null; } };
+const pulseStale = j => { const p=pulseOf(j); return !p || !p.at || dayDiff(p.at, today()) >= PULSE_STALE_DAYS; };
+/* How well a company's observed ways of working fit the person's sorts:
+   their musts count double, goods once, anything they avoid heavily against. */
+function cultureFit(pulse, pr){
+  if(!pulse || !(pulse.culture||[]).length) return null;
+  const c=workOf(pr).culture; let s=0;
+  pulse.culture.forEach(x=>{ const v=c[x.k]; s += v==='must'?2 : v==='good'?1 : v==='avoid'?-3 : 0; });
+  return s;
+}
+async function pulseCompany(i, quiet){
+  const p=P(), j=p&&p.jobs[i]; if(!j) return;
+  const say=t=>{ if(!quiet) setInfo(t); };
+  try{
+    if(!j.site){
+      say('Finding '+j.company+'’s website…');
+      const ans=String(await claude(`What is the official website of the organisation "${j.company}"${j.location?` (${j.location})`:''}? Reply with the bare domain only, e.g. example.org -- or the single word unknown if you are not sure. Never guess.`, 600)||'').trim().toLowerCase();
+      const dom=(ans.match(/[a-z0-9-]+(\.[a-z0-9-]+)+/)||[])[0];
+      if(!dom || /unknown/.test(ans)){ j.pulse=JSON.stringify({ at:today(), error:'no website found — add it' }); await save(); render(); return; }
+      j.site=dom;
+    }
+    say('Reading what '+j.company+' has published…');
+    const raw=await hosted('company_pulse',{ company:j.company, site:j.site });
+    const src=[raw.about&&`ABOUT: ${raw.about}`,
+      raw.careers&&`CAREERS PAGE: ${raw.careers.text}`,
+      ...(raw.news||[]).map(n=>`NEWS ${n.date} (${n.source||'news'}): ${n.title}`),
+      ...(raw.blog||[]).map(n=>`BLOG ${n.date}: ${n.title} — ${n.text}`),
+      ...(raw.youtube||[]).map(n=>`YOUTUBE ${n.date}: ${n.title}`),
+      ...(raw.telegram||[]).map(n=>`TELEGRAM ${n.date}: ${n.title}`)].filter(Boolean).join('\n').slice(0,6000);
+    let r={ now:[], culture:[], activity:'unknown', summary:'' };
+    if(src.trim()){
+      const txt=await claude(`Read what one organisation has published recently and report ONLY what the text says.
+
+ORGANISATION: ${j.company}
+TODAY: ${today()}
+TEXT:
+${src}
+
+WAYS OF WORKING to look for (use these keys only): ${CULTURE_ITEMS.map(([k,l])=>k+'='+l).join('; ')}
+
+Return ONLY JSON:
+{"now":[{"what":"something happening now that would make them need help or hire: hiring, a new programme, a campaign, an event, funding -- max 14 words","when":"YYYY-MM-DD or month","source":"news|blog|careers|youtube|telegram"}],
+ "culture":[{"k":"exactly one of: ${CULTURE_ITEMS.map(c=>c[0]).join('|')} -- the organisation's own value names are NOT keys; map each to the nearest key","quote":"the EXACT words from the text that show it, max 15 words"}],
+ "activity":"weekly|monthly|quiet|unknown -- how often they publish, judged from the dates",
+ "summary":"one line, max 20 words: what they are doing now"}
+Rules: at most 3 "now" items, newest first, nothing older than 60 days. Ignore any item that is about something else sharing the name (news searches match words, not organisations). A culture item needs an exact quote from the TEXT; if none, leave it out. Never use outside knowledge.`, TOK_CAP);
+      const d=grabJSON(txt)||{};
+      const flat=src.toLowerCase().replace(/\s+/g,' ');
+      r={ now:(d.now||[]).filter(x=>x&&x.what).slice(0,3),
+          // A quote that is not really in the fetched text is dropped, item and all.
+          culture:(d.culture||[]).filter(x=>x && CULTURE_ITEMS.some(c=>c[0]===x.k) && x.quote && flat.includes(String(x.quote).toLowerCase().replace(/\s+/g,' ').slice(0,60))).slice(0,6),
+          activity:['weekly','monthly','quiet'].includes(d.activity)?d.activity:'unknown', summary:String(d.summary||'').slice(0,200) };
+    }
+    j.pulse=JSON.stringify({ at:today(), site:raw.site, verified:!!raw.verified, socials:raw.socials||{}, careers:raw.careers?raw.careers.url:null, ...r });
+    track('pulse_read',{ now:r.now.length, culture:r.culture.length, verified:!!raw.verified });
+    await save(); render(); say('');
+  }catch(e){
+    if(e.message==='NEEDKEY'){ keyDialog(()=>pulseCompany(i)); return; }
+    j.pulse=JSON.stringify({ at:today(), error:e.message }); await save(); render();
+  }
+}
+/* The card's account of it. */
+function pulseHtml(j, pr){
+  const p=pulseOf(j); if(!p) return '';
+  if(p.error) return `<div class="ct-meta" style="color:var(--due)">${esc(p.error)}</div>`;
+  const c=workOf(pr).culture, mark=k=>c[k]==='must'||c[k]==='good'?' ✓':c[k]==='avoid'?' ✗':'';
+  const soc=Object.entries(p.socials||{}).filter(([,u])=>u).map(([k,u])=>`<a class="lnk" href="${esc(u)}" target="_blank" rel="noopener">${esc(k)}</a>`).join(' · ');
+  return `${p.now&&p.now.length?`<div style="font-size:12px;margin-top:5px"><b>Right now:</b> ${p.now.map(n=>`${esc(n.what)} <span style="color:var(--dim)">(${esc(n.when||'')}, ${esc(n.source||'')})</span>`).join(' · ')}</div>`:''}
+    ${p.culture&&p.culture.length?`<div style="font-size:12px;margin-top:3px"><b>How they work:</b> ${p.culture.map(x=>`<span title="“${esc(x.quote)}”">${esc(labelOf(CULTURE_ITEMS,x.k).toLowerCase())}${mark(x.k)}</span>`).join(' · ')}</div>`:''}
+    <div class="ct-meta">${p.site?`<a class="lnk" href="${esc(/^https?:/.test(p.site)?p.site:'https://'+p.site)}" target="_blank" rel="noopener">website</a>${p.verified?'':' (unconfirmed)'}`:''}${soc?' · '+soc:''}${p.careers?` · <a class="lnk" href="${esc(p.careers)}" target="_blank" rel="noopener">careers page</a>`:''} · ${esc(p.activity==='unknown'?'activity unknown':'posts '+p.activity)} · checked ${esc(p.at)}</div>`;
+}
+
 function renderCompanies(){
   const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const conns=loadConns();
   const targets=p.jobs.map((j,i)=>({j,i})).filter(x => chOf(x.j)==='cold' && isOpen(x.j))
-    .map(x => ({ ...x, warm: warmFor(x.j.company, conns) }))
-    .sort((a,b) => (b.warm.length>0) - (a.warm.length>0) || rankOf(b.j) - rankOf(a.j));
+    .map(x => ({ ...x, warm: warmFor(x.j.company, conns), fit: cultureFit(pulseOf(x.j), prof), now: ((pulseOf(x.j)||{}).now||[]).length }))
+    // Someone you know there first; then how the place works for you; then
+    // whether something is happening there now; then the old ranking.
+    .sort((a,b) => (b.warm.length>0) - (a.warm.length>0) || (b.fit??0) - (a.fit??0) || (b.now>0) - (a.now>0) || rankOf(b.j) - rankOf(a.j));
   const have=new Set(p.jobs.map(j=>normCo(j.company)));
   const net=networkCompanies(conns, trk, have).slice(0,10);
   const person=x=>`<div class="ct-meta">${esc(x.n)}${x.p?` — ${esc(x.p)}`:''}</div>`;
@@ -7278,10 +7371,12 @@ function renderCompanies(){
         <div class="ct-nm">${esc(j.company)} ${warm.length?`<span class="pill2 go">you know ${warm.length}</span>`:`<span class="pill2">cold</span>`}</div>
         <div style="font-size:12px;color:var(--muted);margin-top:3px">${esc(String(j.description||'').slice(0,220))}</div>
         ${warm.slice(0,3).map(person).join('')}
+        ${pulseHtml(j, prof)}
       </div>
       <div class="btn-row" style="gap:6px">
         ${warm.length?`<button class="btn-go btn-sm" data-intro="${i}">Ask ${esc(warm[0].n.split(' ')[0])} for an intro</button>`:''}
         <button class="btn-sm ${warm.length?'':'btn-go'}" data-act="pitch" data-i="${i}">Draft an approach</button>
+        <button class="btn-sm" data-pulse="${i}" ${busy?'disabled':''}>${pulseOf(j)?'Check again':'What’s new here?'}</button>
         <button class="btn-sm" data-act="goto" data-i="${i}">Open</button></div></div>`;
   return `<div class="listhead"><span style="color:var(--muted);font-size:12px">Most work is never advertised. It is reached through a company — best of all through someone who already works there.</span></div>
     <div class="btn-row" style="margin:10px 0 14px;gap:8px;flex-wrap:wrap">
@@ -7294,6 +7389,7 @@ function renderCompanies(){
           <div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="coWork">Build my work model</button></div></div>`}
     ${conns.length?'':`<p class="hint" style="margin:-6px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
     ${targets.length?`<div class="eyebrow" style="margin:4px 0 6px">Companies to approach · ${targets.length}${targets.some(t=>t.warm.length)?` · ${targets.filter(t=>t.warm.length).length} where you know someone`:''}</div>
+      ${targets.some(t=>pulseStale(t.j))?`<div class="btn-row" style="margin:0 0 8px"><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} of them — about 2 AI credits each</button></div>`:''}
       ${targets.map(card).join('')}`
       :`<div class="empty"><b>No companies yet</b>Suggest some for this direction${conns.length?', or add one from your network below':', and add your LinkedIn connections to see where you already know someone'}.</div>`}
     ${net.length?`<div class="eyebrow" style="margin:18px 0 6px">From your network — companies where you already know people</div>
@@ -7324,6 +7420,14 @@ function bindCompanies(){
     addJobs([j]); track('network_company_added'); await save(); render();
   });
   document.querySelectorAll('[data-intro]').forEach(x=>x.onclick=()=>introDialog(+x.dataset.intro));
+  document.querySelectorAll('[data-pulse]').forEach(x=>x.onclick=async()=>{ if(busy) return; busy=true; render(); try{ await pulseCompany(+x.dataset.pulse); } finally{ busy=false; render(); } });
+  const pa=$('#coPulseAll'); if(pa) pa.onclick=async()=>{
+    if(busy) return;
+    const stale=p.jobs.map((j,i)=>({j,i})).filter(x=>chOf(x.j)==='cold' && isOpen(x.j) && pulseStale(x.j)).slice(0,10);
+    busy=true; render();
+    try{ for(let k=0;k<stale.length;k++){ setInfo(`Checking ${k+1} of ${stale.length}: ${stale[k].j.company}…`); await pulseCompany(stale[k].i, true); } }
+    finally{ busy=false; setInfo(''); render(); }
+  };
   const wm=$('#coWork'); if(wm) wm.onclick=e=>{ e.preventDefault(); workModelDialog(); };
 }
 
@@ -7347,7 +7451,7 @@ FROM: ${prof.name||'the sender'} — ${prof.headline||''}. What they do best: ${
 They are looking for: ${trk.label||'new work'}${trk.mode?` (${trk.mode})`:''}.
 TO: ${who.n}, ${who.p||'works'} at ${j.company}.
 
-Rules: 4 sentences at most. Warm and plain, no flattery. Ask for one small thing -- 15 minutes of advice about ${j.company}, or who there would be the right person to talk to -- never for a job outright. Mention one concrete thing the sender has done that is relevant. Use ONLY the facts above. Return the message text only.`, 400);
+Rules: 4 sentences at most. Warm and plain, no flattery. Ask for one small thing -- 15 minutes of advice about ${j.company}, or who there would be the right person to talk to -- never for a job outright. Mention one concrete thing the sender has done that is relevant. Use ONLY the facts above. Return the message text only.`, 1500);
       out.innerHTML=`<textarea rows="7" style="margin-top:10px">${esc(String(txt||'').trim())}</textarea>
         <div class="btn-row" style="margin-top:8px"><button class="btn-sm" id="inCopy">Copy</button>
         ${who.u?`<a class="btn-sm" href="${esc(who.u)}" target="_blank" rel="noopener">Open ${esc(who.n.split(' ')[0])}'s LinkedIn ↗</a>`:''}
@@ -7504,7 +7608,7 @@ Return ONLY JSON:
  "linkedin_headline":"max 220 chars, title | 2-3 backed terms | what they are known for",
  "designation":"the single advertised title that matches their real level and work",
  "key_skills":["8-12 items, backed terms first, each something the person actually has"],
- "summary":"max 600 chars, first person, plain, opens with what they do and for whom"}`, 900);
+ "summary":"max 600 chars, first person, plain, opens with what they do and for whom"}`, TOK_CAP);
       const j=grabJSON(txt);
       const row=(lab,val,max)=>val?`<label class="lab" style="margin-top:10px">${lab}${max?` <span style="color:var(--dim)">(${String(val).length}/${max})</span>`:''}</label>
         <div style="display:flex;gap:6px;align-items:flex-start"><textarea rows="${String(val).length>140?3:2}" readonly style="flex:1">${esc(val)}</textarea><button class="btn-sm" data-copy>Copy</button></div>`:'';
@@ -8158,7 +8262,8 @@ ${senderBlock(prof,p.raw,'WHO THEY ARE',true)}
 
 TARGET COMPANY: ${j.company}
 TARGET ROLE: ${j.title}
-CONTEXT: ${String(j.description||'').slice(0,900)}
+CONTEXT: ${String(j.description||'').slice(0,900)}${(()=>{ const pu=pulseOf(j); return pu&&!pu.error&&(pu.now||[]).length
+  ? `\nWHAT THEY ARE DOING NOW (from their own news and posts -- mention the most relevant one naturally, never invent detail): ${pu.now.map(n=>n.what+' ('+(n.when||'')+')').join('; ')}` : ''; })()}
 
 ADDRESSED TO: ${cts.length ? cts.map(c=>`${c.name||'(unnamed)'}${c.role?', '+c.role:''}`).join('; ') : 'nobody identified yet \u2014 keep it addressable to any reader'}
 
@@ -8204,7 +8309,8 @@ ${senderBlock(prof,p.raw,"WHO IT'S FROM",false)}
 WHO IT'S TO: ${c.name||'(name unknown)'}${c.role?', '+c.role:''} at ${j.company}
 
 TARGET ROLE: ${j.title}
-CONTEXT: ${String(j.description||'').slice(0,900)}
+CONTEXT: ${String(j.description||'').slice(0,900)}${(()=>{ const pu=pulseOf(j); return pu&&!pu.error&&(pu.now||[]).length
+  ? `\nWHAT THEY ARE DOING NOW (from their own news and posts -- mention the most relevant one naturally, never invent detail): ${pu.now.map(n=>n.what+' ('+(n.when||'')+')').join('; ')}` : ''; })()}
 
 CHANNEL: ${chOf(j)==='cold'
  ? 'COLD — there is NO job posting. Do not refer to "the role" or "your posting" as if one exists. This is an unsolicited approach; make them want to reply.'

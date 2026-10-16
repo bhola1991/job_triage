@@ -279,6 +279,50 @@ const getJson = async (url: string, init: RequestInit = {}) => {
   if (!r.ok) throw new Error(`${host} ${r.status}: ${redact((await r.text()).slice(0, 100))}`);
   return r.json();
 };
+/* ── company_pulse: reading a company's own public pages ─────────────────────
+   Only a public http(s) site on a normal name and port: never an IP address,
+   localhost or an internal name, so a caller cannot point this server at
+   anything but the open web. */
+const PULSE_PER_DAY = 40;
+function safeSite(raw: string): string {
+  let s = raw.trim(); if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  try {
+    const u = new URL(s);
+    if (!/^https?:$/.test(u.protocol) || u.port || u.username || u.password) return "";
+    const h = u.hostname.toLowerCase();
+    if (!h.includes(".") || /^[\d.]+$/.test(h) || h.includes(":") || /(^|\.)(localhost|local|internal|lan|home|arpa)$/.test(h)) return "";
+    return `${u.protocol}//${h}/`;
+  } catch { return ""; }
+}
+async function fetchText(url: string, max: number): Promise<{ text: string; url: string } | null> {
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; jobtriage/1.0)", Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5" },
+      redirect: "follow", signal: AbortSignal.timeout(10000) });
+    if (!r.ok || !r.body) return null;
+    if (!safeSite(r.url)) return null;               // a redirect off the open web is not followed into
+    const reader = r.body.getReader(); const parts: Uint8Array[] = []; let n = 0;
+    while (n < max) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+    reader.cancel().catch(() => {});
+    const buf = new Uint8Array(Math.min(n, max)); let o = 0;
+    for (const p of parts) { const take = Math.min(p.length, buf.length - o); buf.set(p.subarray(0, take), o); o += take; if (o >= buf.length) break; }
+    return { text: new TextDecoder().decode(buf), url: r.url };
+  } catch { return null; }
+}
+const textOf = (h: string) => String(h || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ")
+  .replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#39;|&apos;/g, "'").replace(/&quot;/g, '"')
+  .replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d)).replace(/&[a-z]+;/g, " ").replace(/\s+/g, " ").trim();
+function attr(h: string, tag: RegExp, name: string): string {
+  const t = tag.exec(h)?.[0] || ""; return textOf((new RegExp(`${name}=["']([^"']*)["']`, "i").exec(t) || [])[1] || "");
+}
+/* RSS items or Atom entries: title, date and a little text. */
+function feedItems(xml: string, n: number) {
+  return [...String(xml).matchAll(/<(item|entry)[\s>][\s\S]*?<\/\1>/g)].slice(0, n).map((m) => {
+    const x = m[0], g = (re: RegExp) => textOf((re.exec(x) || [])[1] || "");
+    return { title: g(/<title[^>]*>([\s\S]*?)<\/title>/), date: (g(/<(?:pubDate|published|updated)>([\s\S]*?)<\//) || "").slice(0, 25),
+      source: g(/<source[^>]*>([\s\S]*?)<\/source>/), text: g(/<(?:description|summary|media:description)[^>]*>([\s\S]*?)<\//).slice(0, 240) };
+  }).filter((i) => i.title);
+}
 const ADZUNA_COUNTRIES = new Set(["gb", "us", "ca", "au", "de", "fr", "es", "it", "nl", "at", "be", "br", "in", "mx", "nz", "pl", "sg", "za"]);
 
 async function adzuna(title: string, where: string, country: string, since: number): Promise<Job[] | null> {
@@ -1356,6 +1400,81 @@ async function handle(req: Request): Promise<Response> {
         }
         await depositIndex(jobs);
         return json({ jobs, runId: run?.id || null, queries: run?.id ? queries : [], scrapers, searchId, since: 30, free: true, fill: true, sourceErrors: errors });
+      }
+
+      /* What a company is doing now, from what it publishes itself.
+
+         For the Companies tab: the person is about to approach this place,
+         and a message that mentions last week's new programme is not a cold
+         message. Reads only public, free sources, and only what is allowed
+         to be read: the company's own site (to find its accounts, careers
+         page and feed), Google News' public feed for its name, its blog feed,
+         its YouTube channel feed and a public Telegram channel's web view.
+         LinkedIn, X and Facebook are deliberately absent -- see the Companies
+         notes in index.html.
+
+         No model call and no credit here: it returns trimmed text, and the
+         app's own AI call (charged as usual) reads it. Bounded by PULSE_PER_DAY
+         per person, logged in usage_events like everything else. */
+      case "company_pulse": {
+        const company = String(b.company || "").trim().slice(0, 120);
+        if (!company) throw new Http(400, "a company name");
+        const today = new Date().toISOString().slice(0, 10);
+        const { count } = await admin.from("usage_events").select("id", { count: "exact", head: true })
+          .eq("user_id", user).eq("source", "pulse").gte("created_at", today);
+        if ((count || 0) >= PULSE_PER_DAY) throw new Http(429, `That is ${PULSE_PER_DAY} company checks today — more tomorrow.`);
+        await logUsage([{ user_id: user, kind: "api", source: "pulse", units: 1, cost_inr: 0, note: company.slice(0, 80) }]);
+
+        const site = safeSite(String(b.site || ""));
+        const out: Any = { company, site: site || null, verified: false, socials: {}, news: [], blog: [], youtube: [], telegram: [], careers: null, about: null };
+        const words = company.toLowerCase().replace(/[^a-z0-9 ]/g, " ").split(/\s+/)
+          .filter((w) => w.length > 2 && !/^(pvt|ltd|limited|private|the|and|inc|llp|india|foundation|trust|society)$/.test(w));
+
+        if (site) {
+          const home = await fetchText(site, 400_000);
+          if (home) {
+            const h = home.text;
+            const title = textOf((/<title[^>]*>([\s\S]*?)<\/title>/i.exec(h) || [])[1] || "");
+            const desc = attr(h, /<meta[^>]+name=["']description["'][^>]*>/i, "content") || attr(h, /<meta[^>]+property=["']og:description["'][^>]*>/i, "content");
+            const ogName = attr(h, /<meta[^>]+property=["']og:site_name["'][^>]*>/i, "content");
+            const hay = `${title} ${ogName} ${home.url}`.toLowerCase();
+            out.verified = words.length > 0 && words.some((w) => hay.includes(w));
+            out.about = textOf(`${title}. ${desc}`).slice(0, 400);
+            const links = [...h.matchAll(/href=["']([^"'#]+)["']/gi)].map((m) => { try { return new URL(m[1], home.url).href; } catch { return ""; } }).filter(Boolean);
+            const pickL = (re: RegExp) => links.find((u) => re.test(u)) || null;
+            out.socials = {
+              instagram: pickL(/^https?:\/\/(www\.)?instagram\.com\/(?!p\/|reel\/|explore\/)[A-Za-z0-9_.]+\/?$/i),
+              linkedin: pickL(/^https?:\/\/([a-z]+\.)?linkedin\.com\/(company|school)\/[^/?]+/i),
+              facebook: pickL(/^https?:\/\/(www\.|m\.)?facebook\.com\/(?!sharer|share|dialog)[^/?]+\/?$/i),
+              youtube: pickL(/^https?:\/\/(www\.)?youtube\.com\/(channel\/UC|@|c\/|user\/)[^?]+/i),
+              x: pickL(/^https?:\/\/(www\.)?(twitter|x)\.com\/(?!intent|share|home)[A-Za-z0-9_]+\/?$/i),
+              telegram: pickL(/^https?:\/\/(t\.me|telegram\.me)\/[A-Za-z0-9_]{4,}\/?$/i),
+            };
+            const host = new URL(home.url).hostname;
+            const careers = links.find((u) => { try { const x = new URL(u); return x.hostname.endsWith(host.replace(/^www\./, "")) && /career|jobs?\b|join|work-with|vacanc|opportunit|we-are-hiring/i.test(x.pathname); } catch { return false; } });
+            if (careers) { const c = await fetchText(careers, 300_000); if (c) out.careers = { url: careers, text: textOf(c.text).slice(0, 1500) }; }
+            const feedHref = attr(h, /<link[^>]+type=["']application\/(?:rss|atom)\+xml["'][^>]*>/i, "href");
+            if (feedHref) { try { out.blog = feedItems((await fetchText(new URL(feedHref, home.url).href, 300_000))?.text || "", 5); } catch { /* none */ } }
+          }
+        }
+        // News: Google News' public feed for the exact name, last 60 days, Indian edition.
+        const q = encodeURIComponent(`"${company}" when:60d`);
+        out.news = feedItems((await fetchText(`https://news.google.com/rss/search?q=${q}&hl=en-IN&gl=IN&ceid=IN:en`, 300_000))?.text || "", 8);
+        // YouTube: a channel's public feed needs its id, which its page carries.
+        if (out.socials.youtube) {
+          let id = (/channel\/(UC[\w-]{20,})/.exec(out.socials.youtube) || [])[1];
+          if (!id) id = (/"(?:channelId|externalId)":"(UC[\w-]{20,})"/.exec((await fetchText(out.socials.youtube, 600_000))?.text || "") || [])[1];
+          if (id) out.youtube = feedItems((await fetchText(`https://www.youtube.com/feeds/videos.xml?channel_id=${id}`, 200_000))?.text || "", 5);
+        }
+        // Telegram: a public channel's web view, newest last.
+        if (out.socials.telegram) {
+          const name = out.socials.telegram.replace(/\/+$/, "").split("/").pop();
+          const t = (await fetchText(`https://t.me/s/${name}`, 400_000))?.text || "";
+          const texts = [...t.matchAll(/tgme_widget_message_text[^>]*>([\s\S]*?)<\/div>/g)].map((m) => textOf(m[1]).slice(0, 300));
+          const dates = [...t.matchAll(/<time[^>]+datetime="([^"]+)"/g)].map((m) => m[1].slice(0, 10));
+          out.telegram = texts.slice(-6).map((text, k) => ({ title: text, date: dates.slice(-6)[k] || "" })).reverse();
+        }
+        return json(out);
       }
 
       case "index_search": {
