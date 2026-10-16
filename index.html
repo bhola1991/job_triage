@@ -3253,7 +3253,7 @@ Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
 THE DIRECTION THEY ARE PURSUING: ${trk.label||'general'}${trk.why?` — ${trk.why}`:''}
 ${workSummary(prof).length?`WHAT MATTERS TO THEM AND WHERE THEY THRIVE (their own choices):
 ${workSummary(prof).join('\n')}
-Weight this as heavily as skills. Never suggest a place that is known to be what they want to avoid, or that cannot meet a non-negotiable. Say in "why" how the place works, as far as you actually know it -- and say so when you do not.`:''}
+Weight this as heavily as skills. Never suggest a place that is known to be what they want to avoid, or that cannot meet a non-negotiable. For EVERY company fill "how_they_work": what is genuinely known about how the place works, named against the choices above ("small and flat, which you want", "known for long hours, which you avoid"). If you do not actually know, write "not known yet" -- never invent a culture.`:''}
 ${(()=>{ const net=networkCompanies(loadConns(), trk, new Set()).slice(0,30); return net.length
   ? `COMPANIES WHERE THEY ALREADY KNOW SOMEONE: ${net.map(g=>g.name).join('; ')}\nInclude any of these that genuinely fit -- a warm introduction beats any cold approach -- but never one that does not fit.` : ''; })()}
 ${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
@@ -3266,22 +3266,26 @@ Return ONLY a JSON object, no preamble, no markdown fences:
   "why":"one sentence, max 22 words: why THIS person specifically, not a generic candidate",
   "overlap":"the single concrete thing in their background that this company would care about",
   "odds":"strong|fair|longshot",
+  "how_they_work":"how the place works, against what they said matters to them -- or \"not known yet\"",
   "website":"the official website domain, e.g. example.org -- or empty if you are not sure; never guess"
 }]}
 
-Give 16 to 24 companies. Rules that matter:
+Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a longer list ran the model past its token ceiling). Rules that matter:
 
 1. Weight heavily toward the person's DOMAIN, not just their job title. Someone who has run operations in a particular industry is far more valuable to companies in that industry than to a generic employer, even when the role title is identical. Find the companies where their specific background is an advantage rather than a neutral.
 
 2. Spread across reachability. Include some obvious large names, but the majority should be companies small or specific enough that a well-aimed message actually gets read. A list of famous companies is useless.
 
-3. Favour their own region and genuinely remote-friendly employers. A company that will not hire someone in ${prof.location||'their location'} is not a real target.
+3. LOCAL FIRST. They are based in ${prof.location||'their location'}. At least a third of the list must be organisations based in, or with a real team in, that city or its wider region${/kolkata|calcutta|west bengal/i.test(prof.location||'')?' (Kolkata and West Bengal first, then the rest of East and North-East India)':''} -- companies, nonprofits, institutions, agencies. If fewer genuinely fitting local ones exist, give the ones that do and say so in their "why". Then remote-friendly employers that hire people where they live. A company that will not hire someone in ${prof.location||'their location'} is not a real target.
 
-4. Prefer companies that plausibly use Greenhouse, Lever or Ashby - startups and scale-ups - since their openings can be checked automatically. But include a few larger or regional ones if they are genuinely strong fits.
+4. Never pick a company for being easy to track. Being a startup on a known applicant-tracking system is not a reason; fit and reach are.
 
 5. "odds" is about whether an approach from THIS person converts, considering their gaps, not about company quality.
 
-6. Real companies only, named exactly. No placeholders, no invented names, no "various startups". If unsure a company exists, leave it out.`, TOK_CAP);
+6. Real companies only, named exactly. No placeholders, no invented names, no "various startups". If unsure a company exists, leave it out.`, TOK_CAP, 'flash');
+  /* flash, not the default: with local-first and how_they_work, the larger
+     model's hidden reasoning ran past the 16,000-token ceiling every time on a
+     real profile (2026-10-17); flash answered in about a minute, and well. */
   const d = grabJSON(txt);
   const list = Array.isArray(d) ? d : (d.companies||[]);
   return list.filter(c=>c&&c.name).slice(0,24);
@@ -3296,6 +3300,7 @@ function companyRow(c,i){
         <span class="tag ${tag}" style="margin-left:6px">${esc(c.odds||'')}</span></div>
       <div style="font-size:12px;color:var(--muted);margin-top:2px">${esc(c.why||'')}</div>
       ${c.overlap?`<div style="font-size:11px;color:var(--cold);margin-top:3px">↳ ${esc(c.overlap)}</div>`:''}
+      ${c.how_they_work?`<div style="font-size:11px;color:var(--muted);margin-top:3px">How they work: ${esc(c.how_they_work)}</div>`:''}
       <div class="ct-meta" style="margin-top:3px">${esc(c.location||'')}${c.stage?' · '+esc(c.stage):''}</div>
     </div></label>`;
 }
@@ -3352,7 +3357,7 @@ async function addSuggested(list, checkHiring){
   const cold=list.map(c=>{
     const j=blank();
     j.company=c.name; j.title='Cold approach'; j.location=c.location||'';
-    j.description=[c.why,c.overlap?('Your overlap: '+c.overlap):'',c.stage?('Stage: '+c.stage):'']
+    j.description=[c.why,c.overlap?('Your overlap: '+c.overlap):'',c.how_they_work?('How they work: '+c.how_they_work):'',c.stage?('Stage: '+c.stage):'']
       .filter(Boolean).join(' — ');
     j.source='Suggested'; j.channel='cold'; j.stage='new';
     j.notes=c.odds?('Odds: '+c.odds):'';
@@ -7313,6 +7318,8 @@ async function pulseCompany(i, quiet){
       ...(raw.youtube||[]).map(n=>`YOUTUBE ${n.date}: ${n.title}`),
       ...(raw.telegram||[]).map(n=>`TELEGRAM ${n.date}: ${n.title}`)].filter(Boolean).join('\n').slice(0,6000);
     let r={ now:[], culture:[], activity:'unknown', summary:'' };
+    const trk=(p.profile.tracks||[]).find(t=>t.id===p.track)||{};
+    const forWhom=[trk.label, (trk.titles||[]).slice(0,5).join(', '), p.profile.headline].filter(Boolean).join(' — ');
     if(src.trim()){
       const txt=await claude(`Read what one organisation has published recently and report ONLY what the text says.
 
@@ -7324,14 +7331,17 @@ ${src}
 WAYS OF WORKING to look for (use these keys only): ${CULTURE_ITEMS.map(([k,l])=>k+'='+l).join('; ')}
 
 Return ONLY JSON:
-{"now":[{"what":"something happening now that would make them need help or hire: hiring, a new programme, a campaign, an event, funding -- max 14 words","when":"YYYY-MM-DD or month","source":"news|blog|careers|youtube|telegram"}],
+{"now":[{"what":"something happening now that would make them need help or hire: hiring, a new programme, a campaign, an event, funding -- max 14 words","when":"YYYY-MM-DD or month","source":"news|blog|careers|youtube|telegram","fits":"true ONLY when it is an opening, project or need that this person could fill: ${forWhom}"}],
  "culture":[{"k":"exactly one of: ${CULTURE_ITEMS.map(c=>c[0]).join('|')} -- the organisation's own value names are NOT keys; map each to the nearest key","quote":"the EXACT words from the text that show it, max 15 words"}],
  "activity":"weekly|monthly|quiet|unknown -- how often they publish, judged from the dates",
  "summary":"one line, max 20 words: what they are doing now"}
 Rules: at most 3 "now" items, newest first, nothing older than 60 days. Ignore any item that is about something else sharing the name (news searches match words, not organisations). A culture item needs an exact quote from the TEXT; if none, leave it out. Never use outside knowledge.`, TOK_CAP);
       const d=grabJSON(txt)||{};
       const flat=src.toLowerCase().replace(/\s+/g,' ');
-      r={ now:(d.now||[]).filter(x=>x&&x.what).slice(0,3),
+      // What fits this person first: a Legal Executive opening tells them the
+      // place is hiring, but it is not theirs to apply for.
+      r={ now:(d.now||[]).filter(x=>x&&x.what).map(x=>({ ...x, fits: x.fits===true||x.fits==='true' }))
+            .sort((a,b)=>b.fits-a.fits).slice(0,3),
           // A quote that is not really in the fetched text is dropped, item and all.
           culture:(d.culture||[]).filter(x=>x && CULTURE_ITEMS.some(c=>c[0]===x.k) && x.quote && flat.includes(String(x.quote).toLowerCase().replace(/\s+/g,' ').slice(0,60))).slice(0,6),
           activity:['weekly','monthly','quiet'].includes(d.activity)?d.activity:'unknown', summary:String(d.summary||'').slice(0,200) };
@@ -7350,7 +7360,7 @@ function pulseHtml(j, pr){
   if(p.error) return `<div class="ct-meta" style="color:var(--due)">${esc(p.error)}</div>`;
   const c=workOf(pr).culture, mark=k=>c[k]==='must'||c[k]==='good'?' ✓':c[k]==='avoid'?' ✗':'';
   const soc=Object.entries(p.socials||{}).filter(([,u])=>u).map(([k,u])=>`<a class="lnk" href="${esc(u)}" target="_blank" rel="noopener">${esc(k)}</a>`).join(' · ');
-  return `${p.now&&p.now.length?`<div style="font-size:12px;margin-top:5px"><b>Right now:</b> ${p.now.map(n=>`${esc(n.what)} <span style="color:var(--dim)">(${esc(n.when||'')}, ${esc(n.source||'')})</span>`).join(' · ')}</div>`:''}
+  return `${p.now&&p.now.length?`<div style="font-size:12px;margin-top:5px"><b>Right now:</b> ${p.now.map(n=>`${n.fits?'<span class="pill2 go">for you</span> ':''}${esc(n.what)} <span style="color:var(--dim)">(${esc(n.when||'')}, ${esc(n.source||'')})</span>`).join(' · ')}</div>`:''}
     ${p.culture&&p.culture.length?`<div style="font-size:12px;margin-top:3px"><b>How they work:</b> ${p.culture.map(x=>`<span title="“${esc(x.quote)}”">${esc(labelOf(CULTURE_ITEMS,x.k).toLowerCase())}${mark(x.k)}</span>`).join(' · ')}</div>`:''}
     <div class="ct-meta">${p.site?`<a class="lnk" href="${esc(/^https?:/.test(p.site)?p.site:'https://'+p.site)}" target="_blank" rel="noopener">website</a>${p.verified?'':' (unconfirmed)'}`:''}${soc?' · '+soc:''}${p.careers?` · <a class="lnk" href="${esc(p.careers)}" target="_blank" rel="noopener">careers page</a>`:''} · ${esc(p.activity==='unknown'?'activity unknown':'posts '+p.activity)} · checked ${esc(p.at)}</div>`;
 }
@@ -7359,10 +7369,11 @@ function renderCompanies(){
   const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const conns=loadConns();
   const targets=p.jobs.map((j,i)=>({j,i})).filter(x => chOf(x.j)==='cold' && isOpen(x.j))
-    .map(x => ({ ...x, warm: warmFor(x.j.company, conns), fit: cultureFit(pulseOf(x.j), prof), now: ((pulseOf(x.j)||{}).now||[]).length }))
+    .map(x => ({ ...x, warm: warmFor(x.j.company, conns), fit: cultureFit(pulseOf(x.j), prof),
+                 now: ((pulseOf(x.j)||{}).now||[]).reduce((n,v)=>n+(v.fits?3:1),0) }))
     // Someone you know there first; then how the place works for you; then
     // whether something is happening there now; then the old ranking.
-    .sort((a,b) => (b.warm.length>0) - (a.warm.length>0) || (b.fit??0) - (a.fit??0) || (b.now>0) - (a.now>0) || rankOf(b.j) - rankOf(a.j));
+    .sort((a,b) => (b.warm.length>0) - (a.warm.length>0) || (b.fit??0) - (a.fit??0) || b.now - a.now || rankOf(b.j) - rankOf(a.j));
   const have=new Set(p.jobs.map(j=>normCo(j.company)));
   const net=networkCompanies(conns, trk, have).slice(0,10);
   const person=x=>`<div class="ct-meta">${esc(x.n)}${x.p?` — ${esc(x.p)}`:''}</div>`;
