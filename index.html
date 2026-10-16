@@ -719,8 +719,6 @@
   .empty::after{content:"";position:absolute;left:0;right:0;bottom:0;height:22px;border-top:1.5px solid var(--line);
     background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
   .empty b{display:block;color:var(--text);font-size:15px;font-weight:500;margin-bottom:6px}
-  .prog{height:2px;background:var(--panel2);border-radius:1px;overflow:hidden;margin-top:8px}
-  .prog i{display:block;height:100%;background:var(--signal);transition:width .3s}
 
   .modal{position:fixed;inset:0;background:var(--veil);display:flex;
     align-items:center;justify-content:center;padding:20px;z-index:50}
@@ -846,9 +844,24 @@
 
   .hint{font-size:11px;color:var(--dim);margin-top:6px;line-height:1.45}
   .err{color:var(--warn);font-size:12px;margin-top:8px;font-family:var(--mono)}
-  .spin{display:inline-block;width:11px;height:11px;border:2px solid var(--line);
-    border-top-color:var(--signal);border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
+  /* currentColor, so it shows on a filled button too: it was green on green. */
+  .spin{display:inline-block;width:11px;height:11px;border:2px solid currentColor;border-right-color:transparent;
+    border-radius:50%;animation:sp .7s linear infinite;vertical-align:-1px}
   @keyframes sp{to{transform:rotate(360deg)}}
+  /* Waiting: the one scene for a pause long enough to notice -- the boot splash
+     and a board search. The cast's car drives the ruled floor on the light tile
+     the people always stand on, so it reads the same in every theme. */
+  .wait{border:1.5px solid var(--line);border-radius:10px;background:var(--panel);overflow:hidden;margin-bottom:12px}
+  .wait-h{display:flex;align-items:center;gap:9px;padding:14px 16px 0;font-size:15px;font-weight:600;color:var(--text)}
+  .wait-s{padding:4px 16px 12px;font-family:var(--mono);font-size:12px;color:var(--muted);min-height:1.5em}
+  .road{position:relative;height:60px;background:var(--tile);border-top:1.5px solid var(--line)}
+  .road::after{content:"";position:absolute;left:0;right:0;bottom:0;height:18px;border-top:1.5px solid var(--hard);
+    background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
+  .road svg{position:absolute;bottom:17px;left:-80px;width:72px;height:auto;z-index:1;animation:drive 3.4s linear infinite}
+  @keyframes drive{to{left:100%}}
+  @media(prefers-reduced-motion:reduce){.road svg{left:calc(50% - 36px)}}   /* parked, not off-stage */
+  .prog{height:8px;background:var(--panel2);border:1.5px solid var(--line);border-radius:5px;overflow:hidden;margin-top:8px}
+  .prog i{display:block;height:100%;background:var(--go);transition:width .3s}
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 
   /* The clean direction. One thin even line on everything, plain cards with a
@@ -4406,7 +4419,7 @@ async function autoScore(){
 }
 
 function setInfo(t){ const e=$('#scoreInfo'); if(e) e.textContent=t; }
-function setSearchInfo(t){ const e=$('#searchInfo'); if(e) e.textContent=t; }
+function setSearchInfo(t){ SEARCH_TXT=t; for(const e of document.querySelectorAll('#searchInfo,#waitInfo')) e.textContent=t; }
 
 /* ═══ board search: every source's results, scored, 50+ kept ═══
    No cap on how many jobs a search adds. As each source's results land (liveBoard):
@@ -6223,6 +6236,18 @@ const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" str
    drawn: circle heads, capsule limbs, one stroke weight, flat fills. Their
    colours are ink on a drawing, not tokens, and mean nothing about a job. */
 const CAST = '<svg class="r-cast" viewBox="0 0 540 250" role="img" aria-label="The three job seekers and their car"><g><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#6B4A2F" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L91.1 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L91.1 138.4" stroke="#F5B700" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="91.1" cy="138.4" r="7" fill="#F2B79C" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#F2B79C" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#F2B79C" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M38.5 42 A21.5 21.5 0 0 1 81.5 42 Q60 27 38.5 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="45" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="62" y="40" width="13" height="10" rx="3" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M58 45 H62" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(96 25) scale(.9)"><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M50.0 148.0 L50.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M50.0 148.0 L50.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#14181A" stroke-width="21.0" stroke-linecap="round" fill="none"/><path d="M70.0 148.0 L70.0 222.0" stroke="#2F5BEA" stroke-width="16.0" stroke-linecap="round" fill="none"/><rect x="36" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="58" y="221" width="26" height="14" rx="7" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="80" rx="14" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L106.6 40.2" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L106.6 40.2" stroke="#E5484D" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="106.6" cy="40.2" r="7" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#8E5B3D" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#8E5B3D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="41.2" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="48.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="60.0" cy="22.0" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="71.5" cy="25.6" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="78.8" cy="35.2" r="9" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="2.2" fill="#14181A"/><circle cx="68" cy="46" r="2.2" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(188 0)"><rect x="35" y="24" width="50" height="78" rx="23" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M42.0 86.0 L28.9 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M42.0 86.0 L28.9 138.4" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="28.9" cy="138.4" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M51.0 178.0 L51.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M51.0 178.0 L51.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#14181A" stroke-width="15.0" stroke-linecap="round" fill="none"/><path d="M69.0 178.0 L69.0 224.0" stroke="#C98A68" stroke-width="10.0" stroke-linecap="round" fill="none"/><rect x="42" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="60" y="222" width="20" height="13" rx="6.5" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M40 128 H80 L90 180 H30 Z" fill="#E5484D" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="38" y="74" width="44" height="62" rx="14" fill="#1F9D55" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M78.0 86.0 L91.1 138.4" stroke="#14181A" stroke-width="18.0" stroke-linecap="round" fill="none"/><path d="M78.0 86.0 L91.1 138.4" stroke="#1F9D55" stroke-width="13.0" stroke-linecap="round" fill="none"/><circle cx="91.1" cy="138.4" r="7" fill="#C98A68" stroke="#14181A" stroke-width="2.5"/><path d="M60.0 64.0 L60.0 76.0" stroke="#14181A" stroke-width="14.0" stroke-linecap="round" fill="none"/><path d="M60.0 64.0 L60.0 76.0" stroke="#C98A68" stroke-width="9.0" stroke-linecap="round" fill="none"/><circle cx="60" cy="44" r="21" fill="#C98A68" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M39 42 A21 21 0 0 1 81 42 Q60 32 39 42 Z" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="52" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="68" cy="46" r="6.5" fill="none" stroke="#E5484D" stroke-width="3"/><circle cx="52" cy="46" r="1.8" fill="#14181A"/><circle cx="68" cy="46" r="1.8" fill="#14181A"/><path d="M54 55 Q60 60 66 55" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g><g transform="translate(300 119) scale(.9)"><path d="M52 72 Q58 22 130 22 Q202 22 208 72 Z" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><rect x="10" y="70" width="240" height="46" rx="16" fill="#F5B700" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M72 64 Q78 36 124 34 V64 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M136 34 Q182 36 188 64 H136 Z" fill="#B9C6D3" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><path d="M130 70 V114 M22 92 H34" fill="none" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="68" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="20" fill="#14181A" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/><circle cx="192" cy="114" r="8" fill="#FFFFFF" stroke="#14181A" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/></g></svg>';
+
+/* Waiting.
+   The car alone, lifted out of CAST, for the waiting scene (.wait, .road). */
+const CAR_SVG = '<svg viewBox="6 18 250 120" aria-hidden="true">'
+  + CAST.match(/<g transform="translate\(300 119\) scale\(\.9\)">(.*?)<\/g>/)[1] + '</svg>';
+const searching = () => busy && STOP!==null;   // a board search, not scoring
+let SEARCH_TXT = '';                             // survives render(); setSearchInfo writes it
+function waitScene(head, sub, id){
+  return `<div class="wait" role="status"><div class="wait-h">${esc(head)}</div>
+    <div class="wait-s"${id?` id="${id}"`:''}>${esc(sub||'')}</div>
+    <div class="road">${CAR_SVG}</div></div>`;
+}
 /* Whether the rail is open. Remembered on a wide screen, where open is a
    layout; never on a phone, where open is a sheet over the page. */
 let RAIL = false;
@@ -6483,7 +6508,7 @@ function renderUnapplied(){
     ${gated.length} role${gated.length===1?'':'s'} matched your directions but ${gated.length===1?'was':'were'} removed by the limits you set.
     <div class="btn-row" style="margin-top:12px;justify-content:center">
       <button class="btn-sm" id="showGated">Show them anyway</button></div></div>`;
-  if(!mine.length) return `<div class="empty"><b>Nothing waiting</b>
+  if(!mine.length) return searching() ? '' : `<div class="empty"><b>Nothing waiting</b>
     Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>`;
 
   // Saved jobs move to the front, in their own section, and out of the bands.
@@ -6861,7 +6886,7 @@ function renderApp(){
           :`<div class="empty"><b>The map fills in after scoring</b>Add some jobs on the left, then hit score.</div>`}
       </div>`}
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
-      ${TAB!=='unapplied' ? '' : `<div>${renderUnapplied()}</div>`}
+      ${TAB!=='unapplied' ? '' : `<div>${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
@@ -8676,11 +8701,7 @@ function renderClaim(){
    rather than a loading one. */
 function splash(msg, sub){
   const r=$('#root'); if(!r) return;
-  r.innerHTML=`<div class="onb">
-    <div class="eyebrow">Job Triage</div>
-    <p class="lede" style="margin-top:14px"><span class="spin"></span> ${esc(msg)}</p>
-    ${sub?`<p class="say">${esc(sub)}</p>`:''}
-  </div>`;
+  r.innerHTML=`<div class="onb"><div class="eyebrow" style="margin-bottom:14px">Job Triage</div>${waitScene(msg, sub)}</div>`;
 }
 
 /* Landing from a "reset your password" email. Supabase has already put a
