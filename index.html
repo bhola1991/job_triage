@@ -1713,7 +1713,7 @@ function jobRow(j){
   JOB_JSON.forEach(c => { r[c] = jsonOut(j[c], extras, c); });
   // A company's website and what was last read about it (Companies tab):
   // no column of their own, so they ride in extras, which the read side restores.
-  ['site','pulse'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
+  ['site','pulse','dir'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
   r.extras = extras;
   return r;
 }
@@ -3580,6 +3580,9 @@ function addJobs(list){
   return n;
 }
 const isScored = j => String(j.ai_score||'').trim()!=='';
+/* Is this job the current direction's? Scored before jobs carried a direction,
+   or for a direction since deleted: it belongs to all of them (feedback #13). */
+const inDir = (j,p) => !j.dir || j.dir===p.track || !(p.profile.tracks||[]).some(t=>t.id===j.dir);
 
 /* Can you act on this row? Three legs, kept apart on purpose.
 
@@ -4318,6 +4321,9 @@ async function scoreBatch(batch, prof, track, maxTok, tier){
     conf:CONF_CODES[c]||c,
     flags:normFlags(it.f??it.flags),
     posted:p&&typeof p==='object'?p:null }; });
+  // A score is a judgement against one direction, so the job remembers which:
+  // the list shows a direction's own jobs, and the rest stay one fold away.
+  if(track) batch.forEach(b=>{ if(out[String(b.i)]) b.j.dir=String(track); });
   return out;
 }
 
@@ -6471,8 +6477,17 @@ const foldSect=(key,title,sub,rows)=>{
 
 function renderUnapplied(){
   const p=P();
-  const all=p.jobs.map((j,i)=>({j,i}))
+  const open=p.jobs.map((j,i)=>({j,i}))
     .filter(x=>isOpen(x.j) && stOf(x.j)==='new' && (CHFILT==='all'||chOf(x.j)===CHFILT));
+  const all=open.filter(x=>inDir(x.j,p));
+  /* Another direction's jobs: not in this list (switching direction changes
+     it), but the good ones are one fold away, named by their direction, since
+     a strong role elsewhere can beat a middling one here. Its score was made
+     against that direction, so it is labelled rather than ranked in. */
+  const dirName=id=>((p.profile.tracks||[]).find(t=>t.id===id)||{}).label||'another direction';
+  const elsewhere=sortList(open.filter(x=>!inDir(x.j,p) && isScored(x.j) && overBar(x.j,p.profile) && !redLine(x.j,p.profile)));
+  const elseFold=foldSect('elsewhere','Strong in your other directions',
+    `Over the bar for ${[...new Set(elsewhere.map(x=>dirName(x.j.dir)))].join(', ')}. Scored for that direction, not this one; switch direction to rank them.`,elsewhere);
   /* The red lines, applied HERE and nowhere else: at read time, over the list
      the queue is about to draw. Nothing is written, no score is altered, and
      unchecking a limit brings every one of these straight back on the next
@@ -6489,7 +6504,7 @@ function renderUnapplied(){
     <div class="btn-row" style="margin-top:12px;justify-content:center">
       <button class="btn-sm" id="showGated">Show them anyway</button></div></div>`;
   if(!mine.length) return `<div class="empty"><b>Nothing waiting</b>
-    Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>`;
+    Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>${elseFold}`;
 
   // Saved jobs move to the front, in their own section, and out of the bands.
   const saved=sortList(mine.filter(x=>isSaved(x.j)));
@@ -6526,7 +6541,8 @@ function renderUnapplied(){
       ${scored.length?`${scored.length} scored here, none at fit ${bars.workFit}+ and reachability ${bars.workReach}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
     </div>
     ${foldSect('below','Below the bar',`Scored under fit ${bars.workFit} or reachability ${bars.workReach}. Kept, because a score is a judgement rather than a fact.`,below)}
-    ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}`;
+    ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}
+    ${elseFold}`;
 }
 
 /* ═══ Applied — review ═══
@@ -6657,7 +6673,7 @@ function renderApp(){
      whichever it was, and a day spent on cold approaches is the same work --
      reading 0 of 3 after a morning of them would be a lie about the effort. */
   const doneToday=p.jobs.filter(j=>j.date_applied===today()).length;
-  const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
+  const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p)).length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
   const coldCount=p.jobs.filter(j=>isOpen(j)&&chOf(j)==='cold'&&stOf(j)==='new').length;
@@ -7702,9 +7718,9 @@ const familyShort = k => familyLabel(k).split(/[ ,]/)[0];   // "Film", "Nonprofi
 function mapItems(){
   const p=P(); if(!p) return [];
   let L=p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j));
-  if(MAPVIEW==='unapplied') L=L.filter(x=>isOpen(x.j)&&stOf(x.j)==='new');
+  if(MAPVIEW==='unapplied') L=L.filter(x=>isOpen(x.j)&&stOf(x.j)==='new'&&inDir(x.j,p));
   else if(MAPVIEW==='applied') L=L.filter(x=>['sent','live'].includes(stOf(x.j)) || (stOf(x.j)==='closed'&&x.j.date_applied));
-  else L=L.filter(x=>isOpen(x.j));
+  else L=L.filter(x=>isOpen(x.j)&&(stOf(x.j)!=='new'||inDir(x.j,p)));
   if(MAPVIEW==='families' && FAMSEL) L=L.filter(x=>familyOf(x.j)===FAMSEL);
   return L;
 }
