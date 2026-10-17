@@ -451,7 +451,8 @@ window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
 All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
 `girl` = the two poster characters, `they` = the lettering "they can't help
-you."), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+you.", `watch` = the standing woman in sunglasses, `juice` = the lettering "JOBS
+with Juice"), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
 come from it, so a change to the drawings is one edit. The poster woman's robe
 and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
 light values); the girl's on the cast red, pink (`--dir-1`, night value) and
@@ -459,7 +460,7 @@ an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
 not scripted in this repository**: they were made once from photographs of the
 drawings, so keep the SVGs rather than regenerating them.
 
-It is about 160 KB of path data inline. That is the cost of keeping the
+It is about 187 KB of path data inline. That is the cost of keeping the
 hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
@@ -488,6 +489,17 @@ adds the girl (`ART.girl`, `.wait-girl`) at the end of a taller road when it is
 given an id (a search); the car then drives up to her and starts over
 (`driveTo`). The boot splash passes no id and keeps the car alone. Under
 `prefers-reduced-motion` the car parks.
+
+**Two next-step banners carry a picture.** `nextStep()` marks the states that
+have art (`art:'score'` for "N jobs not scored yet", `art:'clear'` for "Clear for
+today"); `NEXT_ART` turns each into markup, and the banner is drawn inside a
+`.nextrow` with the picture in a `.next-art` tile beside it. The picture is never
+inside the banner, because the banner's edge carries an instruction colour. The
+woman in sunglasses watches scoring; the girl and the "JOBS with Juice" lettering
+mark a clear day. The tile is hidden under 700px. **Overdue and "a reply" have
+no entry on purpose**: they wait for two poses that are not drawn yet (the man
+glancing at a watch, the cast with both arms up). Add the art, then add the key
+to `NEXT_ART` and `art:` to `nextStep()`; nothing else changes.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
