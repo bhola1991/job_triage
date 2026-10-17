@@ -930,15 +930,15 @@
     background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
   .road .car{position:absolute;bottom:17px;left:-100px;width:78px;height:auto;z-index:1;animation:drive 3.4s linear infinite}
   @keyframes drive{to{left:100%}}
-  /* A search: a taller road, the girl waiting at the end of it, and the car
+  /* A wait with company: a taller road, someone at the end of it, and the car
      driving up to her before it starts over. She stands on the floor line. */
-  .wait.search .road{height:132px}
-  .wait-girl{position:absolute;right:28px;bottom:17px;height:104px;width:auto;z-index:1}
-  .wait.search .car{animation:driveTo 4.4s linear infinite}
+  .wait.co .road{height:132px}
+  .wait-pal{position:absolute;right:28px;bottom:17px;height:104px;width:auto;z-index:1}
+  .wait.co .car{animation:driveTo 4.4s linear infinite}
   @keyframes driveTo{0%{left:-100px;opacity:0}8%{opacity:1}86%{left:calc(100% - 172px);opacity:1}100%{left:calc(100% - 172px);opacity:0}}
   /* The two poster characters, standing over an empty view. */
   .empty-art{display:block;height:150px;width:auto;margin:0 auto 12px}
-  @media(prefers-reduced-motion:reduce){.road .car,.wait.search .car{animation:none;opacity:1;left:calc(50% - 36px)}}   /* parked, not off-stage */
+  @media(prefers-reduced-motion:reduce){.road .car,.wait.co .car{animation:none;opacity:1;left:calc(50% - 36px)}}   /* parked, not off-stage */
   .prog{height:8px;background:var(--panel2);border:1.5px solid var(--line);border-radius:5px;overflow:hidden;margin-top:8px}
   .prog i{display:block;height:100%;background:var(--go);transition:width .3s}
   @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -6411,13 +6411,15 @@ const CAST = artSvg('cast','r-cast','The three job seekers and their car');
 const CAR_SVG = artSvg('car','car');
 const searching = () => busy && STOP!==null;   // a board search, not scoring
 let SEARCH_TXT = '';                             // survives render(); setSearchInfo writes it
-function waitScene(head, sub, id){
-  /* A board search (it has an id for its live line) is the long wait: the girl
-     waits on the road and the car drives up to her. The boot splash is short,
-     so it keeps the car alone. */
-  return `<div class="wait${id?' search':''}" role="status"><div class="wait-h">${esc(head)}</div>
+function waitScene(head, sub, id, pal){
+  /* The wait has company: someone stands at the end of the road and the car
+     drives up to them. A board search (it has an id for its live line) is the
+     long wait, so the girl waits. The boot splash passes the woman in sunglasses,
+     who watches. Neither passed: the car alone. */
+  const who = pal || (id ? 'girl' : '');
+  return `<div class="wait${who?' co':''}" role="status"><div class="wait-h">${esc(head)}</div>
     <div class="wait-s"${id?` id="${id}"`:''}>${esc(sub||'')}</div>
-    <div class="road">${CAR_SVG}${id?artSvg('girl','wait-girl'):''}</div></div>`;
+    <div class="road">${CAR_SVG}${who?artSvg(who==='girl'?'girl':'watch','wait-pal'):''}</div></div>`;
 }
 /* Whether the rail is open. Remembered on a wide screen, where open is a
    layout; never on a phone, where open is a sheet over the page. */
@@ -9182,7 +9184,7 @@ function renderClaim(){
    rather than a loading one. */
 function splash(msg, sub){
   const r=$('#root'); if(!r) return;
-  r.innerHTML=`<div class="onb"><div class="eyebrow" style="margin-bottom:14px">Job Triage</div>${waitScene(msg, sub)}</div>`;
+  r.innerHTML=`<div class="onb"><div class="eyebrow" style="margin-bottom:14px">Job Triage</div>${waitScene(msg, sub, null, 'watch')}</div>`;
 }
 
 /* Landing from a "reset your password" email. Supabase has already put a

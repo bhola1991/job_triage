@@ -485,9 +485,11 @@ page. Returning visitors ("Welcome back.") and the reset, claim and recover
 screens do not get it.
 
 **A board search is the long wait, so it gets a second character.** `waitScene`
-adds the girl (`ART.girl`, `.wait-girl`) at the end of a taller road when it is
-given an id (a search); the car then drives up to her and starts over
-(`driveTo`). The boot splash passes no id and keeps the car alone. Under
+gives the wait a companion (`.wait.co`, `.wait-pal`): someone stands at the end
+of a taller road and the car drives up to them, then starts over (`driveTo`). A
+search (it has an id) gets the girl (`ART.girl`); the boot splash, shown while
+the app waits on the network, gets the woman in sunglasses (`ART.watch`), who
+watches. With neither the scene is the car alone. Under
 `prefers-reduced-motion` the car parks.
 
 **Two next-step banners carry a picture.** `nextStep()` marks the states that
