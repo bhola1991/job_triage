@@ -452,7 +452,7 @@ All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
 `girl` = the two poster characters, `they` = the lettering "they can't help
 you.", `watch` = the standing woman in sunglasses, `juice` = the lettering "JOBS
-with Juice"), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+with Juice", `man` = the standing man), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
 come from it, so a change to the drawings is one edit. The poster woman's robe
 and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
 light values); the girl's on the cast red, pink (`--dir-1`, night value) and
@@ -460,7 +460,7 @@ an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
 not scripted in this repository**: they were made once from photographs of the
 drawings, so keep the SVGs rather than regenerating them.
 
-It is about 187 KB of path data inline. That is the cost of keeping the
+It is about 195 KB of path data inline. That is the cost of keeping the
 hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
@@ -500,6 +500,21 @@ mark a clear day. The tile is hidden under 700px. **Overdue and "a reply" have
 no entry on purpose**: they wait for two poses that are not drawn yet (the man
 glancing at a watch, the cast with both arms up). Add the art, then add the key
 to `NEXT_ART` and `art:` to `nextStep()`; nothing else changes.
+
+**"Sent." is a beat, not a rule.** When a job is marked sent, `stageChange`
+asks `sentMoment()` whether this send earns a picture: the first three sends ever
+in this browser (`triage:sentart`), and the send that reaches the day's target
+(`DAY_FLOOR`). If so the toast is drawn with the man (`ART.man`) on a tile at its
+left, "Sent.", "The next move is theirs." and an "n of 3 today" eyebrow; every
+other send is the plain "Marked applied". Undo is always there. The man waits; he
+does not cheer.
+
+**"Saved on this device" is a calm card.** When a save only reaches this device,
+`softNote(reason)` draws the woman in pink (`ART.woman`) on a tile beside the
+message and a Try again button, instead of a red mono line. The reason is kept in
+`SOFT` and drawn again after every render, because each render rebuilds
+`#syncInfo`; it clears when a save gets through. It is a wait, not an alarm, so
+there is no red and no warning colour.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.

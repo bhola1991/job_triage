@@ -9,6 +9,7 @@ the sources for editing or for dragging into Figma. They are **not loaded by the
 | `car.svg` | the car alone (the waiting scene) |
 | `woman.svg` | the woman in pink (poster, "they can't help you") |
 | `they.svg` | the lettering "they can't help you." (first-time landing) |
+| `man.svg` | the man in the yellow shirt, hands in pockets (the Sent toast; traced small) |
 | `watch.svg` | the woman in green with red sunglasses, standing (scoring) |
 | `juice.svg` | the lettering "JOBS with Juice", traced small (clear for today) |
 | `girl.svg` | the girl in platform shoes (poster, "Jobs with Juice") |
