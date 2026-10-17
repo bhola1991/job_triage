@@ -375,7 +375,7 @@ there are almost no icons.
   - **The rim is load-bearing.** The ground is 1.27:1 against a black home screen and 1.03:1 against iOS dark, so without a `--line` rim the tile has no edge and dissolves into the wallpaper. Do not remove it. Inverting to a light ground is not the fix — it fails on a white background in exactly the same way.
   - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off. Measured: the scaled axes reach **203.7 against the 204.8 limit — a margin of 1.1px in 512**. Treat that as a floor, not as headroom; `selfcheck-icon.js` flags it even while passing.
 - The rail's icons: one `IC` map of path data in `index.html` and one `ic(name)` that wraps a path in the convention below. Thirteen today (`tools compass check clock glass send list command inbox chat moon coin exit`). To add one, add a path to `IC`.
-- One `viewBox="0 0 640 420"` data plot.
+- One data plot, `viewBox="0 0 W 420"`: `sizePlot()` sets W (640 to 1000) from the window so the plot fills its card, and scales the axis text on a narrow screen.
 - `CAST`, the three people and their car as one static inline SVG (see below).
 
 The convention, which `ic()` applies so nobody has to retype it:
@@ -450,8 +450,9 @@ window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
 
 All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
-`girl` = the two poster characters), turned into markup by `artSvg(key, class,
-label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+`girl` = the two poster characters, `they` = the lettering "they can't help
+you.", `watch` = the standing woman in sunglasses, `juice` = the lettering "JOBS
+with Juice", `man` = the standing man, `boy` = the standing boy), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
 come from it, so a change to the drawings is one edit. The poster woman's robe
 and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
 light values); the girl's on the cast red, pink (`--dir-1`, night value) and
@@ -459,7 +460,7 @@ an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
 not scripted in this repository**: they were made once from photographs of the
 drawings, so keep the SVGs rather than regenerating them.
 
-It is about 135 KB of path data inline. That is the cost of keeping the
+It is about 202 KB of path data inline. That is the cost of keeping the
 hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
@@ -474,6 +475,61 @@ the same frame. It began as a felt-pen drawing with a wavy sky and a wobble
 filter; since 2026-10-14 it is the clean version of that — the same figures as
 `CAST` (`AU_PEOPLE`, the same art), with the straight-line fill kept for the
 floor alone.
+
+**First-time visitors also get the lettered headline** ("they can't help you.",
+`ART.they`) in `.au-hero`, passed to `auScene` only when the visitor has not
+signed in here before. It stands between the card and the sun on a wide, tall
+screen (1100px by 760px or more), sits as a short line under the card on a
+phone, and is absent in between, where the card's own headline carries the
+page. Returning visitors ("Welcome back.") and the reset, claim and recover
+screens do not get it.
+
+**A board search is the long wait, so it gets a second character.** `waitScene`
+gives the wait a companion (`.wait.co`, `.wait-pal`): someone stands at the end
+of a taller road and the car drives up to them, then starts over (`driveTo`). A
+search (it has an id) gets the girl (`ART.girl`); the boot splash, shown while
+the app waits on the network, gets the woman in sunglasses (`ART.watch`), who
+watches. With neither the scene is the car alone. Under
+`prefers-reduced-motion` the car parks.
+
+**Two next-step banners carry a picture.** `nextStep()` marks the states that
+have art (`art:'score'` for "N jobs not scored yet", `art:'clear'` for "Clear for
+today"); `NEXT_ART` turns each into markup, and the banner is drawn inside a
+`.nextrow` with the picture in a `.next-art` tile beside it. The picture is never
+inside the banner, because the banner's edge carries an instruction colour. The
+woman in sunglasses watches scoring; the girl and the "JOBS with Juice" lettering
+mark a clear day. The tile is hidden under 700px. **Overdue and "a reply" have
+no entry on purpose**: they wait for two poses that are not drawn yet (the man
+glancing at a watch, the cast with both arms up). Add the art, then add the key
+to `NEXT_ART` and `art:` to `nextStep()`; nothing else changes.
+
+**"Sent." is a beat, not a rule.** When a job is marked sent, `stageChange`
+asks `sentMoment()` whether this send earns a picture: the first three sends ever
+in this browser (`triage:sentart`), and the send that reaches the day's target
+(`DAY_FLOOR`). If so the toast is drawn with the man (`ART.man`) on a tile at its
+left, "Sent.", "The next move is theirs." and an "n of 3 today" eyebrow; every
+other send is the plain "Marked applied". Undo is always there. The man waits; he
+does not cheer.
+
+**"Saved on this device" is a calm card.** When a save only reaches this device,
+`softNote(reason)` draws the woman in pink (`ART.woman`) on a tile beside the
+message and a Try again button, instead of a red mono line. The reason is kept in
+`SOFT` and drawn again after every render, because each render rebuilds
+`#syncInfo`; it clears when a save gets through. It is a wait, not an alarm, so
+there is no red and no warning colour.
+
+**Each onboarding step has its own figure.** In `renderOnb` the band under the
+top bar holds the cast only on "What we found"; on the other steps one person
+stands over the right edge of the 680px column (`.au-solo`): the woman in pink
+on "Your profile" (calm, beside the drop zone), the woman in sunglasses on "Pick
+a direction" (looking), the boy on "What you want" (the newcomer, asking).
+"What we found" keeps the cast until the man reading a sheet is drawn.
+
+**The boy peeks over the map card until the first application is sent.**
+`renderMap` draws `.map-peek` (head and shoulders on a tile tab at the card's top
+right) while no job has left the `new` stage, i.e. for a newcomer. It ends the
+moment anything is sent, closed or answered. It is a first-times beat: it is not
+shown to anyone who has used the app.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
