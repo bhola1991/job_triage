@@ -567,7 +567,7 @@
     .qitem[data-st="new"]:not(:hover):not(:focus-within):not(.sel) .qacts>*:not(.act-primary){visibility:hidden}
     .qitem:hover .qmini{display:block}
     .qitem{position:relative}
-    .qitem:hover .qhist{display:block;position:absolute;right:12px;top:calc(100% - 6px);z-index:5;min-width:240px;max-width:380px;
+    .qitem:hover .qhist,.qitem:focus-within .qhist{display:block;position:absolute;right:12px;top:calc(100% - 6px);z-index:5;min-width:240px;max-width:380px;
       padding:8px 10px;background:var(--panel);border:1.5px solid var(--line);border-radius:8px;box-shadow:var(--shadow-md);
       font-size:12px;color:var(--muted);line-height:1.5}
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
@@ -575,33 +575,7 @@
   .qfacts{align-items:center}
   .costrip{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   .costrip .co-lead{flex:1 1 260px;font-size:12.5px;color:var(--muted)}
-  .cocard{display:flex;gap:16px;align-items:flex-start;flex-wrap:wrap;margin:0 0 10px;padding:14px 16px 14px 18px;cursor:pointer;
-    background:var(--panel);border:1.5px solid var(--line);border-radius:10px;box-shadow:inset 5px 0 0 var(--closed)}
-  .cocard.go{box-shadow:inset 5px 0 0 var(--go)}
-  .co-main{flex:1 1 300px;min-width:0}
-  .co-h{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
-  .co-h b{font-size:15.5px;font-weight:700;margin-right:10px}
-  .co-f{font-size:11px;color:var(--dim)}
-  .co-why{font-size:12.5px;color:var(--muted);margin-top:4px}
-  .co-who{font-size:12.5px;margin-top:5px} .co-who span{color:var(--muted)}
-  .co-now{font-size:12.5px;margin-top:4px} .co-now span{color:var(--dim)}
-  .co-acts{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-  .co-x{display:contents}
-  .co-more{display:none}
-  @media(hover:hover){
-    .cocard:not(:hover):not(:focus-within) .co-x>*{visibility:hidden}
-    .cocard:hover .co-more{display:block}
-    .cocard:hover .co-now{display:none}
-  }
-  .dirtab{padding:6px 0}
-  .dirtab .dt-h,.dirtab .dt-r{display:grid;grid-template-columns:minmax(0,1fr) repeat(4,74px);gap:8px;align-items:center;padding:7px 14px}
-  .dirtab .dt-h{font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
-  .dirtab .dt-h span:not(:first-child),.dirtab .dt-r .num{text-align:right}
-  .dirtab .dt-r,.dirtab .dt-r:hover:not(:disabled){width:100%;border:0;border-top:1px solid var(--hair);border-radius:0;background:none;
-    color:var(--text);font-weight:400;text-align:left;cursor:pointer}
-  .dirtab .dt-r:hover{background:var(--panel2)}
-  .dirtab .dt-n{font-size:13.5px;font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  @media(max-width:640px){ .dirtab .dt-h,.dirtab .dt-r{grid-template-columns:minmax(0,1fr) repeat(4,46px);padding:7px 10px} }
+
   /* Fixed widths on the fact and action columns, so the columns line up across
      rows even though every row is its own grid. */
   .qrow{display:grid;grid-template-columns:5px 38px minmax(0,1fr) 128px 104px 290px;
@@ -6520,6 +6494,24 @@ const sect=(acc,title,sub,rows)=>rows.length?`<div class="qsec ${acc}">
     <p class="qsec-sub">${sub}</p>
     <div class="qcar" data-car="${esc(title)}">${rows.map(x=>jobCard(x.j,x.i)).join('')}</div></div>`:'';
 
+/* To decide's row and section, for things that are not jobs -- a company, a
+   direction, a stage, a logged event -- so every view reads the same way: a
+   ruled section, then rows of rank, name, one line under it, two facts as a
+   label over a value, and the buttons on the right. The row's accent is its
+   instruction, as on a job; st:'new' makes the extra buttons wait for hover. */
+function rowCard({acc='', rank='', quiet=false, title, sub='', facts=[], acts='', st='info', pop=''}){
+  const fact=([k,v,cls])=>`<div class="qfact"><div class="eyebrow">${k}</div><div class="v ${cls||''}">${v}</div></div>`;
+  return `<div class="qitem ${acc}" data-st="${st}">
+    <div class="qrow"><i class="qbar"></i><span class="qrank ${quiet?'quiet':''}">${rank}</span>
+      <div style="min-width:0"><div class="qt">${title}</div><div class="qs">${sub}</div></div>
+      <div class="qfacts">${facts.slice(0,2).map(fact).join('')}</div>
+      <div class="qacts">${acts}</div></div>${pop?`<div class="qhist">${pop}</div>`:''}
+  </div>`;
+}
+const sectOf=(acc,title,sub,n,inner)=>n?`<div class="qsec ${acc}">
+    <div class="qsec-h"><h3>${title}</h3><span class="ct">${n}</span></div>
+    ${sub?`<p class="qsec-sub">${sub}</p>`:''}<div style="margin-top:6px">${inner}</div></div>`:'';
+
 /* The same section, folded away: rows that are real but not what you came for
    -- under the bar, not yet scored, already closed. Reachable without being
    scrolled past. Capped, because a fold can hold hundreds. */
@@ -6678,17 +6670,11 @@ function byDirection(p){
     return { t, found:js.filter(isScored).length, sent:sent.length, back:back.length,
       rate: sent.length ? Math.round(back.length/sent.length*100) : null };
   });
-  return `<div class="sect">
-      <div class="sect-h"><h3>By direction</h3><span class="ct">${tracks.length}</span></div>
-      <p class="sect-sub">Which direction is getting answers. Five sent with none back says more than fifty found. Click one to see it on the map.</p>
-      <div class="card dirtab">
-        <div class="dt-h"><span></span><span>found</span><span>sent</span><span>replies</span><span>reply rate</span></div>
-        ${R.map(x=>`<button class="dt-r" data-dashdir="${esc(x.t.id)}" title="Show ${esc(x.t.label)} on the map">
-          <span class="dt-n">${dirMark(x.t.id)}${esc(x.t.label)}${x.t.id===p.track?' <span style="color:var(--dim)">· picked</span>':''}</span>
-          <span class="num">${x.found}</span><span class="num">${x.sent}</span><span class="num">${x.back}</span>
-          <span class="num">${x.rate===null?'—':x.rate+'%'}</span></button>`).join('')}
-      </div>
-    </div>`;
+  return sectOf('','By direction','Which direction is getting answers. Five sent with none back says more than fifty found.',tracks.length,
+    R.map(x=>rowCard({ acc: x.back?'go':'', rank:x.found, title:esc(x.t.label)+(x.t.id===p.track?' <span style="color:var(--dim)">· picked</span>':''),
+      sub: dirMark(x.t.id)+`${x.found} found · ${x.sent} sent · ${x.back} ${x.back===1?'reply':'replies'}`,
+      facts:[['sent / back',`${x.sent} / ${x.back}`,''],['reply rate',x.rate===null?'—':x.rate+'%',x.rate===null?'quiet':'']],
+      acts:`<button class="btn-sm" data-dashdir="${esc(x.t.id)}">Show on map</button>` })).join(''));
 }
 
 function renderDash(){
@@ -6710,57 +6696,24 @@ function renderDash(){
   jobs.forEach((j,i)=>listOf(j,'events').forEach(e=>feed.push({on:e.on,kind:e.kind,text:e.text,j,i})));
   feed.sort((a,b)=>String(b.on).localeCompare(String(a.on)));
 
-  /* Counts are grey: a bar is a statistic, not an instruction, and the colour
-     law keeps green for "do this now". */
-  const row=(label,n,col)=>{
-    const w=jobs.length?Math.round(n/jobs.length*100):0;
-    return `<div style="display:flex;align-items:center;gap:11px;margin-bottom:8px">
-      <span style="width:96px;font-size:12px;color:var(--muted)">${label}</span>
-      <span style="flex:1;height:6px;background:var(--panel2);border-radius:3px;overflow:hidden"><i style="display:block;height:100%;width:${w}%;background:${col}"></i></span>
-      <span class="num" style="width:36px;text-align:right;font-size:12.5px">${n}</span></div>`;
-  };
 
-  return `<div class="sect">
-      <div class="sect-h"><h3>Pipeline</h3><span class="ct">${jobs.length}</span></div>
-      <p class="sect-sub">Where everything stands. A live conversation is worth more than any number of new rows.</p>
-      <div class="card">
-        ${row('To decide',nNew,'var(--dim)')}
-        ${row('Sent',nSent,'var(--dim)')}
-        ${row('In conversation',nLive,'var(--dim)')}
-        ${row('Closed',nClosed,'var(--closed)')}
-      </div>
-    </div>
+
+  const pct=n=>jobs.length?Math.round(n/jobs.length*100)+'%':'—';
+  const go=(tab,label)=>`<button class="btn-sm" data-dashgo="${tab}">${label}</button>`;
+  const stageRow=(n,title,sub,share,acc,tab,label)=>rowCard({acc, rank:n, quiet:!n, title, sub, facts:[['share',share,'quiet']], acts:go(tab,label)});
+  return `${sectOf('','Pipeline','Where everything stands. A live conversation is worth more than any number of new rows.',jobs.length,
+      stageRow(nNew,'To decide','Scored and waiting on you',pct(nNew),'','unapplied','Open')
+      + stageRow(nSent,'Sent','Applied; the next move is theirs',pct(nSent),nSent?'awaiting':'','applied','Open')
+      + stageRow(nLive,'In conversation','Someone replied',pct(nLive),nLive?'go':'','applied','Open')
+      + stageRow(nClosed,'Closed','Answered no, or ran out',pct(nClosed),'','applied','Open'))}
     ${byDirection(p)}
-
-    <div class="sect">
-      <div class="sect-h"><h3>Freshness</h3><span class="ct">${dated.length} dated</span></div>
-      <p class="sect-sub">How old the board has got. A stale posting is usually filled however well it scores \u2014 an italic age on a card was estimated rather than stated.</p>
-      <div class="stats" style="margin-top:0">
-        <div class="stat"><div class="k num">${week}</div><div class="l">this week</div></div>
-        <div class="stat"><div class="k num">${fortnight}</div><div class="l">last 14 days</div></div>
-        <div class="stat"><div class="k num" style="color:var(--dim)">${stale}</div><div class="l">over 60 days</div></div>
-        <div class="stat"><div class="k num" style="color:var(--dim)">${undated}</div><div class="l">undated</div></div>
-      </div>
-      <p class="hint" style="margin-top:0">Untouched rows are cleared ${KEEP_UNTOUCHED_DAYS} days after they arrive.${
-        PURGED?` ${PURGED} went on this load.`:''}${
-        goingSoon?` ${goingSoon} due to go within two days \u2014 act on one to keep it.`:''}</p>
-    </div>
-
-    <div class="sect">
-      <div class="sect-h"><h3>Recent activity</h3><span class="ct">${feed.length}</span></div>
-      <p class="sect-sub">Everything you have logged, newest first, across every job.</p>
-      ${feed.length?`<div class="card">${feed.slice(0,14).map(e=>`
-        <div class="ct-row" style="align-items:baseline">
-          <span class="num" style="font-size:11px;color:var(--dim);width:72px;flex-shrink:0">${esc(e.on)}</span>
-          <span class="stage" style="flex-shrink:0">${esc(e.kind)}</span>
-          <div style="flex:1;min-width:0">
-            <div style="font-size:13px">${esc(e.j.company||'\u2014')}<span style="color:var(--muted)"> \u00b7 ${esc(e.j.title||'')}</span></div>
-            ${e.text?`<div style="font-size:12px;color:var(--muted)">${esc(e.text)}</div>`:''}
-          </div>
-          <button class="btn-sm" data-act="goto" data-i="${e.i}" style="flex-shrink:0">Open</button>
-        </div>`).join('')}</div>`
-      :`<div class="empty">Nothing logged yet. Marking a job applied, or logging a note on one, writes its first line here.</div>`}
-    </div>`;
+    ${sectOf('','Freshness','How old the board has got. A stale posting is usually filled however well it scores.',1,
+      rowCard({ rank:week, title:'Posted this week', sub:`${undated} undated · untouched rows are cleared ${KEEP_UNTOUCHED_DAYS} days after they arrive${PURGED?` · ${PURGED} went on this load`:''}${goingSoon?` · ${goingSoon} due to go within two days — act on one to keep it`:''}`,
+        facts:[['last 14 days',fortnight,''],['over 60 days',stale,stale?'quiet':'quiet']] }))}
+    ${sectOf('','Recent activity','Everything you have logged, newest first, across every job.',feed.length,
+      feed.slice(0,14).map(e=>rowCard({ title:`${esc(e.j.company||'—')} <span style="color:var(--muted)">· ${esc(e.j.title||'')}</span>`, sub:esc(e.text||''),
+        facts:[['on',esc(mmdd(e.on)),'quiet'],['what',esc(e.kind),'']], acts:`<button class="btn-sm" data-act="goto" data-i="${e.i}">Open</button>` })).join(''))
+    }${feed.length?'':`<div class="empty">Nothing logged yet. Marking a job applied, or logging a note on one, writes its first line here.</div>`}`;
 }
 
 function renderApp(){
@@ -7482,28 +7435,23 @@ function renderCompanies(){
   const have=new Set(p.jobs.map(j=>normCo(j.company)));
   const net=networkCompanies(conns, trk, have).slice(0,10);
   const person=x=>`<div class="ct-meta">${esc(x.n)}${x.p?` — ${esc(x.p)}`:''}</div>`;
-  /* One card per company. The edge says what to do (green: you know someone
-     there, so ask them now); the card says why them, who you know, how they
-     work against your work model, and what is new -- the last two in full on
-     hover, as one line at rest. One filled button. */
-  const card=({j,i,warm,fit})=>{
-    const pu=pulseOf(j), now=(pu&&pu.now||[])[0];
-    const facts=[warm.length?`${warm.length} you know`:'no one yet', fit===null?'culture unread':fit>0?'culture fits':fit<0?'culture clashes':'culture neutral',
-      pu&&!pu.error?`checked ${esc(pu.at)}`:'not checked'];
-    const pri = warm.length ? `<button class="btn-go btn-sm" data-intro="${i}">Ask ${esc(warm[0].n.split(' ')[0])} for an intro</button>`
-                            : `<button class="btn-go btn-sm" data-act="pitch" data-i="${i}">Draft an approach</button>`;
-    return `<div class="cocard${warm.length?' go':''}">
-      <div class="co-main">
-        <div class="co-h">${dirMark(dirKey(j),dirLabel(dirKey(j)))}<b>${esc(j.company)}</b><span class="co-f num">${facts.join(' · ')}</span></div>
-        <div class="co-why">${esc(String(j.description||'').slice(0,160))}${String(j.description||'').length>160?'…':''}</div>
-        ${warm.length?`<div class="co-who">${warm.slice(0,3).map(x=>esc(x.n)+(x.p?` <span>(${esc(x.p)})</span>`:'')).join(', ')}${warm.length>3?` and ${warm.length-3} more`:''}</div>`:''}
-        ${now?`<div class="co-now"><b>New:</b> ${esc(now.what)} <span>(${esc(now.when||'')})</span></div>`:''}
-        <div class="co-more">${pulseHtml(j, prof)}</div>
-      </div>
-      <div class="co-acts">${pri}
-        <span class="co-x">${warm.length?`<button class="btn-sm" data-act="pitch" data-i="${i}">Draft an approach</button>`:''}
-        <button class="btn-sm" data-pulse="${i}" ${busy?'disabled':''}>${pu?'Check again':'What’s new?'}</button>
-        <button class="btn-sm" data-act="goto" data-i="${i}">Open</button></span></div></div>`; };
+  /* A company is a row like a job: green edge when you know someone there
+     (the instruction is "ask them"), the newest news under its name, who you
+     know and the full read of the company on hover. One filled button. */
+  const coRow=({j,i,warm,fit})=>{
+    const pu=pulseOf(j), now=(pu&&pu.now||[])[0], why=String(j.description||'');
+    const pri = warm.length ? `<button class="btn-go btn-sm act-primary" data-intro="${i}">Ask ${esc(warm[0].n.split(' ')[0])} for an intro</button>`
+                            : `<button class="btn-go btn-sm act-primary" data-act="pitch" data-i="${i}">Draft an approach</button>`;
+    return rowCard({ acc: warm.length?'go':'', st:'new', rank: isScored(j)?Math.round(rankOf(j)):'—', quiet:!isScored(j),
+      title: esc(j.company),
+      sub: dirMark(dirKey(j),dirLabel(dirKey(j))) + (now ? `<b style="color:var(--text);font-weight:600">New:</b> ${esc(now.what)}` : esc(why.slice(0,110))+(why.length>110?'…':'')),
+      facts: [['you know', warm.length?`${warm.length} ${warm.length===1?'person':'people'}`:'no one', warm.length?'go':'quiet'],
+              ['culture', fit===null?'unread':fit>0?'fits you':fit<0?'clashes':'neutral', fit===null||fit===0?'quiet':fit<0?'due':'']],
+      acts: pri + (warm.length?`<button class="btn-sm" data-act="pitch" data-i="${i}">Draft an approach</button>`:'')
+        + `<button class="btn-sm" data-pulse="${i}" ${busy?'disabled':''}>${pu?'Check again':'What’s new?'}</button><button class="btn-sm" data-act="goto" data-i="${i}">Open</button>`,
+      pop: (warm.length?`<div><b>You know:</b> ${warm.slice(0,4).map(x=>esc(x.n)+(x.p?` (${esc(x.p)})`:'')).join(', ')}</div>`:'')
+        + (why?`<div style="margin-top:3px">${esc(why.slice(0,240))}</div>`:'') + pulseHtml(j, prof) });
+  };
   const setupDone = conns.length && workSet(prof);
   return `<div class="costrip">
       <span class="co-lead">Most work is reached through a company — best of all through someone who works there.</span>
@@ -7512,15 +7460,14 @@ function renderCompanies(){
       <button class="btn-sm" id="coWork" title="${esc(workSet(prof)?workSummary(prof).slice(0,3).join(' · '):'Two minutes: decides which companies are worth your time')}">${workSet(prof)?'Work model ✓':'Build work model'}</button>
       <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
     ${setupDone||conns.length?'':`<p class="hint" style="margin:-4px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
-    ${targets.length?`<div class="eyebrow" style="margin:4px 0 6px">Companies to approach · ${targets.length}${targets.some(t=>t.warm.length)?` · ${targets.filter(t=>t.warm.length).length} where you know someone`:''}</div>
-      ${targets.some(t=>pulseStale(t.j))?`<div class="btn-row" style="margin:0 0 8px"><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} of them — about 2 AI credits each</button></div>`:''}
-      ${targets.map(card).join('')}`
+    ${targets.length?`${targets.some(t=>pulseStale(t.j))?`<div class="listhead"><span style="color:var(--muted);font-size:12px">${targets.length} to approach</span><div class="spacer"></div><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} — about 2 AI credits each</button></div>`:''}
+      ${sectOf('go','Ask someone you know','You know someone there. A short note asking for fifteen minutes beats any application.',targets.filter(t=>t.warm.length).length,targets.filter(t=>t.warm.length).map(coRow).join(''))}
+      ${sectOf('','Approach cold','No one you know yet. One specific, short message to the right person.',targets.filter(t=>!t.warm.length).length,targets.filter(t=>!t.warm.length).map(coRow).join(''))}`
       :`<div class="empty"><b>No companies yet</b>Suggest some for this direction${conns.length?', or add one from your network below':', and add your LinkedIn connections to see where you already know someone'}.</div>`}
-    ${net.length?`<div class="eyebrow" style="margin:18px 0 6px">From your network — companies where you already know people</div>
-      ${net.map((g,k)=>`<div class="contact-row" style="align-items:flex-start">
-        <div style="flex:1;min-width:0"><div class="ct-nm">${esc(g.name)} <span class="pill2">${g.people.length} ${g.people.length===1?'person':'people'}</span></div>
-        ${g.people.slice(0,3).map(person).join('')}</div>
-        <button class="btn-sm" data-netadd="${k}">Add to approach</button></div>`).join('')}`:''}`;
+    ${sectOf('','From your network','Companies where you already know people, not yet on your list.',net.length,net.map((g,k)=>rowCard({
+        rank:g.people.length, quiet:true, title:esc(g.name), sub:g.people.slice(0,3).map(x=>esc(x.n)+(x.p?` (${esc(x.p)})`:'')).join(', '),
+        facts:[['you know',`${g.people.length} ${g.people.length===1?'person':'people'}`,'']],
+        acts:`<button class="btn-sm" data-netadd="${k}">Add to approach</button>`})).join(''))}`;
 }
 
 function bindCompanies(){
@@ -7553,9 +7500,7 @@ function bindCompanies(){
     finally{ busy=false; setInfo(''); render(); }
   };
   const wm=$('#coWork'); if(wm) wm.onclick=e=>{ e.preventDefault(); workModelDialog(); };
-  /* A card is a way in: clicking anywhere that is not a button or link opens it. */
-  document.querySelectorAll('.cocard').forEach(c=>c.onclick=e=>{ if(e.target.closest('button,a')) return;
-    const b=c.querySelector('[data-act="goto"]'); if(b) b.click(); });
+
 }
 
 /* Asking someone you know is a different message from a cold approach: short,
@@ -7959,12 +7904,8 @@ function renderMap(){
       <div class="maptip" id="mapTip" hidden></div>
     </div>
     <p class="hint" style="margin:6px 0 0">Scroll to zoom where the pointer is. Drag a box to zoom into it. Click a dot to decide on it.</p></div>
-    <div class="eyebrow" style="margin:14px 0 6px">In view · ${inView.length}</div>
-    ${inView.slice(0,30).map(({j,i})=>`<div class="contact-row maprow${SEL_JOB===keyOf(j)?' on':''}" data-mapsel="${i}" style="cursor:pointer;align-items:center">
-      <span class="num" style="width:58px;color:var(--muted)">${fitOf(j)} · ${reachOf(j)}</span>${dirMark(dirKey(j),dirLabel(dirKey(j)))}
-      <span style="flex:1;min-width:0"><b>${esc(j.title)}</b> <span style="color:var(--muted)">· ${esc(j.company)}${inDir(j,P())?'':` · ${esc(dirLabel(j.dir))}`}</span></span>
-      ${primaryAct(j,i)}</div>`).join('')}
-    ${inView.length>30?`<p class="hint">and ${inView.length-30} more — zoom in to narrow it.</p>`:''}
+    <div style="margin-top:22px">${sectOf('','In view',`Exactly what is on the map above, best first.${inView.length>30?` Showing 30 of ${inView.length} — zoom in to narrow it.`:''}`,inView.length,
+      inView.slice(0,30).map(({j,i})=>jobCard(j,i)).join(''))}</div>
     ${!inView.length&&items.length?'<p class="hint">Nothing in this part of the map. Zoom out.</p>':''}`;
 }
 
@@ -8454,6 +8395,7 @@ function renderPalette(){
 /* Opened from the keyboard, or from the top bar -- a shortcut alone would make
    the whole surface unreachable on a phone, where there is no ⌘ to press. */
 document.addEventListener('click',e=>{
+  const g=e.target.closest && e.target.closest('[data-dashgo]'); if(g){ TAB=g.dataset.dashgo; SEL_JOB=null; return render(); }
   const d=e.target.closest && e.target.closest('[data-dashdir]'); if(!d) return;
   TAB='map'; ZOOM=[]; SEL_JOB=null; zoomToClass('dir', d.dataset.dashdir); track('dash_direction'); render();
 });
