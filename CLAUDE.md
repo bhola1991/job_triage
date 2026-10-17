@@ -417,8 +417,9 @@ Every view is a slice of the map and behaves like it: **hover tells, click does.
 - **Direction is identity, never instruction.** `dirMark(id)` draws a direction's colour and shape (the map's own) on job rows, company cards, the map's in-view list and the Dashboard's "By direction" table — only when a profile has two or more directions.
 - **At rest a row shows its one button.** On a pointer screen (`@media(hover:hover)`) a waiting row hides Read and ⋯ until hover or focus, and shows a thumbnail of the map with its dot (`.qmini`); an applied row shows its last three events on hover (`.qhist`). Touch screens see everything, always.
 - **Keyboard triage in To decide:** j/k walk (existing `moveSel`), Enter presses the row's primary button, s saves, x closes it as not interested and moves to the next. They click the row's own buttons, so logging and undo are the same as a click.
-- **Companies are cards** (`.cocard`): edge green only when you know someone there (the instruction is "ask them"), grey otherwise; one filled button; who you know and the newest news at rest, the full pulse on hover. Setup is one strip (`.costrip`).
-- **The Dashboard's counts are grey.** "By direction" (found, sent, replies, reply rate) is the one question the pipeline cannot answer; a row zooms the map to that direction (`zoomToClass`).
+- **One row, one section, everywhere.** To decide's markup is the house style: `jobCard` for jobs, and `rowCard({acc, rank, title, sub, facts:[2], acts, st, pop})` + `sectOf(acc,title,sub,n,inner)` for anything else (a company, a direction, a pipeline stage, a logged event). The Map's in-view list, Companies ("Ask someone you know" in green, "Approach cold", "From your network") and every Dashboard section are built from them. Do not add a new card style; extend `rowCard`.
+- **Companies:** the row edge is green only when you know someone there (the instruction is "ask them"); one filled button; who you know and the full company read are the row's hover popover (`pop`). Setup is one strip (`.costrip`).
+- **The Dashboard's counts are grey.** "By direction" (found, sent, replies, reply rate) is the one question the pipeline cannot answer; its button zooms the map to that direction (`zoomToClass`), and each pipeline stage opens its view.
 - **The next-step banner** shows on Map and Applied only.
 - Headless Chrome reports no hover pointer and cannot emulate one, so hover CSS never fires in a CDP test; swap `@media(hover:hover)` for `@media all` in a test copy to check it.
 
@@ -436,12 +437,30 @@ That row and the sign-in card are the **only two hard offset shadows**
 
 ### The people
 
-`CAST` is the three job seekers and their car, built from rules rather than
-drawn: circle heads, capsule limbs, one stroke weight, flat fills, three skin
-tones. They stand at the foot of the open rail on a light tile (`--tile`) in
-**both** themes, since they are ink on paper. Their colours are hard-coded in
-the SVG and are not tokens: a yellow shirt says nothing about a closing job.
+`CAST` is the three job seekers and their car: the felt-pen drawings
+themselves, traced to flat-colour paths (one potrace layer per colour) and
+recoloured onto the cast's own hues. The marker's wobbly outline is kept on
+purpose; the colours are not the marker's. They stand at the foot of the open
+rail on a light tile (`--tile`) in **both** themes, since they are ink on paper.
+Their colours are hard-coded in the SVG and are not tokens: a yellow shirt says
+nothing about a closing job. The palette is fixed: ink `#14181A`, yellow
+`#F5B700`, red `#E5484D`, blue `#2F5BEA`, green `#1F9D55`, brown `#6B4A2F`,
+window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
 `--brand` (purple) is the one brand colour and is likewise not an accent.
+
+All the art is one `ART` object in `index.html` (`cast` = the three people and
+the car as drawn, `car` = the car alone for the waiting scene, `woman` and
+`girl` = the two poster characters), turned into markup by `artSvg(key, class,
+label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+come from it, so a change to the drawings is one edit. The poster woman's robe
+and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
+light values); the girl's on the cast red, pink (`--dir-1`, night value) and
+an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
+not scripted in this repository**: they were made once from photographs of the
+drawings, so keep the SVGs rather than regenerating them.
+
+It is about 135 KB of path data inline. That is the cost of keeping the
+hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
 or `ui-kit`. Inline the one path you need.
@@ -453,8 +472,8 @@ shows the three people the app is for, standing on a lined floor beside their
 car, with signing in as a card on the same page. Reset, claim and recover use
 the same frame. It began as a felt-pen drawing with a wavy sky and a wobble
 filter; since 2026-10-14 it is the clean version of that — the same figures as
-`CAST` in a different pose (`AU_PEOPLE`), a thin even line, and the
-straight-line fill kept for the floor alone.
+`CAST` (`AU_PEOPLE`, the same art), with the straight-line fill kept for the
+floor alone.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
