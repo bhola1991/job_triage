@@ -609,6 +609,14 @@
   .qrank.quiet{color:var(--muted)}
   .qt{font-size:14px;line-height:1.35}
   .qs{font-size:12px;color:var(--muted);margin-top:2px}
+  /* The pipeline as one bar, so its shape reads before any of its rows do.
+     Only the two stages that mean something take an accent (law: one
+     instruction each); the rest are neutral. */
+  .pbar{display:flex;height:14px;border-radius:7px;overflow:hidden;background:var(--hair);margin:4px 0 8px}
+  .pbar i{display:block;min-width:3px}
+  .pbar-l{display:flex;gap:6px 18px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:0 0 12px}
+  .pbar-l span{display:inline-flex;align-items:center;gap:6px}
+  .pbar-l i{width:10px;height:10px;border-radius:2px;display:inline-block}
   .qfact .v{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:13px;margin-top:3px;white-space:nowrap}
   .qfact .v.quiet{color:var(--muted)} .qfact .v.est{font-style:italic}
   .qfact .v.go{color:var(--go)} .qfact .v.due{color:var(--due)}
@@ -803,6 +811,9 @@
     background:linear-gradient(90deg,var(--warn-tint),transparent 60%)}
   .next .nh{font-size:15px;font-weight:500;margin-bottom:2px}
   .next .ns{font-size:12px;color:var(--muted)}
+  /* On a phone the banner is a headline and a button; the sentence under it
+     cost about 140px of an 844px screen before the map began. */
+  @media(max-width:700px){ .next{padding:10px 14px;margin-bottom:12px;gap:10px} .next .ns{display:none} .next .nh{margin:0} }
   /* Background-task toasts. Fixed to the corner and above the app but BELOW
      the modal layer, so opening the picker doesn't leave a toast floating
      over its own dialog. */
@@ -921,7 +932,10 @@
     padding:26px 24px 26px 14px;border-width:2px;border-color:var(--text);box-shadow:5px 5px 0 var(--hard);
     background:var(--panel);transform:none}
   .qitem.sel .qbar{grid-row:auto;align-self:stretch;min-height:56px;box-shadow:none}
-  .qitem.sel .qrank,.qitem.sel .qfacts,.qitem.sel .qs{display:none}
+  .qitem.sel .qrank,.qitem.sel .qfacts{display:none}
+  /* Company and place stay: they are what you compare rows by, and the list
+     lost them the moment you picked one. The numbers are still in the pane. */
+  .qitem.sel .qs{font-size:14px;margin-top:6px}
   .qitem.sel .qt{font-size:25px;line-height:1.15;font-weight:750;letter-spacing:-.02em;white-space:normal}
   .qitem.sel .qacts{grid-column:auto;grid-row:auto}
   .qitem.sel .qacts>*:not(.act-primary){display:none}
@@ -1092,7 +1106,7 @@ svg.plot.hl .dot:not(.lit){ opacity:.1 }
 .mapstage{ position:relative }
 /* Open on a wide screen, the key sits BESIDE the plot (the plot narrows):
    over it, it would hide the top-right corner, which is where the best jobs are. */
-@media(min-width:901px){ .mapstage.keyon{ padding-right:250px } }
+@media(min-width:901px){ .mapstage.keyon{ padding-right:0; display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:12px; align-items:start } }
 /* The key: a tab on the map's right edge; open, it floats over that edge. */
 .keytab{ position:absolute; top:6px; right:0; writing-mode:vertical-rl; padding:10px 5px; border-radius:8px 0 0 8px;
   font-size:12px; font-weight:650; letter-spacing:.04em }
@@ -1101,12 +1115,20 @@ svg.plot.hl .dot:not(.lit){ opacity:.1 }
 .mapkey{ position:absolute; top:0; right:0; bottom:0; width:236px; overflow:auto; z-index:2; padding:8px 8px 10px;
   background:var(--panel); border:1.5px solid var(--line); border-radius:8px; box-shadow:var(--shadow-md) }
 .mapkey[hidden]{ display:none }
+/* Beside the plot it is a column of the stage, as tall as its own list, so
+   nothing is cut off at the bottom; the tab rides on the seam between them. */
+@media(min-width:901px){
+  .mapstage.keyon .mapkey{ position:static; width:auto; overflow:visible }
+  .mapstage.keyon .keytab.on{ right:250px }
+}
+/* (A direction's name wraps, below, rather than trailing off: two directions
+   that start alike cannot be told apart once cut.) */
 .mapkey .kg+.kg{ margin-top:8px; padding-top:8px; border-top:1px solid var(--hair) }
 .mapkey .kgh{ font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--dim); margin:0 4px 3px }
 .mapkey .kz,.mapkey .kz:hover:not(:disabled){ display:flex; align-items:center; gap:8px; width:100%; padding:4px 6px; border:0;
   border-radius:6px; background:none; color:var(--text); font-size:12.5px; font-weight:400; text-align:left; min-height:0 }
 .mapkey .kz:hover{ background:var(--panel2) }
-.mapkey .kz span{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+.mapkey .kz span{ flex:1; min-width:0; line-height:1.25 }
 .mapkey .kz b{ font-weight:400; color:var(--muted); font-size:11px }
 .mapkey .kz i{ flex:0 0 10px; width:10px; height:10px; border-radius:50% }
 .mapkey .kz i.hollow{ border:1.6px solid var(--dim) }
@@ -5980,7 +6002,22 @@ async function finishOnb(){
 }
 
 /* ═══════════════ MAIN APP ═══════════════ */
-const PL={x:56,y:20,w:544,h:340};
+let PL={x:56,y:20,w:544,h:340}, PLK=1, PLW=640;
+/* The plot takes the shape of the room it is given. It used to be a fixed
+   640x420 box capped at 58vh, so on a wide screen it filled about half the card
+   and sat in the middle of empty margins. Widen the box to the card's aspect
+   (never narrower than the old one) and, when it is squeezed onto a phone,
+   grow the axis text so it still reads at about 9px. The width is estimated
+   from the window because the card is not in the page yet when this runs. */
+function sizePlot(){
+  const vw=window.innerWidth, vh=window.innerHeight;
+  const avail=Math.max(300, Math.min(vw-(vw>900?110:44), 1320) - (KEYOPEN&&vw>900?262:0));
+  const room=Math.min(.58*vh, avail*.66);
+  PLW=Math.round(Math.max(640, Math.min(1000, 420*avail/room)));
+  PLK=Math.max(1, Math.min(1.8, PLW/avail));
+  const left=Math.round(56*PLK), bottom=Math.round(60*PLK);
+  PL={x:left, y:20, w:PLW-left-40, h:420-20-bottom};
+}
 const plotXY=(f,r)=>{ const D=DOMAIN(); return { x:PL.x+((r-D.r0)/(D.r1-D.r0))*PL.w, y:PL.y+(1-(f-D.f0)/(D.f1-D.f0))*PL.h }; };
 
 function inRange(j){
@@ -6647,7 +6684,7 @@ function renderApplied(){
       <div class="stat"><div class="k num" style="color:var(--awaiting)">${waiting.length}</div><div class="l">awaiting them</div></div>
       <div class="stat"><div class="k num">${oldest}</div><div class="l">days, longest silence</div></div>
     </div>
-    ${sect('due','Overdue a chase',`Past the ${FOLLOWUP_DAYS}-day mark with no reply. One nudge is worth sending; a second rarely is.`,due)}
+    ${sect('due','Overdue — chase these',`Past the ${FOLLOWUP_DAYS}-day mark with no reply. One nudge is worth sending; a second rarely is.`,due)}
     ${sect('go','In conversation','Someone replied. Keep these moving before anything else.',live)}
     ${sect('awaiting','Awaiting them','Sent recently and not yet due. Nothing to do here yet.',waiting)}
     ${foldSect('closed','Closed','Ended, withdrawn or turned down. Kept for the record \u2014 reopening puts one back in Unapplied.',closed)}`;
@@ -6701,8 +6738,19 @@ function renderDash(){
   const pct=n=>jobs.length?Math.round(n/jobs.length*100)+'%':'—';
   const go=(tab,label)=>`<button class="btn-sm" data-dashgo="${tab}">${label}</button>`;
   const stageRow=(n,title,sub,share,acc,tab,label)=>rowCard({acc, rank:n, quiet:!n, title, sub, facts:[['share',share,'quiet']], acts:go(tab,label)});
-  return `${sectOf('','Pipeline','Where everything stands. A live conversation is worth more than any number of new rows.',jobs.length,
-      stageRow(nNew,'To decide','Scored and waiting on you',pct(nNew),'','unapplied','Open')
+  /* The rail counts To decide for the direction that is open; this page counts
+     every row. Say so, and give the open direction's number, so the two can be
+     reconciled by eye instead of looking like one of them is wrong. */
+  const nDir=jobs.filter(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p)).length;
+  const nCold=jobs.filter(j=>chOf(j)==='cold').length;
+  const nDirs=(p.profile.tracks||[]).length;
+  const bar=[[nNew,'To decide','var(--muted)'],[nSent,'Sent','var(--awaiting)'],[nLive,'In conversation','var(--go)'],[nClosed,'Closed','var(--dim)']];
+  const funnel=`<div class="pbar" role="img" aria-label="${bar.map(([n,l])=>`${n} ${l}`).join(', ')}">${
+      bar.filter(b=>b[0]).map(([n,l,c])=>`<i style="flex:${n};background:${c}" title="${n} ${l}"></i>`).join('')}</div>
+    <div class="pbar-l">${bar.map(([n,l,c])=>`<span><i style="background:${c}"></i>${n} ${l}</span>`).join('')}</div>`;
+  return `${sectOf('','Pipeline',`Where everything stands, across ${nDirs>1?`all ${nDirs} directions`:'every row'}${nCold?` and the ${nCold} compan${nCold===1?'y':'ies'} to approach`:''}. A live conversation is worth more than any number of new rows.`,jobs.length,
+      funnel
+      + stageRow(nNew,'To decide',nDirs>1?`Waiting on you in every direction · ${nDir} in the one open now`:'Scored and waiting on you',pct(nNew),'','unapplied','Open')
       + stageRow(nSent,'Sent','Applied; the next move is theirs',pct(nSent),nSent?'awaiting':'','applied','Open')
       + stageRow(nLive,'In conversation','Someone replied',pct(nLive),nLive?'go':'','applied','Open')
       + stageRow(nClosed,'Closed','Answered no, or ran out',pct(nClosed),'','applied','Open'))}
@@ -6913,7 +6961,11 @@ function renderApp(){
     <div class="main">
       ${(()=>{ /* The next step, on the two views it is about: the map (home)
                   and Applied. Repeated on every view it was furniture. */
-        const n=(TAB==='map'||TAB==='applied')&&nextStep(); return n?`<div class="next ${n.cls}">
+        let n=(TAB==='map'||TAB==='applied')&&nextStep();
+        /* Applied opens with the very rows a follow-up nudge points at (Overdue,
+           In conversation), so on that view the banner only repeats them. */
+        if(n && TAB==='applied' && n.act==='follow') n=null;
+        return n?`<div class="next ${n.cls}">
         <div style="flex:1;min-width:220px">
           <div class="nh">${esc(n.h)}</div>
           <div class="ns">${esc(n.s)}</div></div>
@@ -7832,10 +7884,10 @@ function plotSVG(){
       const vv=+v.toFixed(2);
       if(axis==='f'){ const y=plotXY(vv,D.r0).y;
         g+=`<line x1="${PL.x}" y1="${y}" x2="${PL.x+PL.w}" y2="${y}" stroke="${cGrid}" stroke-width=".5"/>`;
-        g+=`<text x="${PL.x-9}" y="${y+3.5}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${vv}</text>`; }
+        g+=`<text x="${PL.x-9}" y="${y+3.5*PLK}" text-anchor="end" font-family="ui-monospace,Consolas,monospace" font-size="${9*PLK}" fill="${cDim}">${vv}</text>`; }
       else { const x=plotXY(D.f0,vv).x;
         g+=`<line x1="${x}" y1="${PL.y}" x2="${x}" y2="${PL.y+PL.h}" stroke="${cGrid}" stroke-width=".5"/>`;
-        g+=`<text x="${x}" y="${PL.y+PL.h+15}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="9" fill="${cDim}">${vv}</text>`; }
+        g+=`<text x="${x}" y="${PL.y+PL.h+15*PLK}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="${9*PLK}" fill="${cDim}">${vv}</text>`; }
     }
   }
   if(isFull(D)){
@@ -7843,8 +7895,8 @@ function plotSVG(){
     g+=`<text class="quadlabel" x="${PL.x+6}" y="${PL.y+14}">DREAM / LONG ODDS</text>`;
     g+=`<text class="quadlabel" x="${PL.x+PL.w-6}" y="${PL.y+PL.h-6}" text-anchor="end">EASY BUT WRONG</text>`;
   }
-  g+=`<text x="14" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}" transform="rotate(-90 14 ${PL.y+PL.h/2})">FIT</text>`;
-  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="10" fill="${cAxis}">REACHABILITY</text>`;
+  g+=`<text x="${14*PLK}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="${10*PLK}" fill="${cAxis}" transform="rotate(-90 ${14*PLK} ${PL.y+PL.h/2})">FIT</text>`;
+  g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h+34*PLK}" text-anchor="middle" font-family="ui-monospace,Consolas,monospace" font-size="${10*PLK}" fill="${cAxis}">REACHABILITY</text>`;
   if(BOX){ const a=plotXY(BOX.f1,BOX.r0), b=plotXY(BOX.f0,BOX.r1);
     g+=`<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="${cText}" fill-opacity=".06" stroke="${cText}" stroke-width="1" stroke-dasharray="4 3"/>`; }
   {
@@ -7885,6 +7937,7 @@ function mapKey(inView){
 
 /* The map's whole view: trail, plot with its key, and what is in view. */
 function renderMap(){
+  sizePlot();
   const D=DOMAIN(), items=mapItems().map(x=>({...x,k:dotKeys(x.j)}));
   const inView=items.filter(x=>inDomain(x.j,D)).sort((a,b)=>rankOf(b.j)-rankOf(a.j));
   const r=v=>Math.round(v);
@@ -7897,7 +7950,7 @@ function renderMap(){
       <button class="btn-sm" id="mapOut" ${ZOOM.length?'':'disabled'} title="Back up one step">Zoom out</button>
     </div>
     <div class="mapstage${KEYOPEN?' keyon':''}">
-      <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
+      <svg class="plot" id="plot" viewBox="0 0 ${PLW} 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
       <button class="keytab${KEYOPEN?' on':''}" id="keyTab" aria-expanded="${KEYOPEN}" title="What the dots mean — hover a line to pick those out; click to keep it open">Key</button>
       <div class="mapkey" id="mapKey" ${KEYOPEN?'':'hidden'}>${mapKey(inView).map(([g,L])=>`<div class="kg"><div class="kgh">${g}</div>${
         L.map(x=>`<button class="kz" data-hk="${x.a}:${esc(x.v)}" title="Click to zoom to these">${x.sw}<span>${esc(x.l)}</span><b class="num">${x.n}</b></button>`).join('')}</div>`).join('')}</div>
