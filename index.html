@@ -1068,6 +1068,17 @@
 .maplegend i{ width:10px; height:10px; border-radius:50%; display:inline-block }
 .maplegend i.hollow{ border:1.6px solid var(--dim) }
 .maplegend i.sq{ border-radius:2px; border:1.6px solid var(--cold); background:transparent }
+.dirlegend .dirkey{ cursor:default; padding:2px 6px; margin:-2px -6px; border-radius:6px; color:var(--text) }
+.dirlegend .dirkey.on{ background:var(--panel2) }
+.dirlegend svg{ color:var(--muted) }
+svg.plot .dot{ transition:opacity .12s }
+svg.plot.hl .dot:not(.lit){ opacity:.1 }
+.plotwrap{ position:relative }
+.maptip{ position:absolute; z-index:3; pointer-events:none; max-width:260px; padding:8px 10px; border-radius:8px;
+  background:var(--panel); border:1.5px solid var(--line); box-shadow:var(--shadow-md); font-size:12px; line-height:1.35;
+  display:flex; flex-direction:column; gap:2px }
+.maptip[hidden]{ display:none }
+.maptip b{ font-size:13px } .maptip span{ color:var(--muted) }
 /* The map's trail, and the row selected from it. */
 .trail{ font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap }
 .trail b{ color:var(--text); font-weight:600 }
@@ -7718,11 +7729,29 @@ const familyShort = k => familyLabel(k).split(/[ ,]/)[0];   // "Film", "Nonprofi
 function mapItems(){
   const p=P(); if(!p) return [];
   let L=p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j));
-  if(MAPVIEW==='unapplied') L=L.filter(x=>isOpen(x.j)&&stOf(x.j)==='new'&&inDir(x.j,p));
+  // Every direction at once, told apart by shape (dirShape); the list
+  // under To decide is the one that follows the picked direction.
+  if(MAPVIEW==='unapplied') L=L.filter(x=>isOpen(x.j)&&stOf(x.j)==='new');
   else if(MAPVIEW==='applied') L=L.filter(x=>['sent','live'].includes(stOf(x.j)) || (stOf(x.j)==='closed'&&x.j.date_applied));
-  else L=L.filter(x=>isOpen(x.j)&&(stOf(x.j)!=='new'||inDir(x.j,p)));
+  else L=L.filter(x=>isOpen(x.j));
   if(MAPVIEW==='families' && FAMSEL) L=L.filter(x=>familyOf(x.j)===FAMSEL);
   return L;
+}
+/* Which direction a dot is, by shape, since colour already says freshness.
+   The picked direction (and anything scored before jobs carried one) is the
+   plain circle; every other direction gets its own shape, in profile order. */
+const DIR_SHAPES = ['tri','dia','hex','tri2'];
+const dirKey = j => { const p=P(); return inDir(j,p) ? (p.track||'') : j.dir; };
+const dirLabel = id => ((P().profile.tracks||[]).find(t=>t.id===id)||{}).label || 'Not tagged';
+function dirShape(id){
+  const p=P(); if(!id || id===p.track) return 'circle';
+  const others=(p.profile.tracks||[]).map(t=>t.id).filter(t=>t!==p.track);
+  return DIR_SHAPES[Math.max(0,others.indexOf(id)) % DIR_SHAPES.length];
+}
+/* An SVG path for a shape of radius r about (x,y). */
+function shapePath(sh,x,y,r){
+  const pts = n => [...Array(n)].map((_,k)=>{ const a=-Math.PI/2+(sh==='tri2'?Math.PI:0)+k*2*Math.PI/n; return `${(x+r*1.25*Math.cos(a)).toFixed(1)},${(y+r*1.25*Math.sin(a)).toFixed(1)}`; });
+  return 'M'+(sh==='dia'?pts(4):sh==='hex'?pts(6):pts(3)).join('L')+'Z';
 }
 const inDomain = (j,D) => { const f=fitOf(j), r=reachOf(j); return f>=D.f0&&f<=D.f1&&r>=D.r0&&r<=D.r1; };
 /* A dot's colour. Once applied to, it says what the job needs next, by the
@@ -7786,11 +7815,12 @@ function plotSVG(){
   } else {
     items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
       const pt=plotXY(fitOf(j),reachOf(j)), c0=dotColour(j), hollow=!c0, col=c0||CV('--dim'), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
-      const age=ageOf(j);
-      const tip=`<title>${esc(j.title)} — ${esc(j.company)}\nfit ${fitOf(j)} · reach ${reachOf(j)}${chOf(j)==='cold'?'':` · ${age===null?'posting date unknown':age<1?'posted today':`posted ${age} day${age===1?'':'s'} ago`}`}</title>`;
+      const dk=dirKey(j), sh=dirShape(dk), attrs=`class="dot" data-idx="${i}" data-dir="${esc(dk)}" aria-label="${esc(j.title)} at ${esc(j.company)}"`;
       g += chOf(j)==='cold'
-        ? `<rect class="dot" data-idx="${i}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}">${tip}</rect>`
-        : `<circle class="dot" data-idx="${i}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}">${tip}</circle>`;
+        ? `<rect ${attrs} x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}"/>`
+        : sh==='circle'
+        ? `<circle ${attrs} cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}"/>`
+        : `<path ${attrs} d="${shapePath(sh,pt.x,pt.y,rad)}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}" stroke-linejoin="round"/>`;
     });
   }
   if(!items.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">${
@@ -7820,12 +7850,18 @@ function renderMap(){
     ${MAPVIEW!=='applied' && !(MAPVIEW==='families'&&!FAMSEL) ? `<div class="maplegend" aria-label="What the colours mean">
       <span>Posted</span>${FRESH_BANDS.map(([,l],b)=>`<span><i style="background:var(--fresh-${b})"></i>${l}</span>`).join('')}
       <span><i class="hollow"></i>date unknown</span><span><i class="sq"></i>company to approach</span></div>` : ''}
+    ${(P().profile.tracks||[]).length>1 && !(MAPVIEW==='families'&&!FAMSEL) ? `<div class="maplegend dirlegend" aria-label="Directions — hover one to pick out its jobs">
+      <span>Directions</span>${[P().track, ...(P().profile.tracks||[]).map(t=>t.id).filter(t=>t!==P().track)].map(id=>{
+        const n=items.filter(x=>dirKey(x.j)===id).length;
+        return `<span class="dirkey" data-dirkey="${esc(id)}"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true">${dirShape(id)==='circle'
+          ? '<circle cx="7" cy="7" r="4.5" fill="currentColor"/>' : `<path d="${shapePath(dirShape(id),7,7.6,4.6)}" fill="currentColor"/>`}</svg>${esc(dirLabel(id))}${id===P().track?' (picked)':''} · ${n}</span>`; }).join('')}</div>` : ''}
+    <div class="maptip" id="mapTip" hidden></div>
     <p class="hint" style="margin:6px 0 0">${MAPVIEW==='families'&&!FAMSEL ? 'Each bubble is a kind of work, placed at the average of what is in it. Click one to go inside.'
       : 'Drag a box to zoom into it. Click a dot to decide on it.'}</p></div>
     ${showList ? `<div class="eyebrow" style="margin:14px 0 6px">In view · ${inView.length}</div>
       ${inView.slice(0,30).map(({j,i})=>`<div class="contact-row maprow${SEL_JOB===keyOf(j)?' on':''}" data-mapsel="${i}" style="cursor:pointer;align-items:center">
         <span class="num" style="width:58px;color:var(--muted)">${fitOf(j)} · ${reachOf(j)}</span>
-        <span style="flex:1;min-width:0"><b>${esc(j.title)}</b> <span style="color:var(--muted)">· ${esc(j.company)}</span></span>
+        <span style="flex:1;min-width:0"><b>${esc(j.title)}</b> <span style="color:var(--muted)">· ${esc(j.company)}${inDir(j,P())?'':` · ${esc(dirLabel(j.dir))}`}</span></span>
         ${primaryAct(j,i)}</div>`).join('')}
       ${inView.length>30?`<p class="hint">and ${inView.length-30} more — zoom in to narrow it.</p>`:''}
       ${!inView.length&&items.length?'<p class="hint">Nothing in this part of the map. Zoom out.</p>':''}`
@@ -7848,6 +7884,27 @@ function bindPlot(){
   document.querySelectorAll('[data-mapsel]').forEach(r=>r.onclick=e=>{ if(e.target.closest('button')) return;
     const j=P().jobs[+r.dataset.mapsel]; if(j){ SEL_JOB=keyOf(j); render(); } });
   const svg=$('#plot'); if(!svg) return;
+  /* Hover a dot: what it is, beside it. Hover a direction in the legend: its
+     dots stay, the rest fade. Neither does anything a click does not already. */
+  const tip=$('#mapTip'), wrap=svg.closest('.plotwrap');
+  svg.addEventListener('mouseover',ev=>{
+    const d=ev.target.closest('.dot'); if(!d||!tip) return;
+    const j=P().jobs[+d.dataset.idx]; if(!j) return;
+    const age=ageOf(j);
+    tip.innerHTML=`<b>${esc(j.title)}</b><span>${esc(j.company)}${j.location?' · '+esc(j.location):''}</span>
+      <span class="num">fit ${fitOf(j)} · reach ${reachOf(j)}</span>
+      <span>${chOf(j)==='cold'?'company to approach':age===null?'posting date unknown':age<1?'posted today':`posted ${age} day${age===1?'':'s'} ago`}${(P().profile.tracks||[]).length>1?' · '+esc(dirLabel(dirKey(j))):''}</span>`;
+    tip.hidden=false;
+    const a=d.getBoundingClientRect(), w=wrap.getBoundingClientRect();
+    const left=Math.min(a.left-w.left+a.width/2+12, w.width-tip.offsetWidth-8);
+    tip.style.left=Math.max(8,left)+'px'; tip.style.top=Math.max(8,a.top-w.top-tip.offsetHeight-6)+'px';
+  });
+  svg.addEventListener('mouseout',ev=>{ if(ev.target.closest('.dot') && tip) tip.hidden=true; });
+  document.querySelectorAll('[data-dirkey]').forEach(k=>{
+    k.onmouseenter=()=>{ svg.classList.add('hl'); k.classList.add('on');
+      svg.querySelectorAll('.dot').forEach(d=>d.classList.toggle('lit', d.dataset.dir===k.dataset.dirkey)); };
+    k.onmouseleave=()=>{ svg.classList.remove('hl'); k.classList.remove('on'); };
+  });
   let start=null;
   const toPlot=ev=>{ const pt=svg.createSVGPoint(); const t=ev.touches?ev.touches[0]:(ev.changedTouches?ev.changedTouches[0]:ev);
     pt.x=t.clientX; pt.y=t.clientY; const m=svg.getScreenCTM(); if(!m) return null;
