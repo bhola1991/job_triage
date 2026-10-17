@@ -8,6 +8,7 @@ the sources for editing or for dragging into Figma. They are **not loaded by the
 | `cast.svg` | the man, the boy, the woman and the car, as drawn |
 | `car.svg` | the car alone (the waiting scene) |
 | `woman.svg` | the woman in pink (poster, "they can't help you") |
+| `they.svg` | the lettering "they can't help you." (first-time landing) |
 | `girl.svg` | the girl in platform shoes (poster, "Jobs with Juice") |
 
 Traced from photographs of the sketchbook, one flat colour per layer, and recoloured onto the app's cast palette

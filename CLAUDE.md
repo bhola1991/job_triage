@@ -450,8 +450,8 @@ window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
 
 All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
-`girl` = the two poster characters), turned into markup by `artSvg(key, class,
-label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+`girl` = the two poster characters, `they` = the lettering "they can't help
+you."), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
 come from it, so a change to the drawings is one edit. The poster woman's robe
 and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
 light values); the girl's on the cast red, pink (`--dir-1`, night value) and
@@ -459,7 +459,7 @@ an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
 not scripted in this repository**: they were made once from photographs of the
 drawings, so keep the SVGs rather than regenerating them.
 
-It is about 135 KB of path data inline. That is the cost of keeping the
+It is about 160 KB of path data inline. That is the cost of keeping the
 hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
@@ -474,6 +474,20 @@ the same frame. It began as a felt-pen drawing with a wavy sky and a wobble
 filter; since 2026-10-14 it is the clean version of that — the same figures as
 `CAST` (`AU_PEOPLE`, the same art), with the straight-line fill kept for the
 floor alone.
+
+**First-time visitors also get the lettered headline** ("they can't help you.",
+`ART.they`) in `.au-hero`, passed to `auScene` only when the visitor has not
+signed in here before. It stands between the card and the sun on a wide, tall
+screen (1100px by 760px or more), sits as a short line under the card on a
+phone, and is absent in between, where the card's own headline carries the
+page. Returning visitors ("Welcome back.") and the reset, claim and recover
+screens do not get it.
+
+**A board search is the long wait, so it gets a second character.** `waitScene`
+adds the girl (`ART.girl`, `.wait-girl`) at the end of a taller road when it is
+given an id (a search); the car then drives up to her and starts over
+(`driveTo`). The boot splash passes no id and keeps the car alone. Under
+`prefers-reduced-motion` the car parks.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
