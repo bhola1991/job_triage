@@ -915,7 +915,7 @@
   /* The rail. Everything the top bar held, down the left edge: icons at 68px,
      icons and words at 296px. Every control keeps the id it had in the bar,
      because the command palette dispatches by clicking them. */
-  .rail{position:fixed;left:0;top:0;bottom:0;width:68px;z-index:12;background:var(--panel);
+  .rail{position:fixed;left:0;top:0;bottom:0;width:76px;z-index:12;background:var(--panel);
     border-right:1.5px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:12px 10px;
     overflow:hidden auto;scrollbar-width:none;font-family:var(--disp);transition:width .18s ease}
   .rail .r-it,.rail .r-it:hover:not(:disabled){display:flex;align-items:center;gap:12px;padding:4px 2px;min-height:48px;
@@ -954,8 +954,21 @@
   /* On a short screen the list already fills the rail; a cut-off drawing looks broken. */
   @media(max-height:800px) and (min-width:901px){ .rail.open .r-foot{display:none} }
   #syncInfo{margin:0 22px}
-  .rail ~ .wrap{margin-left:68px;transition:margin-left .18s ease}
-  .rail ~ #syncInfo{margin-left:90px}
+  .rail ~ .wrap{margin-left:76px;transition:margin-left .18s ease}
+  .rail ~ #syncInfo{margin-left:98px}
+  /* Closed, each icon carries a short word under it: icons alone were read as
+     buttons of unknown meaning (feedback #14). */
+  .rail:not(.open) .r-it,.rail:not(.open) .r-it:hover:not(:disabled){flex-direction:column;justify-content:center;gap:3px;min-height:62px;padding:2px 0}
+  .rail:not(.open) .r-lb{display:block;font-size:10.5px;font-weight:600;line-height:1.1;max-width:100%;
+    overflow:hidden;text-overflow:ellipsis;text-align:center;color:var(--muted)}
+  .rail:not(.open){padding-inline:5px}
+  .rail.open .r-dir .r-lb{display:none}   /* open, the select names itself */
+  .rail:not(.open) .r-lb small{display:none}
+  .rail:not(.open) .r-view.on .r-lb{color:var(--text)}
+  .rail:not(.open) .r-dir select.trkbar{left:0;top:0;width:100%;height:100%}
+  /* The More group: in the page always (the command list clicks these ids),
+     shown only when asked for. Beats the phone sheet's show-everything rule. */
+  .rail:not(.more) .r-it.r-more{display:none !important}
   /* Open, the rail pushes the workspace across instead of covering it, at
      every width where it is a column. It used to push only from 1200px, so on
      most laptops it covered the queue instead. Below 1200 the decision pane is
@@ -976,7 +989,7 @@
   /* Phone: the rail is a strip along the bottom, under the thumb, and pulls up
      into a sheet -- by its handle, or by a swipe. */
   @media(max-width:900px){
-    .rail{left:0;right:0;top:auto;bottom:0;width:auto;height:calc(84px + env(safe-area-inset-bottom));flex-direction:row;
+    .rail{left:0;right:0;top:auto;bottom:0;width:auto;height:calc(104px + env(safe-area-inset-bottom));flex-direction:row;
       align-items:flex-start;justify-content:space-around;border-right:0;border-top:1.5px solid var(--line);
       border-radius:18px 18px 0 0;padding:24px 12px 0;gap:4px;z-index:44;transition:none;overflow:hidden}
     .r-grab,.rail .r-grab:hover:not(:disabled){display:block;position:absolute;left:0;right:0;top:0;height:22px;
@@ -996,8 +1009,9 @@
     .r-dir select.trkbar{width:38px;height:38px}
     .rail ~ .wrap,.rail ~ #syncInfo{margin-left:0}
     .rail.open ~ #scrim{display:block}
-    .main{padding-bottom:120px}
-    #fb{bottom:calc(100px + env(safe-area-inset-bottom))}
+    .main{padding-bottom:140px}
+    .rail:not(.open) .r-it,.rail:not(.open) .r-it:hover:not(:disabled){flex:1 1 0;min-width:0;padding:0}
+    #fb{bottom:calc(120px + env(safe-area-inset-bottom))}
     #app:has(.rail.open) #fb{display:none}
     .qrow{grid-template-columns:5px 32px minmax(0,1fr)} .qbar{grid-row:1 / span 3}
     .qfacts{grid-column:3} .qacts{grid-column:3;grid-row:3;justify-content:flex-start;margin-top:10px}
@@ -1277,6 +1291,7 @@ const CAR = {};
    The detail now renders beside the queue instead of inside it, so this is a
    selection: the list does not change shape when it moves. */
 let SEL_JOB = null;
+let RAILMORE = false;   // the rail's More group, shown or not
 /* Which disclosures are open, sidebar and lists alike. Held here rather than
    left as DOM state because render() rebuilds #root from scratch: a panel that
    shut itself every time you used something inside it would be worse than no
@@ -5218,7 +5233,10 @@ function fbMount(){
     btn.disabled=true; note.textContent='Sending…';
     try{
       await fbSend(FB_KIND, msg, FB_TRIG ? { trigger:FB_TRIG } : {});
-      m.value=''; note.textContent=`Got it — ${FB_SENT} sent. Anything else?`;
+      // Sent means done: close the box and say so (feedback #15).
+      m.value=''; note.textContent=''; btn.disabled=false; fbClose();
+      askToast('Feedback sent — thank you', 'We read every one.', []);
+      return;
     }catch(e){ note.textContent='Could not send: '+e.message; }
     btn.disabled=false; m.focus();
   };
@@ -6202,7 +6220,8 @@ const IC = {
   exit:'<path d="M10 4H5v16h5M14 8l4 4-4 4M18 12H9"/>',
   map:'<path d="M4 20V4M4 20h16"/><circle cx="9" cy="14" r="1.6"/><circle cx="13" cy="9" r="1.6"/><circle cx="17" cy="12" r="1.6"/><circle cx="16" cy="6" r="1.6"/>',
   building:'<path d="M4 21V5l8-3v19M12 21V9l8 3v9M2 21h20M7.5 8h1M7.5 12h1M7.5 16h1M15.5 14h1M15.5 17h1"/>',
-  chart:'<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>'
+  chart:'<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>',
+  more:'<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>'
 };
 const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 /* The three people the app is for, and their car. Built from rules rather than
@@ -6660,37 +6679,16 @@ function renderApp(){
   const selJob = selIdx>=0 ? p.jobs[selIdx] : null;
 
   $('#root').innerHTML=`
-  <nav class="rail${RAIL?' open':''}" id="rail" aria-label="Job Triage">
+  <nav class="rail${RAIL?' open':''}${RAILMORE?' more':''}" id="rail" aria-label="Job Triage">
     <button class="r-grab" id="railGrab" aria-label="Pull up everything"></button>
     <button class="r-it r-x2" id="railTog" title="Open or close the rail" aria-expanded="${RAIL}">
       <span class="r-ic r-jt">JT</span><span class="r-lb">Job Triage</span></button>
-    <button class="r-it primary" id="tbOpen" title="Find work &amp; tools">
-      <span class="r-ic">${ic('tools')}</span><span class="r-lb">Find work &amp; tools<small>search, scoring, keys</small></span></button>
-    <div class="r-it r-x2"><span class="r-ic r-av">${esc(initials)}</span>
-      <span class="r-lb">${esc(prof.name)}<small>${esc(prof.location||'')}</small></span></div>
-    <!-- Changing direction re-ranks every job in the app. That is a lens over
-         the whole tool, not a tool in a drawer, so it reads and changes from
-         the rail rather than from inside the thing it reorders. -->
-    <label class="r-it r-x2 r-dir" title="Direction — changing it re-ranks everything"><span class="r-ic">${ic('compass')}</span>
-      <select id="trackSel" class="trkbar" aria-label="Direction">${(prof.tracks||[]).map(t=>
-      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select></label>
-    <div class="r-it" title="${doneToday} sent today. ${DAY_FLOOR} is the day's floor rather than a target — it resets every morning, and nothing is lost by missing it.">
-      <span class="r-ic">${ic('check')}<b class="r-bd${doneToday>=DAY_FLOOR?' go':''}">${doneToday}/${DAY_FLOOR}</b></span>
-      <span class="r-lb">${doneToday>=DAY_FLOOR ? `${doneToday} today · floor cleared` : `${doneToday} of ${DAY_FLOOR} sent today`}<small>the day's floor</small></span></div>
-    <div class="r-sep"></div>
-    ${law.due?`<div class="r-it" title="${law.due} overdue"><span class="r-ic">${ic('clock')}<b class="r-bd due">${law.due}</b></span>
-      <span class="r-lb">${law.due} overdue<small>past the follow-up date</small></span></div>`:''}
-    ${law.closing?`<div class="r-it" title="${law.closing} closing"><span class="r-ic">${ic('glass')}<b class="r-bd closing">${law.closing}</b></span>
-      <span class="r-lb">${law.closing} closing<small>old enough to be filled soon</small></span></div>`:''}
-    ${law.awaiting?`<div class="r-it" title="${law.awaiting} awaiting"><span class="r-ic">${ic('send')}<b class="r-bd awaiting">${law.awaiting}</b></span>
-      <span class="r-lb">${law.awaiting} awaiting<small>sent; the next move is theirs</small></span></div>`:''}
-    <div class="r-sep"></div>
     <!-- The views. They were a row of tabs above the list; here they are one
          place to look, each with its own count, and the main area is just the
          view. Ids kept stable for the command list. -->
     ${[['map','viewMap','map','Map','where everything sits'],
        ['companies','viewCompanies','building','Companies',`${coldCount} to approach`],
-       ['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting on you`],
+       ['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting · ${doneToday} of ${DAY_FLOOR} sent today`],
        ['applied','viewApplied','send','Applied',`${appliedCount} in play`],
        ['dash','viewDash','chart','Dashboard','how it is going']].map(([t,id,icn,lab,sub])=>{
       const n = t==='companies'?coldCount : t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
@@ -6698,15 +6696,33 @@ function renderApp(){
         <span class="r-ic">${ic(icn)}${n?`<b class="r-bd${t==='applied'&&appliedDue?' due':''}">${n}</b>`:''}</span>
         <span class="r-lb">${lab}<small>${esc(sub)}</small></span></button>`; }).join('')}
     <div class="r-sep"></div>
-    <button class="r-it" id="btnPal" title="Every command in one list — ⌘K, or /">
+    <button class="r-it primary" id="tbOpen" title="Find work &amp; tools">
+      <span class="r-ic">${ic('tools')}</span><span class="r-lb">Find work<small>search, scoring, keys</small></span></button>
+    <!-- Changing direction re-ranks every job in the app. That is a lens over
+         the whole tool, not a tool in a drawer, so it reads and changes from
+         the rail rather than from inside the thing it reorders. -->
+    <label class="r-it r-x2 r-dir" title="Direction — changing it re-ranks everything"><span class="r-ic">${ic('compass')}</span>
+      <select id="trackSel" class="trkbar" aria-label="Direction">${(prof.tracks||[]).map(t=>
+      `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select><span class="r-lb">Direction</span></label>
+    <div class="r-sep"></div>
+    <!-- Everything used now and then sits behind More (feedback #14: too many
+         items, some of them not buttons at all). Hidden, not removed: the
+         command list dispatches by clicking these ids. The day's count and the
+         overdue/closing/awaiting counts are gone from here; they are badges
+         on To decide and Applied. -->
+    <button class="r-it r-x2" id="railMore" title="More" aria-expanded="${RAILMORE}">
+      <span class="r-ic">${ic('more')}</span><span class="r-lb">More<small>commands, profile, settings</small></span></button>
+    <button class="r-it r-x2 r-more" id="btnRailProfile" title="Your profile"><span class="r-ic r-av">${esc(initials)}</span>
+      <span class="r-lb">${esc(prof.name)}<small>${esc(prof.location||'')}</small></span></button>
+    <button class="r-it r-x2 r-more" id="btnPal" title="Every command in one list — ⌘K, or /">
       <span class="r-ic">${ic('command')}</span><span class="r-lb">Commands<small>every action, typed</small></span></button>
-    <button class="r-it r-x2" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>
+    <button class="r-it r-x2 r-more" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>
       <span class="r-ic">${ic('chat')}</span><span class="r-lb">Feedback<small>tell us what broke</small></span></button>
-    <button class="r-it r-x2" id="btnTheme" title="Theme: ${THEME}. Click to change.">
+    <button class="r-it r-x2 r-more" id="btnTheme" title="Theme: ${THEME}. Click to change.">
       <span class="r-ic">${ic('moon')}</span><span class="r-lb">Colours<small>${({auto:'follows this device',light:'salmon paper',blush:'blush',dark:'night'})[THEME]}</small></span></button>
-    ${CLOUD&&USER?`<button class="r-it r-x2" id="btnCredits" title="Credits">
+    ${CLOUD&&USER?`<button class="r-it r-x2 r-more" id="btnCredits" title="Credits">
       <span class="r-ic">${ic('coin')}</span><span class="r-lb">${esc(creditsLabel())}</span></button>
-    <button class="r-it r-x2" id="btnSignOut" title="${esc(userName())}">
+    <button class="r-it r-x2 r-more" id="btnSignOut" title="${esc(userName())}">
       <span class="r-ic">${ic('exit')}</span><span class="r-lb">Sign out<small>${esc(userName())}</small></span></button>`:''}
     <div class="r-foot" aria-hidden="true">${CAST}</div>
   </nav>
@@ -6954,7 +6970,7 @@ function renderApp(){
     const bar=$('#btnPal');
     if(bar && !$('#btnReplies')){
       const b=document.createElement('button');
-      b.className='r-it r-x2'; b.id='btnReplies'; b.title='Let replies mark themselves';
+      b.className='r-it r-x2 r-more'; b.id='btnReplies'; b.title='Let replies mark themselves';
       b.innerHTML=`<span class="r-ic">${ic('inbox')}</span><span class="r-lb">Replies<small>mail that came back</small></span>`;
       b.onclick=replyInboxDialog;
       bar.after(b);
@@ -6985,6 +7001,8 @@ function renderApp(){
     $('#railTog').setAttribute('aria-expanded', RAIL);
   };
   $('#railTog').onclick=toggleRail;
+  $('#railMore').onclick=()=>{ RAILMORE=!RAILMORE; $('#rail').classList.toggle('more',RAILMORE); $('#railMore').setAttribute('aria-expanded',RAILMORE); };
+  $('#btnRailProfile').onclick=showProfile;
   $('#railGrab').onclick=toggleRail;
   { /* The pull: a swipe up on the strip opens it, a swipe down on the sheet's
        top closes it. Vertical only, and only where the rail is a strip. */

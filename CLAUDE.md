@@ -390,7 +390,13 @@ The convention, which `ic()` applies so nobody has to retype it:
 ### The rail replaced the top bar
 
 Everything the top bar held is in `<nav class="rail" id="rail">`, down the
-left edge: 68px of icons with count badges, 296px with words when opened.
+left edge: 76px of icons, each with a short word under it and count badges,
+296px with words when opened. Order: the views first, then Find work and
+Direction, then **More**, which holds profile, Commands, Replies, Feedback,
+Colours, Credits and Sign out (`.r-more`, shown by `.rail.more`). Since
+2026-10-17 nothing in the rail is a status-only item: the day's count and the
+overdue/closing/awaiting counts went (feedback #14, "cannot click"); their
+numbers are badges on To decide and Applied.
 
 - **Every control kept its id** (`tbOpen`, `trackSel`, `btnPal`, `btnTheme`, `btnFeedback`, `btnCredits`, `btnSignOut`, and `btnReplies` when inbound mail is live), because the command palette dispatches by clicking them. Do not rename or duplicate one.
 - **The views live in the rail, not in tabs** (since 2026-10-17): Map (home), Companies, To decide, Applied, Dashboard — ids `viewMap viewCompanies viewDecide viewApplied viewDash`, each with its count. The tab row and the Posted / Cold filter are gone; sort is one "Sorted by" select.
