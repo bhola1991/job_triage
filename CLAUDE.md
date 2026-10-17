@@ -368,6 +368,7 @@ There is **no icon library, no sprite sheet, and no naming convention** — beca
 there are almost no icons.
 
 - `icon.svg` — the PWA app icon (a fit × reachability scatter plot). On the v2 palette, using the same colours as the plot it depicts: ground `--ink`, axes `--line`, an open role `--go`, a cold target `--cold`, an unopened one `--dim`. Values are hard-coded because an icon loads outside the document, so `var()` never resolves there — **so it is a fourth place a token change must reach.** `node scripts/selfcheck-icon.js` now checks that it did.
+  The map's freshness ramp, `--fresh-0` to `--fresh-3`, is in the same position (app-only, both `:root` blocks): one hue, the brand purple, freshest most vivid, each step at least 3:1 on `--panel` in all three colour styles.
   One of those five is not in the source of truth: **`--cold` is defined only in `index.html`'s two `:root` blocks** (`index.html:53` dark, `:98` light) and appears in neither `design/jobtriage.tokens.json` nor `ui-kit/src/v2/tokens.css` nor §1's token vocabulary. A change to it has nothing upstream to drive it, so `selfcheck-icon.js` reads it from the app and says so. `--plot-fade` (`index.html:2944`) is in the same position. Promoting both is the real fix.
   Its comment must not contain a `--` sequence: XML forbids a double hyphen inside a comment, and it silently makes the whole file an unparseable broken image. Write token names without their leading dashes there.
   Two constraints on its geometry, both easy to undo by accident:

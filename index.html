@@ -31,6 +31,11 @@
     /* The app's own, not in the tokens file: the one brand colour, the hard
        offset shadow, and the light tile the drawn people stand on. */
     --brand:#A98BFF; --hard:#000000; --tile:#EFEFEA; --gnd:#C9C9C0;
+    /* Freshness on the map: one hue (the brand purple, never an accent), freshest
+       most vivid. Night's own steps -- fresh is lightest here -- not a flip.
+       App-only, like --cold: not in design/jobtriage.tokens.json. Each clears
+       3:1 on --panel; adjacent steps are close, so a dot also says its age. */
+    --fresh-0:#E0C7FF; --fresh-1:#BEA0FF; --fresh-2:#9B80D8; --fresh-3:#7B67A8;
     --ink:#111315; --panel:#1A1D21; --panel2:#23272C; --line:#59616A; --hair:#2C3137;
     --text:#ECECE8; --muted:#AEB4BA; --dim:#8D949B;
 
@@ -82,6 +87,7 @@
   :root[data-theme="light"]{
     color-scheme:light;
     --brand:#6A41C6; --hard:#2B211C; --tile:#EBD3C1; --gnd:#D2B8A4;
+    --fresh-0:#4E0096; --fresh-1:#6539A9; --fresh-2:#7B5DB8; --fresh-3:#907AC3;   /* see the dark block */
     --ink:#F4E1D2; --panel:#FCF1E7; --panel2:#EBD3C1; --line:#2B211C; --hair:#E0C6B3;
     --text:#211A16; --muted:#5A4A40; --dim:#6F5E53;
 
@@ -1042,6 +1048,12 @@
     .saved .qcar{display:block;margin:0;padding:0}
     .saved .qcar>.qitem{margin-top:8px}
   }
+/* The map's freshness legend. Text in text tokens; only the swatch is coloured. */
+.maplegend{ display:flex; flex-wrap:wrap; gap:6px 14px; font-size:11.5px; color:var(--muted); margin-top:8px }
+.maplegend span{ display:inline-flex; align-items:center; gap:5px }
+.maplegend i{ width:10px; height:10px; border-radius:50%; display:inline-block }
+.maplegend i.hollow{ border:1.6px solid var(--dim) }
+.maplegend i.sq{ border-radius:2px; border:1.6px solid var(--cold); background:transparent }
 /* The map's trail, and the row selected from it. */
 .trail{ font-size:12px; color:var(--muted); display:flex; gap:6px; align-items:center; flex-wrap:wrap }
 .trail b{ color:var(--text); font-weight:600 }
@@ -7679,12 +7691,17 @@ function mapItems(){
   return L;
 }
 const inDomain = (j,D) => { const f=fitOf(j), r=reachOf(j); return f>=D.f0&&f<=D.f1&&r>=D.r0&&r<=D.r1; };
-/* A dot's colour says what it needs, by the colour law; on To decide that is
-   posted versus a company to approach. */
+/* A dot's colour. Once applied to, it says what the job needs next, by the
+   colour law. Before that, a posting is coloured by how fresh it is -- one hue,
+   most vivid when newest -- and a company to approach keeps its own colour and
+   shape, since it has no posting to age. No date known: a hollow grey ring. */
+const FRESH_BANDS = [[3,'0–3 days'],[10,'4–10 days'],[21,'11–21 days'],[Infinity,'22+ days · closing soon']];
+const freshBand = j => { const a=ageOf(j); return a===null ? -1 : FRESH_BANDS.findIndex(([max])=>a<=max); };
 function dotColour(j){
   const st=stOf(j);
   if(MAPVIEW!=='unapplied' && st!=='new') return st==='live'?CV('--go') : isDue(j)?CV('--due') : st==='sent'?CV('--awaiting') : CV('--closed');
-  return chOf(j)==='cold' ? CV('--cold') : CV('--signal');
+  if(chOf(j)==='cold') return CV('--cold');
+  const b=freshBand(j); return b<0 ? null : CV('--fresh-'+b);
 }
 /* Grid steps that read as round numbers at any zoom. */
 const niceStep = span => { const raw=span/4, p=Math.pow(10,Math.floor(Math.log10(raw))); const m=raw/p; return (m<1.5?1:m<3.5?2.5:m<7.5?5:10)*p; };
@@ -7734,11 +7751,12 @@ function plotSVG(){
     });
   } else {
     items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
-      const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
-      const tip=`<title>${esc(j.title)} — ${esc(j.company)}\nfit ${fitOf(j)} · reach ${reachOf(j)}</title>`;
+      const pt=plotXY(fitOf(j),reachOf(j)), c0=dotColour(j), hollow=!c0, col=c0||CV('--dim'), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
+      const age=ageOf(j);
+      const tip=`<title>${esc(j.title)} — ${esc(j.company)}\nfit ${fitOf(j)} · reach ${reachOf(j)}${chOf(j)==='cold'?'':` · ${age===null?'posting date unknown':age<1?'posted today':`posted ${age} day${age===1?'':'s'} ago`}`}</title>`;
       g += chOf(j)==='cold'
         ? `<rect class="dot" data-idx="${i}" x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}">${tip}</rect>`
-        : `<circle class="dot" data-idx="${i}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${col}" fill-opacity=".85" stroke="${sel?cText:col}" stroke-width="${sel?2.4:1}">${tip}</circle>`;
+        : `<circle class="dot" data-idx="${i}" cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}">${tip}</circle>`;
     });
   }
   if(!items.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">${
@@ -7765,6 +7783,9 @@ function renderMap(){
       <button class="btn-sm" id="mapOut" ${ZOOM.length||FAMSEL?'':'disabled'} title="Back up one step">Zoom out</button>
     </div>
     <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
+    ${MAPVIEW!=='applied' && !(MAPVIEW==='families'&&!FAMSEL) ? `<div class="maplegend" aria-label="What the colours mean">
+      <span>Posted</span>${FRESH_BANDS.map(([,l],b)=>`<span><i style="background:var(--fresh-${b})"></i>${l}</span>`).join('')}
+      <span><i class="hollow"></i>date unknown</span><span><i class="sq"></i>company to approach</span></div>` : ''}
     <p class="hint" style="margin:6px 0 0">${MAPVIEW==='families'&&!FAMSEL ? 'Each bubble is a kind of work, placed at the average of what is in it. Click one to go inside.'
       : 'Drag a box to zoom into it. Click a dot to decide on it.'}</p></div>
     ${showList ? `<div class="eyebrow" style="margin:14px 0 6px">In view · ${inView.length}</div>
