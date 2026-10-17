@@ -571,7 +571,7 @@ job-triage.tokens.json              ⚠ STALE v1 tokens. Not the source of truth
 design/
   jobtriage.tokens.json             ✅ THE TOKENS.
   Ground 18211C.dc.html             ✅ The reference screen.
-  Job Triage Mockups.dc.html        Turn 3 (top) is current; turns 1-2 superseded.
+  Job Triage Mockups.dc.html        Turn 4 (top, the map as home) is current; turn 3 holds the colour law; 1-2 superseded.
   Colour wheel.dc.html              The hue picker.
   README.md                         The palette, stated.
 ui-kit/
