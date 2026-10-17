@@ -375,7 +375,7 @@ there are almost no icons.
   - **The rim is load-bearing.** The ground is 1.27:1 against a black home screen and 1.03:1 against iOS dark, so without a `--line` rim the tile has no edge and dissolves into the wallpaper. Do not remove it. Inverting to a light ground is not the fix — it fails on a white background in exactly the same way.
   - **Every mark must sit inside the maskable safe zone**, the centred circle of 80% width (radius 204.8 of 512), because the manifest declares `purpose: "any maskable"` and Android crops to it. The content group is scaled `0.92` about the centre for exactly this reason; at full size the axis elbow and both ends reach 222 and get sliced off. Measured: the scaled axes reach **203.7 against the 204.8 limit — a margin of 1.1px in 512**. Treat that as a floor, not as headroom; `selfcheck-icon.js` flags it even while passing.
 - The rail's icons: one `IC` map of path data in `index.html` and one `ic(name)` that wraps a path in the convention below. Thirteen today (`tools compass check clock glass send list command inbox chat moon coin exit`). To add one, add a path to `IC`.
-- One `viewBox="0 0 640 420"` data plot.
+- One data plot, `viewBox="0 0 W 420"`: `sizePlot()` sets W (640 to 1000) from the window so the plot fills its card, and scales the axis text on a narrow screen.
 - `CAST`, the three people and their car as one static inline SVG (see below).
 
 The convention, which `ic()` applies so nobody has to retype it:
