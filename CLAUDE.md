@@ -452,7 +452,7 @@ All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
 `girl` = the two poster characters, `they` = the lettering "they can't help
 you.", `watch` = the standing woman in sunglasses, `juice` = the lettering "JOBS
-with Juice", `man` = the standing man), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+with Juice", `man` = the standing man, `boy` = the standing boy), turned into markup by `artSvg(key, class, label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
 come from it, so a change to the drawings is one edit. The poster woman's robe
 and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
 light values); the girl's on the cast red, pink (`--dir-1`, night value) and
@@ -460,7 +460,7 @@ an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
 not scripted in this repository**: they were made once from photographs of the
 drawings, so keep the SVGs rather than regenerating them.
 
-It is about 195 KB of path data inline. That is the cost of keeping the
+It is about 202 KB of path data inline. That is the cost of keeping the
 hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
@@ -515,6 +515,19 @@ message and a Try again button, instead of a red mono line. The reason is kept i
 `SOFT` and drawn again after every render, because each render rebuilds
 `#syncInfo`; it clears when a save gets through. It is a wait, not an alarm, so
 there is no red and no warning colour.
+
+**Each onboarding step has its own figure.** In `renderOnb` the band under the
+top bar holds the cast only on "What we found"; on the other steps one person
+stands over the right edge of the 680px column (`.au-solo`): the woman in pink
+on "Your profile" (calm, beside the drop zone), the woman in sunglasses on "Pick
+a direction" (looking), the boy on "What you want" (the newcomer, asking).
+"What we found" keeps the cast until the man reading a sheet is drawn.
+
+**The boy peeks over the map card until the first application is sent.**
+`renderMap` draws `.map-peek` (head and shoulders on a tile tab at the card's top
+right) while no job has left the `new` stage, i.e. for a newcomer. It ends the
+moment anything is sent, closed or answered. It is a first-times beat: it is not
+shown to anyone who has used the app.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
