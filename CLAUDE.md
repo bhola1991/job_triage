@@ -410,6 +410,18 @@ numbers are badges on To decide and Applied.
 - **The avatar is neutral, the badges carry the accents.** A badge is a count of rows in that state, so its colour means what the row's edge means.
 - **Closed, the direction picker is the compass**: the native `<select>` lies invisibly over the icon, so one click opens the list with no scripted menu.
 
+### The views share one language (2026-10-17)
+
+Every view is a slice of the map and behaves like it: **hover tells, click does.**
+
+- **Direction is identity, never instruction.** `dirMark(id)` draws a direction's colour and shape (the map's own) on job rows, company cards, the map's in-view list and the Dashboard's "By direction" table — only when a profile has two or more directions.
+- **At rest a row shows its one button.** On a pointer screen (`@media(hover:hover)`) a waiting row hides Read and ⋯ until hover or focus, and shows a thumbnail of the map with its dot (`.qmini`); an applied row shows its last three events on hover (`.qhist`). Touch screens see everything, always.
+- **Keyboard triage in To decide:** j/k walk (existing `moveSel`), Enter presses the row's primary button, s saves, x closes it as not interested and moves to the next. They click the row's own buttons, so logging and undo are the same as a click.
+- **Companies are cards** (`.cocard`): edge green only when you know someone there (the instruction is "ask them"), grey otherwise; one filled button; who you know and the newest news at rest, the full pulse on hover. Setup is one strip (`.costrip`).
+- **The Dashboard's counts are grey.** "By direction" (found, sent, replies, reply rate) is the one question the pipeline cannot answer; a row zooms the map to that direction (`zoomToClass`).
+- **The next-step banner** shows on Map and Applied only.
+- Headless Chrome reports no hover pointer and cannot emulate one, so hover CSS never fires in a CDP test; swap `@media(hover:hover)` for `@media all` in a test copy to check it.
+
 ### The selected row blows up
 
 A selected row (`.qitem.sel`) keeps exactly two things: the job's name, large,
