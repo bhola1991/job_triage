@@ -36,6 +36,11 @@
        App-only, like --cold: not in design/jobtriage.tokens.json. Each clears
        3:1 on --panel; adjacent steps are close, so a dot also says its age. */
     --fresh-0:#E0C7FF; --fresh-1:#BEA0FF; --fresh-2:#9B80D8; --fresh-3:#7B67A8;
+    /* The map's directions: one hue each, in profile order (a colour follows its
+       direction, never its rank). Picked to stay clear of the four accents and
+       checked with the dataviz palette validator against --panel: lightness
+       band, chroma, colour-blind separation of neighbours, 3:1 contrast. */
+    --dir-0:#9566F0; --dir-1:#D14BA8; --dir-2:#A38C12; --dir-3:#0F98B5;
     --ink:#111315; --panel:#1A1D21; --panel2:#23272C; --line:#59616A; --hair:#2C3137;
     --text:#ECECE8; --muted:#AEB4BA; --dim:#8D949B;
 
@@ -88,6 +93,7 @@
     color-scheme:light;
     --brand:#6A41C6; --hard:#2B211C; --tile:#EBD3C1; --gnd:#D2B8A4;
     --fresh-0:#4E0096; --fresh-1:#6539A9; --fresh-2:#7B5DB8; --fresh-3:#907AC3;   /* see the dark block */
+    --dir-0:#7340D8; --dir-1:#B8287F; --dir-2:#7A6400; --dir-3:#007A99;   /* validated on salmon and blush */
     --ink:#F4E1D2; --panel:#FCF1E7; --panel2:#EBD3C1; --line:#2B211C; --hair:#E0C6B3;
     --text:#211A16; --muted:#5A4A40; --dim:#6F5E53;
 
@@ -1073,7 +1079,7 @@ svg.plot.hl .dot:not(.lit){ opacity:.1 }
 /* The key: a tab on the map's right edge; open, it floats over that edge. */
 .keytab{ position:absolute; top:6px; right:0; writing-mode:vertical-rl; padding:10px 5px; border-radius:8px 0 0 8px;
   font-size:12px; font-weight:650; letter-spacing:.04em }
-.keytab.on{ right:236px; background:var(--panel2) }
+.keytab.on,.mapstage:has(.mapkey:not([hidden])) .keytab{ right:236px; background:var(--panel2) }
 .mapkey{ max-height:none }
 .mapkey{ position:absolute; top:0; right:0; bottom:0; width:236px; overflow:auto; z-index:2; padding:8px 8px 10px;
   background:var(--panel); border:1.5px solid var(--line); border-radius:8px; box-shadow:var(--shadow-md) }
@@ -7739,16 +7745,16 @@ function dotKeys(j){
     dir: dirKey(j), fam: familyOf(j) };
 }
 /* Which direction a dot is, by shape, since colour already says freshness.
-   The picked direction (and anything scored before jobs carried one) is the
-   plain circle; every other direction gets its own shape, in profile order. */
-const DIR_SHAPES = ['tri','dia','hex','tri2'];
+   Shape AND colour, both by the direction's place in the profile, so a
+   direction looks the same whichever one is picked; anything scored before
+   jobs carried a direction counts as the picked one. Two cues, not one, so
+   the directions still part for someone who cannot tell the hues apart. */
+const DIR_SHAPES = ['circle','tri','dia','hex'];
+const dirIdx = id => Math.max(0,(P().profile.tracks||[]).findIndex(t=>t.id===id)) % 4;
+const dirColour = id => CV('--dir-'+dirIdx(id));
 const dirKey = j => { const p=P(); return inDir(j,p) ? (p.track||'') : j.dir; };
 const dirLabel = id => ((P().profile.tracks||[]).find(t=>t.id===id)||{}).label || 'Not tagged';
-function dirShape(id){
-  const p=P(); if(!id || id===p.track) return 'circle';
-  const others=(p.profile.tracks||[]).map(t=>t.id).filter(t=>t!==p.track);
-  return DIR_SHAPES[Math.max(0,others.indexOf(id)) % DIR_SHAPES.length];
-}
+function dirShape(id){ return DIR_SHAPES[dirIdx(id)]; }
 /* An SVG path for a shape of radius r about (x,y). */
 function shapePath(sh,x,y,r){
   const pts = n => [...Array(n)].map((_,k)=>{ const a=-Math.PI/2+(sh==='tri2'?Math.PI:0)+k*2*Math.PI/n; return `${(x+r*1.25*Math.cos(a)).toFixed(1)},${(y+r*1.25*Math.sin(a)).toFixed(1)}`; });
@@ -7765,8 +7771,11 @@ function dotColour(j){
   const st=stOf(j);
   if(st!=='new') return st==='live'?CV('--go') : isDue(j)?CV('--due') : st==='sent'?CV('--awaiting') : CV('--closed');
   if(chOf(j)==='cold') return CV('--cold');
-  const b=freshBand(j); return b<0 ? null : CV('--fresh-'+b);
+  return dirColour(dirKey(j));
 }
+/* How solid a waiting job's dot is: freshest nearly solid, oldest a ghost.
+   The outline stays full strength, so an old dot is faint but never lost. */
+const FRESH_FILL = [.95,.68,.42,.2];
 /* Grid steps that read as round numbers at any zoom. */
 const niceStep = span => { const raw=span/4, p=Math.pow(10,Math.floor(Math.log10(raw))); const m=raw/p; return (m<1.5?1:m<3.5?2.5:m<7.5?5:10)*p; };
 
@@ -7797,13 +7806,14 @@ function plotSVG(){
     g+=`<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="${cText}" fill-opacity=".06" stroke="${cText}" stroke-width="1" stroke-dasharray="4 3"/>`; }
   {
     items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
-      const pt=plotXY(fitOf(j),reachOf(j)), c0=dotColour(j), hollow=!c0, col=c0||CV('--dim'), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
+      const fb=stOf(j)==='new'&&chOf(j)!=='cold' ? freshBand(j) : 0, hollow=fb<0, fop=FRESH_FILL[Math.max(0,fb)];
+      const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
       const K=dotKeys(j), sh=dirShape(K.dir), attrs=`class="dot" data-idx="${i}" data-st="${K.st}" data-fresh="${K.fresh}" data-dir="${esc(K.dir)}" data-fam="${K.fam}" aria-label="${esc(j.title)} at ${esc(j.company)}"`;
       g += chOf(j)==='cold'
         ? `<rect ${attrs} x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}"/>`
         : sh==='circle'
-        ? `<circle ${attrs} cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}"/>`
-        : `<path ${attrs} d="${shapePath(sh,pt.x,pt.y,rad)}" fill="${hollow?'none':col}" fill-opacity=".9" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}" stroke-linejoin="round"/>`;
+        ? `<circle ${attrs} cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="${rad}" fill="${hollow?'none':col}" fill-opacity="${fop}" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}"/>`
+        : `<path ${attrs} d="${shapePath(sh,pt.x,pt.y,rad)}" fill="${hollow?'none':col}" fill-opacity="${fop}" stroke="${sel?cText:col}" stroke-width="${sel?2.4:hollow?1.6:1}" stroke-linejoin="round"/>`;
     });
   }
   if(!items.length) g+=`<text x="${PL.x+PL.w/2}" y="${PL.y+PL.h/2}" text-anchor="middle" font-family="system-ui,sans-serif" font-size="13" fill="${cDim}">${
@@ -7819,12 +7829,12 @@ function mapKey(inView){
   const tracks=p.profile.tracks||[];
   const fams=[...new Set(inView.map(x=>x.k.fam))].sort((a,b)=>n('fam',b)-n('fam',a));
   return [
-    ['Where it stands', [['st','decide',dot('var(--fresh-0)'),'To decide'],['st','cold',sq,'Company to approach'],
+    ['Where it stands', [['st','decide',dot('var(--muted)'),'To decide (colour = direction)'],['st','cold',sq,'Company to approach'],
       ['st','due',dot('var(--due)'),'Overdue — chase it'],['st','sent',dot('var(--awaiting)'),'Applied, waiting on them'],
       ['st','live',dot('var(--go)'),'In conversation'],['st','closed',dot('var(--closed)'),'Closed']]],
-    ['Posted', FRESH_BANDS.map(([,l],b)=>['fresh',String(b),dot(`var(--fresh-${b})`),l]).concat([['fresh','unknown',ring,'Date unknown']])],
+    ['Posted (how solid)', FRESH_BANDS.map(([,l],b)=>['fresh',String(b),`<i style="background:var(--text);opacity:${FRESH_FILL[b]};outline:1.5px solid var(--text);outline-offset:-1.5px"></i>`,l]).concat([['fresh','unknown',ring,'Date unknown']])],
     tracks.length>1 ? ['Direction', [p.track,...tracks.map(t=>t.id).filter(t=>t!==p.track)].map(id=>['dir',id,
-      `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true">${dirShape(id)==='circle'?'<circle cx="7" cy="7" r="5" fill="currentColor"/>':`<path d="${shapePath(dirShape(id),7,7.6,4.8)}" fill="currentColor"/>`}</svg>`,
+      `<svg width="12" height="12" viewBox="0 0 14 14" aria-hidden="true" style="color:var(--dir-${dirIdx(id)})">${dirShape(id)==='circle'?'<circle cx="7" cy="7" r="5" fill="currentColor"/>':`<path d="${shapePath(dirShape(id),7,7.6,4.8)}" fill="currentColor"/>`}</svg>`,
       dirLabel(id)+(id===p.track?' (picked)':'')])] : null,
     ['Kind of work', fams.map(f=>['fam',f,'',familyLabel(f)])],
   ].filter(Boolean).map(([g,L])=>[g,L.map(([a,v,sw,l])=>({a,v,sw,l,n:n(a,v)})).filter(x=>x.n)]).filter(([,L])=>L.length);
@@ -7845,7 +7855,7 @@ function renderMap(){
     </div>
     <div class="mapstage${KEYOPEN?' keyon':''}">
       <svg class="plot" id="plot" viewBox="0 0 640 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
-      <button class="keytab${KEYOPEN?' on':''}" id="keyTab" aria-expanded="${KEYOPEN}" title="What the dots mean — hover a line to pick those out">Key</button>
+      <button class="keytab${KEYOPEN?' on':''}" id="keyTab" aria-expanded="${KEYOPEN}" title="What the dots mean — hover a line to pick those out; click to keep it open">Key</button>
       <div class="mapkey" id="mapKey" ${KEYOPEN?'':'hidden'}>${mapKey(inView).map(([g,L])=>`<div class="kg"><div class="kgh">${g}</div>${
         L.map(x=>`<button class="kz" data-hk="${x.a}:${esc(x.v)}" title="Click to zoom to these">${x.sw}<span>${esc(x.l)}</span><b class="num">${x.n}</b></button>`).join('')}</div>`).join('')}</div>
       <div class="maptip" id="mapTip" hidden></div>
@@ -7884,6 +7894,12 @@ function bindPlot(){
     tip.style.left=Math.max(8,left)+'px'; tip.style.top=Math.max(8,a.top-w.top-tip.offsetHeight-6)+'px';
   });
   svg.addEventListener('mouseout',ev=>{ if(ev.target.closest('.dot') && tip) tip.hidden=true; });
+  /* The key opens on hover over its tab and closes a moment after the pointer
+     leaves both; a click pins it open (remembered) or unpins it. */
+  { const kt=$('#keyTab'), kp=$('#mapKey'); let t=null;
+    const peek=on=>{ clearTimeout(t); if(KEYOPEN) return;
+      if(on) kp.hidden=false; else t=setTimeout(()=>{ if(!KEYOPEN) kp.hidden=true; svg.classList.remove('hl'); },250); };
+    if(kt&&kp){ [kt,kp].forEach(el=>{ el.addEventListener('mouseenter',()=>peek(true)); el.addEventListener('mouseleave',()=>peek(false)); }); } }
   const kt=$('#keyTab'); if(kt) kt.onclick=()=>{ KEYOPEN=!KEYOPEN; try{ localStorage.setItem('triage:mapkey',KEYOPEN?'1':'0'); }catch(e){}
     $('#mapKey').hidden=!KEYOPEN; kt.classList.toggle('on',KEYOPEN); kt.setAttribute('aria-expanded',KEYOPEN); svg.closest('.mapstage').classList.toggle('keyon',KEYOPEN); };
   document.querySelectorAll('[data-hk]').forEach(k=>{
