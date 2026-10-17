@@ -437,12 +437,30 @@ That row and the sign-in card are the **only two hard offset shadows**
 
 ### The people
 
-`CAST` is the three job seekers and their car, built from rules rather than
-drawn: circle heads, capsule limbs, one stroke weight, flat fills, three skin
-tones. They stand at the foot of the open rail on a light tile (`--tile`) in
-**both** themes, since they are ink on paper. Their colours are hard-coded in
-the SVG and are not tokens: a yellow shirt says nothing about a closing job.
+`CAST` is the three job seekers and their car: the felt-pen drawings
+themselves, traced to flat-colour paths (one potrace layer per colour) and
+recoloured onto the cast's own hues. The marker's wobbly outline is kept on
+purpose; the colours are not the marker's. They stand at the foot of the open
+rail on a light tile (`--tile`) in **both** themes, since they are ink on paper.
+Their colours are hard-coded in the SVG and are not tokens: a yellow shirt says
+nothing about a closing job. The palette is fixed: ink `#14181A`, yellow
+`#F5B700`, red `#E5484D`, blue `#2F5BEA`, green `#1F9D55`, brown `#6B4A2F`,
+window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
 `--brand` (purple) is the one brand colour and is likewise not an accent.
+
+All the art is one `ART` object in `index.html` (`cast` = the three people and
+the car as drawn, `car` = the car alone for the waiting scene, `woman` and
+`girl` = the two poster characters), turned into markup by `artSvg(key, class,
+label)`. `CAST`, `AU_PEOPLE`, `CAR_SVG` and the empty states' `.empty-art` all
+come from it, so a change to the drawings is one edit. The poster woman's robe
+and hair sit on the magenta and teal direction hues (`--dir-1`, `--dir-3`,
+light values); the girl's on the cast red, pink (`--dir-1`, night value) and
+an indigo. The standalone sources are in `design/art/`. **Re-tracing them is
+not scripted in this repository**: they were made once from photographs of the
+drawings, so keep the SVGs rather than regenerating them.
+
+It is about 135 KB of path data inline. That is the cost of keeping the
+hand-drawn edge; do not add a fifth piece without simplifying the others.
 
 **Do not add an icon dependency** (lucide, heroicons, react-icons) to either the app
 or `ui-kit`. Inline the one path you need.
@@ -454,8 +472,8 @@ shows the three people the app is for, standing on a lined floor beside their
 car, with signing in as a card on the same page. Reset, claim and recover use
 the same frame. It began as a felt-pen drawing with a wavy sky and a wobble
 filter; since 2026-10-14 it is the clean version of that — the same figures as
-`CAST` in a different pose (`AU_PEOPLE`), a thin even line, and the
-straight-line fill kept for the floor alone.
+`CAST` (`AU_PEOPLE`, the same art), with the straight-line fill kept for the
+floor alone.
 
 - **It adds no image file.** Inline SVG plus two CSS pseudo-elements (the floor
   and the sun). §4's "zero `<img>`, zero `data:image`" still holds.
