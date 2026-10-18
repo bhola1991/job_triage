@@ -524,6 +524,9 @@
     box-shadow:var(--shadow)}
   .plothead{display:flex;align-items:baseline;gap:14px;margin-bottom:10px;flex-wrap:wrap}
   svg.plot{display:block;width:100%;height:auto;max-height:58vh;touch-action:none;cursor:crosshair}
+  /* A phone: one finger scrolls the page over a map that is not zoomed; once
+     zoomed, the map takes the finger (pan) -- pinch always belongs to the map. */
+  @media(max-width:900px){ svg.plot{max-height:70vh;touch-action:pan-y} svg.plot.zoomed{touch-action:none} }
   /* Cold targets are drawn as unfilled squares, so without this only the 1.6px
      stroke is clickable. pointer-events makes the whole shape a target. */
   .dot{cursor:pointer;pointer-events:all}
@@ -583,6 +586,11 @@
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
   }
   .qfacts{align-items:center}
+  .wmstrip{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
+  .wmstrip .wm-ic{flex:0 0 32px;width:32px;height:32px;border-radius:9px}
+  .wmstrip .wm-t{flex:1;min-width:0;font-size:12.5px;color:var(--muted)} .wmstrip .wm-t b{color:var(--text);font-weight:650}
+  .mapkey .kz.on{background:var(--panel2);box-shadow:inset 3px 0 0 var(--text)}
+  .mapkey .kall{color:var(--text);font-weight:650;margin-bottom:6px;border:1.5px solid var(--line)}
   .costrip{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:2px 0 16px;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   .costrip .co-lead{flex:1 1 260px;font-size:12.5px;color:var(--muted)}
 
@@ -6109,11 +6117,17 @@ let PL={x:56,y:20,w:544,h:340}, PLK=1, PLW=640;
    (never narrower than the old one) and, when it is squeezed onto a phone,
    grow the axis text so it still reads at about 9px. The width is estimated
    from the window because the card is not in the page yet when this runs. */
+const PHONE = () => window.innerWidth<=900;
 function sizePlot(){
   const vw=window.innerWidth, vh=window.innerHeight;
+  // A phone opens on where the jobs actually are, not on the empty 0-100 grid
+  // squeezed into a thumb's width (feedback #18).
+  BASE = PHONE() ? fitFrame(mapItems(true).map(x=>x.j)) : FULL;
   const avail=Math.max(300, Math.min(vw-(vw>900?110:44), 1320) - (KEYOPEN&&vw>900?262:0));
-  const room=Math.min(.58*vh, avail*.66);
-  PLW=Math.round(Math.max(640, Math.min(1000, 420*avail/room)));
+  // On a phone the plot is taller than it is wide (most of the screen), so the
+  // box may be narrower than the desktop's 640.
+  const room=PHONE() ? Math.min(.62*vh, avail*1.25) : Math.min(.58*vh, avail*.66);
+  PLW=Math.round(Math.max(PHONE()?340:640, Math.min(1000, 420*avail/room)));
   PLK=Math.max(1, Math.min(1.8, PLW/avail));
   const left=Math.round(56*PLK), bottom=Math.round(60*PLK);
   PL={x:left, y:20, w:PLW-left-40, h:420-20-bottom};
@@ -6413,7 +6427,8 @@ const IC = {
   map:'<path d="M4 20V4M4 20h16"/><circle cx="9" cy="14" r="1.6"/><circle cx="13" cy="9" r="1.6"/><circle cx="17" cy="12" r="1.6"/><circle cx="16" cy="6" r="1.6"/>',
   building:'<path d="M4 21V5l8-3v19M12 21V9l8 3v9M2 21h20M7.5 8h1M7.5 12h1M7.5 16h1M15.5 14h1M15.5 17h1"/>',
   chart:'<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>',
-  more:'<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>'
+  more:'<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>',
+  values:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.7A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'
 };
 const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
 /* The people this app is for, their car, and two more characters: the felt-pen
@@ -6778,6 +6793,7 @@ function renderUnapplied(){
 
   return `<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
+      <button class="btn-sm" data-findmore style="margin-left:10px" title="Search the boards for more">Find more work</button>
       ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
         title="${esc(gated.map(x=>x.gated).filter((v,i,a)=>a.indexOf(v)===i).slice(0,4).join(' · '))}">${
         SHOW_GATED?`hide the ${gated.length} your limits remove`:`${gated.length} removed by your limits`}</button>`:''}
@@ -6968,14 +6984,17 @@ function renderApp(){
         <span class="r-ic">${ic(icn)}${n?`<b class="r-bd${t==='applied'&&appliedDue?' due':''}">${n}</b>`:''}</span>
         <span class="r-lb">${lab}<small>${esc(sub)}</small></span></button>`; }).join('')}
     <div class="r-sep"></div>
-    <button class="r-it primary" id="tbOpen" title="Find work &amp; tools">
-      <span class="r-ic">${ic('tools')}</span><span class="r-lb">Find work<small>search, scoring, keys</small></span></button>
     <!-- Changing direction re-ranks every job in the app. That is a lens over
          the whole tool, not a tool in a drawer, so it reads and changes from
          the rail rather than from inside the thing it reorders. -->
     <label class="r-it r-x2 r-dir" title="Direction — changing it re-ranks everything"><span class="r-ic">${ic('compass')}</span>
       <select id="trackSel" class="trkbar" aria-label="Direction">${(prof.tracks||[]).map(t=>
       `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select><span class="r-lb">Direction</span></label>
+    <!-- The work model (feedback #16): what matters to the person at work. It
+         decides which companies are worth their time, so it sits beside the
+         direction, the other lens over everything. -->
+    <button class="r-it r-x2" id="btnWork" title="Your work model — what matters to you at work">
+      <span class="r-ic">${ic('values')}</span><span class="r-lb">Work model<small>${workSet(prof)?'what matters to you':'not built yet'}</small></span></button>
     <div class="r-sep"></div>
     <!-- Everything used now and then sits behind More (feedback #14: too many
          items, some of them not buttons at all). Hidden, not removed: the
@@ -6986,6 +7005,10 @@ function renderApp(){
       <span class="r-ic">${ic('more')}</span><span class="r-lb">More<small>commands, profile, settings</small></span></button>
     <button class="r-it r-x2 r-more" id="btnRailProfile" title="Your profile"><span class="r-ic r-av">${esc(initials)}</span>
       <span class="r-lb">${esc(prof.name)}<small>${esc(prof.location||'')}</small></span></button>
+    <!-- Searching lives in the views now ("Find more work" on the Map and To
+         decide); the drawer it opens keeps its id here for the command list. -->
+    <button class="r-it r-x2 r-more" id="tbOpen" title="Search, scoring, data and keys">
+      <span class="r-ic">${ic('tools')}</span><span class="r-lb">Search &amp; tools<small>search, scoring, keys</small></span></button>
     <button class="r-it r-x2 r-more" id="btnPal" title="Every command in one list — ⌘K, or /">
       <span class="r-ic">${ic('command')}</span><span class="r-lb">Commands<small>every action, typed</small></span></button>
     <button class="r-it r-x2 r-more" id="btnFeedback" title="Tell us what broke"${fbBeta()?' hidden':''}>
@@ -7122,7 +7145,7 @@ function renderApp(){
         const fig = n.art && NEXT_ART[n.art] ? NEXT_ART[n.art]() : '';
         return fig ? `<div class="nextrow">${banner}<div class="next-art${n.art==='clear'?' wide':''}" aria-hidden="true">${fig}</div></div>` : banner; })()}
       <h2 class="viewh">${({map:'Map',companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
-      ${TAB!=='map'?'':`<div>${renderMap()}</div>`}
+      ${TAB!=='map'?'':`${workStrip(prof)}<div>${renderMap()}</div>`}
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div>${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
@@ -7285,6 +7308,7 @@ function renderApp(){
   $('#railTog').onclick=toggleRail;
   $('#railMore').onclick=()=>{ RAILMORE=!RAILMORE; $('#rail').classList.toggle('more',RAILMORE); $('#railMore').setAttribute('aria-expanded',RAILMORE); };
   $('#btnRailProfile').onclick=showProfile;
+  if($('#btnWork')) $('#btnWork').onclick=()=>{ track('work_model_open',{ from:'rail' }); workModelDialog(); };
   $('#railGrab').onclick=toggleRail;
   { /* The pull: a swipe up on the strip opens it, a swipe down on the sheet's
        top closes it. Vertical only, and only where the rail is a strip. */
@@ -7626,6 +7650,15 @@ function pulseHtml(j, pr){
     <div class="ct-meta">${p.site?`<a class="lnk" href="${esc(/^https?:/.test(p.site)?p.site:'https://'+p.site)}" target="_blank" rel="noopener">website</a>${p.verified?'':' (unconfirmed)'}`:''}${soc?' · '+soc:''}${p.careers?` · <a class="lnk" href="${esc(p.careers)}" target="_blank" rel="noopener">careers page</a>`:''} · ${esc(p.activity==='unknown'?'activity unknown':'posts '+p.activity)} · checked ${esc(p.at)}</div>`;
 }
 
+/* The work model, said back in one line at the top of the views it shapes, with
+   the way to change it. Unbuilt, it is an invitation rather than a summary. */
+function workStrip(prof){
+  const set=workSet(prof), sum=set?workSummary(prof).slice(0,2).join(' · '):'';
+  return `<div class="wmstrip"><span class="r-ic wm-ic">${ic('values')}</span>
+    <span class="wm-t">${set?`<b>Your work model</b> — ${esc(sum)}`:`<b>What matters to you at work?</b> Two minutes. It decides which companies are worth your time.`}</span>
+    <button class="btn-sm${set?'':' btn-go'}" data-workmodel>${set?'Change':'Build it'}</button></div>`;
+}
+
 function renderCompanies(){
   const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const conns=loadConns();
@@ -7656,11 +7689,10 @@ function renderCompanies(){
         + (why?`<div style="margin-top:3px">${esc(why.slice(0,240))}</div>`:'') + pulseHtml(j, prof) });
   };
   const setupDone = conns.length && workSet(prof);
-  return `<div class="costrip">
+  return `${workStrip(prof)}<div class="costrip">
       <span class="co-lead">Most work is reached through a company — best of all through someone who works there.</span>
       <button class="btn-sm ${targets.length?'':'btn-go'}" id="coSuggest" ${busy?'disabled':''}>Suggest for ${esc(trk.label||'me')}</button>
       <button class="btn-sm" id="coConns" title="LinkedIn → Settings → Data privacy → Get a copy of your data → Connections">${conns.length?`Network · ${conns.length}`:'Add LinkedIn connections'}</button>
-      <button class="btn-sm" id="coWork" title="${esc(workSet(prof)?workSummary(prof).slice(0,3).join(' · '):'Two minutes: decides which companies are worth your time')}">${workSet(prof)?'Work model ✓':'Build work model'}</button>
       <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
     ${setupDone||conns.length?'':`<p class="hint" style="margin:-4px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
     ${targets.length?`${targets.some(t=>pulseStale(t.j))?`<div class="listhead"><span style="color:var(--muted);font-size:12px">${targets.length} to approach</span><div class="spacer"></div><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} — about 2 AI credits each</button></div>`:''}
@@ -7702,7 +7734,6 @@ function bindCompanies(){
     try{ for(let k=0;k<stale.length;k++){ setInfo(`Checking ${k+1} of ${stale.length}: ${stale[k].j.company}…`); await pulseCompany(stale[k].i, true); } }
     finally{ busy=false; setInfo(''); render(); }
   };
-  const wm=$('#coWork'); if(wm) wm.onclick=e=>{ e.preventDefault(); workModelDialog(); };
 
 }
 
@@ -7926,7 +7957,24 @@ function showProfile(){
 let ZOOM = [];                  // the trail: [{f0,f1,r0,r1}], innermost last
 let KEYOPEN = (()=>{ try{ return localStorage.getItem('triage:mapkey')==='1'; }catch(e){ return false; } })();   // the key beside the map, remembered
 const FULL = { f0:0, f1:100, r0:0, r1:100 };
-const DOMAIN = () => ZOOM[ZOOM.length-1] || FULL;
+let MAPSEL = null;              // a Key line clicked: {a,v,l,frame} -- the map shows only that class
+let BASE = FULL;                // the frame with no zoom: the whole plane, or on a phone where the jobs are
+const DOMAIN = () => ZOOM[ZOOM.length-1] || (MAPSEL && MAPSEL.frame) || BASE;
+/* The frame that fits a set of jobs, padded, never narrower than 12 points. */
+function fitFrame(js){
+  if(!js.length) return FULL;
+  const fs=js.map(fitOf), rs=js.map(reachOf), pad=6, wide=(lo,hi)=>{ let a0=Math.max(0,lo-pad), b0=Math.min(100,hi+pad);
+    if(b0-a0<12){ const m=(a0+b0)/2; a0=Math.max(0,Math.min(88,m-6)); b0=a0+12; } return [a0,b0]; };
+  const [f0,f1]=wide(Math.min(...fs),Math.max(...fs)), [r0,r1]=wide(Math.min(...rs),Math.max(...rs));
+  return { f0, f1, r0, r1 };
+}
+/* Click a Key line (or a Dashboard direction): the map BECOMES that class --
+   only its dots, framed to fit -- and stays so until another line is picked
+   or "Everything" is. Hover still only lights; a click is a choice. */
+function selectClass(a,v,l){
+  const js=mapItems(true).filter(x=>dotKeys(x.j)[a]===v).map(x=>x.j); if(!js.length) return false;
+  MAPSEL={ a, v, l, frame:fitFrame(js) }; ZOOM=[]; return true;
+}
 const isFull = D => D.f0===0 && D.f1===100 && D.r0===0 && D.r1===100;
 
 /* The occupation families. First match wins, so the specific come before the
@@ -7968,10 +8016,11 @@ const familyShort = k => familyLabel(k).split(/[ ,]/)[0];   // "Film", "Nonprofi
 
 /* Everything on the map: every scored job still open, and everything ever
    applied to (closed ones included -- they are history worth seeing). */
-function mapItems(){
+function mapItems(all){
   const p=P(); if(!p) return [];
-  return p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j) &&
+  const L=p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j) &&
     (isOpen(x.j) || ['sent','live'].includes(stOf(x.j)) || (stOf(x.j)==='closed'&&x.j.date_applied)));
+  return all || !MAPSEL ? L : L.filter(x=>dotKeys(x.j)[MAPSEL.a]===MAPSEL.v);
 }
 /* The classes the key picks out, per dot. Every one of them is also a data-
    attribute on the dot, so a hover in the key is one attribute comparison. */
@@ -8053,7 +8102,7 @@ function plotSVG(){
   {
     items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
       const fb=stOf(j)==='new'&&chOf(j)!=='cold' ? freshBand(j) : 0, hollow=fb<0, fop=FRESH_FILL[Math.max(0,fb)];
-      const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=sel?7.5:5.5;
+      const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=(sel?7.5:5.5)*(PHONE()?1.3:1);
       const K=dotKeys(j), sh=dirShape(K.dir), attrs=`class="dot" data-idx="${i}" data-st="${K.st}" data-fresh="${K.fresh}" data-dir="${esc(K.dir)}" data-fam="${K.fam}" aria-label="${esc(j.title)} at ${esc(j.company)}"`;
       g += chOf(j)==='cold'
         ? `<rect ${attrs} x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}"/>`
@@ -8095,42 +8144,42 @@ function renderMap(){
     ? `<div class="map-peek" aria-hidden="true">${artSvg('boy','peek-fig')}</div>` : '';
   const D=DOMAIN(), items=mapItems().map(x=>({...x,k:dotKeys(x.j)}));
   const inView=items.filter(x=>inDomain(x.j,D)).sort((a,b)=>rankOf(b.j)-rankOf(a.j));
+  // The key counts every class, chosen or not, so another line can always be picked.
+  const keyItems=(MAPSEL ? mapItems(true) : mapItems()).map(x=>({...x,k:dotKeys(x.j)})).filter(x=>MAPSEL||inDomain(x.j,D));
   const r=v=>Math.round(v);
-  const crumbs=[['Everything', -1]].concat(ZOOM.map((z,k)=>[`fit ${r(z.f0)}–${r(z.f1)} · reach ${r(z.r0)}–${r(z.r1)}`, k+1]));
+  const crumbs=[[PHONE()?'Where your jobs are':'Everything', -1]].concat(MAPSEL?[[MAPSEL.l, 0]]:[])
+    .concat(ZOOM.map((z,k)=>[`fit ${r(z.f0)}–${r(z.f1)} · reach ${r(z.r0)}–${r(z.r1)}`, k+1]));
   return `<div class="plotwrap">${peek}
     <div class="plothead" style="flex-wrap:wrap;gap:8px">
       <nav class="trail" aria-label="Where you are on the map">${crumbs.map(([t,k],n)=>
         n===crumbs.length-1 ? `<b>${esc(t)}</b>` : `<a href="#" class="lnk" data-crumb="${k}">${esc(t)}</a> ›`).join(' ')}</nav>
       <div class="spacer"></div>
-      <button class="btn-sm" id="mapOut" ${ZOOM.length?'':'disabled'} title="Back up one step">Zoom out</button>
+      <button class="btn-sm" id="mapOut" ${ZOOM.length||MAPSEL?'':'disabled'} title="Back up one step">${ZOOM.length||!MAPSEL?'Zoom out':'Show everything'}</button>
+      <button class="btn-sm" data-findmore title="Search the boards for more">Find more work</button>
     </div>
     <div class="mapstage${KEYOPEN?' keyon':''}">
       <svg class="plot" id="plot" viewBox="0 0 ${PLW} 420" preserveAspectRatio="xMidYMid meet">${plotSVG()}</svg>
       <button class="keytab${KEYOPEN?' on':''}" id="keyTab" aria-expanded="${KEYOPEN}" title="What the dots mean — hover a line to pick those out; click to keep it open">Key</button>
-      <div class="mapkey" id="mapKey" ${KEYOPEN?'':'hidden'}>${mapKey(inView).map(([g,L])=>`<div class="kg"><div class="kgh">${g}</div>${
-        L.map(x=>`<button class="kz" data-hk="${x.a}:${esc(x.v)}" title="Click to zoom to these">${x.sw}<span>${esc(x.l)}</span><b class="num">${x.n}</b></button>`).join('')}</div>`).join('')}</div>
+      <div class="mapkey" id="mapKey" ${KEYOPEN?'':'hidden'}>${MAPSEL?`<button class="kz kall" data-kall>Show everything again</button>`:''}${mapKey(keyItems).map(([g,L])=>`<div class="kg"><div class="kgh">${g}</div>${
+        L.map(x=>{ const on=MAPSEL&&MAPSEL.a===x.a&&MAPSEL.v===String(x.v);
+          return `<button class="kz${on?' on':''}" data-hk="${x.a}:${esc(x.v)}" aria-pressed="${!!on}" title="${on?'Showing only these — click again for everything':'Show only these'}">${x.sw}<span>${esc(x.l)}</span><b class="num">${x.n}</b></button>`; }).join('')}</div>`).join('')}</div>
       <div class="maptip" id="mapTip" hidden></div>
     </div>
-    <p class="hint" style="margin:6px 0 0">Scroll to zoom where the pointer is. Drag a box to zoom into it. Click a dot to decide on it.</p></div>
+    <p class="hint" style="margin:6px 0 0">${PHONE()?'Pinch to zoom, drag to move once zoomed, double-tap to step back. Tap a dot to decide on it.'
+      :'Scroll to zoom where the pointer is. Drag a box to zoom into it. Click a dot to decide on it.'}</p></div>
     <div style="margin-top:22px">${sectOf('','In view',`Exactly what is on the map above, best first.${inView.length>30?` Showing 30 of ${inView.length} — zoom in to narrow it.`:''}`,inView.length,
       inView.slice(0,30).map(({j,i})=>jobCard(j,i)).join(''))}</div>
     ${!inView.length&&items.length?'<p class="hint">Nothing in this part of the map. Zoom out.</p>':''}`;
 }
 
 let BOX = null, WHEEL_T = null;
-/* Zoom the map to fit every dot of one class (a key line, a dashboard row), as
-   one step on the trail. False when the class has nothing on the map. */
-function zoomToClass(a,v){
-  const js=mapItems().filter(x=>dotKeys(x.j)[a]===v).map(x=>x.j); if(!js.length) return false;
-  const fs=js.map(fitOf), rs=js.map(reachOf), pad=6, wide=(lo,hi)=>{ let a0=Math.max(0,lo-pad), b0=Math.min(100,hi+pad);
-    if(b0-a0<12){ const m=(a0+b0)/2; a0=Math.max(0,Math.min(88,m-6)); b0=a0+12; } return [a0,b0]; };
-  const [f0,f1]=wide(Math.min(...fs),Math.max(...fs)), [r0,r1]=wide(Math.min(...rs),Math.max(...rs));
-  ZOOM.push({f0,f1,r0,r1}); return true;
-}   // the box being dragged, in plot units
+  // the box being dragged, in plot units
 function bindPlot(){
   document.querySelectorAll('[data-crumb]').forEach(a=>a.onclick=e=>{ e.preventDefault(); const k=+a.dataset.crumb;
-    ZOOM = k<0 ? [] : ZOOM.slice(0,k); render(); });
-  const out=$('#mapOut'); if(out) out.onclick=()=>{ ZOOM.pop(); render(); };
+    if(k<0) MAPSEL=null;
+    ZOOM = k<=0 ? [] : ZOOM.slice(0,k); render(); });
+  const ka=document.querySelector('[data-kall]'); if(ka) ka.onclick=()=>{ MAPSEL=null; ZOOM=[]; render(); };
+  const out=$('#mapOut'); if(out) out.onclick=()=>{ if(ZOOM.length) ZOOM.pop(); else MAPSEL=null; render(); };
   document.querySelectorAll('[data-mapsel]').forEach(r=>r.onclick=e=>{ if(e.target.closest('button')) return;
     const j=P().jobs[+r.dataset.mapsel]; if(j){ SEL_JOB=keyOf(j); render(); } });
   const svg=$('#plot'); if(!svg) return;
@@ -8162,7 +8211,11 @@ function bindPlot(){
     const c=k.dataset.hk.indexOf(':'), a=k.dataset.hk.slice(0,c), v=k.dataset.hk.slice(c+1);
     k.onmouseenter=()=>{ svg.classList.add('hl'); svg.querySelectorAll('.dot').forEach(d=>d.classList.toggle('lit', d.dataset[a]===v)); };
     k.onmouseleave=()=>svg.classList.remove('hl');
-    k.onclick=()=>{ if(zoomToClass(a,v)){ track('map_key_zoom',{ by:a }); render(); } };
+    k.onclick=()=>{
+      if(MAPSEL && MAPSEL.a===a && MAPSEL.v===v){ MAPSEL=null; ZOOM=[]; return render(); }   // the chosen line again: back to everything
+      if(selectClass(a,v,k.querySelector('span').textContent)){ track('map_key_pick',{ by:a });
+        if(window.innerWidth<=900) KEYOPEN=false;          // on a phone the key sits over the map: put it away
+        render(); } };
   });
   let start=null;
   const toPlot=ev=>{ const pt=svg.createSVGPoint(); const t=ev.touches?ev.touches[0]:(ev.changedTouches?ev.changedTouches[0]:ev);
@@ -8178,9 +8231,53 @@ function bindPlot(){
     // A box too small to mean anything is a click on empty map, not a zoom.
     if(b && (b.f1-b.f0)>(D.f1-D.f0)*0.06 && (b.r1-b.r0)>(D.r1-D.r0)*0.06){ ZOOM.push(b); track('map_zoom',{ depth:ZOOM.length }); }
     render(); };
-  svg.addEventListener('mousedown',down); svg.addEventListener('touchstart',down,{passive:false});
+  svg.addEventListener('mousedown',down);
   window.onmousemove=move; window.onmouseup=up;
-  svg.addEventListener('touchmove',move,{passive:false}); svg.addEventListener('touchend',up);
+  /* Touch (feedback #17): two fingers pinch about their midpoint; one finger
+     pans once the map is zoomed in (at the base frame it scrolls the page);
+     a double tap on empty map steps back out. A gesture is one step on the
+     trail, like a run of scrolling, and the list catches up when it ends. */
+  const zoomedIn=()=>ZOOM.length>0;
+  svg.classList.toggle('zoomed', zoomedIn());
+  const toPlotD=(x,y,D)=>{ const pt=svg.createSVGPoint(); pt.x=x; pt.y=y; const m=svg.getScreenCTM(); if(!m) return null;
+    const q=pt.matrixTransform(m.inverse());
+    return { r:D.r0+((q.x-PL.x)/PL.w)*(D.r1-D.r0), f:D.f0+(1-(q.y-PL.y)/PL.h)*(D.f1-D.f0) }; };
+  const clampSpan=(lo,hi)=>{ let w=Math.max(3,Math.min(100,hi-lo)), a=Math.max(0,Math.min(100-w,lo)); return [a,a+w]; };
+  const setGesture=z=>{ const top=ZOOM[ZOOM.length-1]; if(top && top.wheel) ZOOM.pop();
+    const full=z.f1-z.f0>=99.9 && z.r1-z.r0>=99.9; if(!(full && !ZOOM.length)) ZOOM.push({...z, wheel:true});
+    svg.innerHTML=plotSVG(); };
+  let G=null, lastTap=0;
+  svg.addEventListener('touchstart',ev=>{
+    const T=ev.touches, D=DOMAIN();
+    if(T.length===2){
+      const mx=(T[0].clientX+T[1].clientX)/2, my=(T[0].clientY+T[1].clientY)/2;
+      G={ kind:'pinch', D, d0:Math.hypot(T[0].clientX-T[1].clientX, T[0].clientY-T[1].clientY)||1, p:toPlotD(mx,my,D) };
+      ev.preventDefault();
+    } else if(T.length===1 && zoomedIn() && !ev.target.closest('.dot')){
+      G={ kind:'pan', D, p:toPlotD(T[0].clientX,T[0].clientY,D) };
+    } else G=null;
+  },{passive:false});
+  svg.addEventListener('touchmove',ev=>{
+    if(!G || !G.p) return; const T=ev.touches; ev.preventDefault();
+    if(G.kind==='pinch' && T.length===2){
+      const d=Math.hypot(T[0].clientX-T[1].clientX, T[0].clientY-T[1].clientY)||1, k=G.d0/d, D=G.D, p=G.p;
+      const [f0,f1]=clampSpan(p.f-(p.f-D.f0)*k, p.f+(D.f1-p.f)*k), [r0,r1]=clampSpan(p.r-(p.r-D.r0)*k, p.r+(D.r1-p.r)*k);
+      setGesture({f0,f1,r0,r1});
+    } else if(G.kind==='pan' && T.length===1){
+      const q=toPlotD(T[0].clientX,T[0].clientY,G.D); if(!q) return;
+      const df=G.p.f-q.f, dr=G.p.r-q.r, D=G.D;
+      const [f0,f1]=clampSpan(D.f0+df, D.f1+df), [r0,r1]=clampSpan(D.r0+dr, D.r1+dr);
+      setGesture({f0,f1,r0,r1});
+    }
+  },{passive:false});
+  svg.addEventListener('touchend',ev=>{
+    if(G && ev.touches.length===0){ const kind=G.kind; G=null; track(kind==='pinch'?'map_pinch':'map_pan',{}); return render(); }
+    if(ev.touches.length) return;
+    // A double tap on empty map: one step back out.
+    const now=Date.now(); if(!ev.target.closest('.dot') && now-lastTap<320){ lastTap=0; ev.preventDefault();
+      if(ZOOM.length) ZOOM.pop(); else MAPSEL=null; return render(); }
+    lastTap=now;
+  });
   /* Scroll zooms about the pointer: the point under it stays put. A run of
      scrolling is ONE step on the trail (the top step is replaced while it is a
      wheel step), and the list under the map catches up once scrolling stops. */
@@ -8607,9 +8704,13 @@ function renderPalette(){
 /* Opened from the keyboard, or from the top bar -- a shortcut alone would make
    the whole surface unreachable on a phone, where there is no ⌘ to press. */
 document.addEventListener('click',e=>{
+  const wm=e.target.closest && e.target.closest('[data-workmodel]');
+  if(wm){ track('work_model_open',{ from:TAB }); return workModelDialog(); }
+  const fm=e.target.closest && e.target.closest('[data-findmore]');
+  if(fm){ TOOLS=true; if(window.innerWidth<=900) RAIL=false; track('find_more',{ tab:TAB }); return render(); }
   const g=e.target.closest && e.target.closest('[data-dashgo]'); if(g){ TAB=g.dataset.dashgo; SEL_JOB=null; return render(); }
   const d=e.target.closest && e.target.closest('[data-dashdir]'); if(!d) return;
-  TAB='map'; ZOOM=[]; SEL_JOB=null; zoomToClass('dir', d.dataset.dashdir); track('dash_direction'); render();
+  TAB='map'; SEL_JOB=null; selectClass('dir', d.dataset.dashdir, dirLabel(d.dataset.dashdir)); track('dash_direction'); render();
 });
 document.addEventListener('keydown',e=>{
   if(VIEW!=='app') return;
