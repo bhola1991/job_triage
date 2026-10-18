@@ -322,7 +322,7 @@ module.exports = {
       anchor: { file: 'index.html', fn: 'migrateRows' }, section: 'rows: profiles and jobs',
       note: 'Counts the rows back before setting triage:migrated. A migration that reports success and did not run is how you lose everything in one step \u2014 on a mismatch it stays on the blob and says so.' },
     'st.put':     { diagram: 'storage', group: 'browser', kind: 'branch', label: 'put — local only, or sync too?',
-      anchor: { file: 'index.html', fn: 'put' }, section: 'accounts and cloud sync', body: 'a1daa8',
+      anchor: { file: 'index.html', fn: 'put' }, section: 'accounts and cloud sync', body: 'b7e77f',
       note: 'The local write always happens first, so a failed sync never loses work.' },
     'st.localOnly': { diagram: 'storage', group: 'browser', kind: 'sync', label: 'LOCAL_ONLY — keys never leave the device',
       anchor: { file: 'index.html', const: 'LOCAL_ONLY' }, section: 'accounts and cloud sync',
