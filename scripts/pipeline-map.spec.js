@@ -582,6 +582,7 @@ module.exports = {
     'index.html section banners': {
       'the map': 'the fit x reachability plane the person works from: views, families, zoom and the in-view list; it reads jobs already scored and changes none',
       'the CV, tailored to one job': 'rewrites the person\'s own CV around one posting already in their list and saves it on that job; after the decision, like outreach drafting, and it changes no score or stage',
+      'you': 'the person said back -- a chosen figure, their directions, the work model and their CVs -- and the analytics one button away; it reads jobs and profile, and changes nothing but the figure they pick',
       'the work model': 'what the person values and where they would thrive, asked by choosing and sorting; only a plain summary of it reaches the AI, and nothing here touches a job',
       'companies': 'who to approach and who the person knows there; the network file never leaves the browser, and nothing here acquires or scores a posting',
       'be found': 'advice on the person\'s own Naukri and LinkedIn profiles, read off the corpus; nothing here acquires, scores or stores a job',

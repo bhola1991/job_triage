@@ -587,6 +587,27 @@
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
   }
   .qfacts{align-items:center}
+  .youcard{display:grid;grid-template-columns:180px minmax(0,1fr);gap:20px;align-items:start;margin:4px 0 26px;padding:16px;
+    border:1.5px solid var(--line);border-radius:12px;background:var(--panel)}
+  .youfig{background:var(--tile);border:1.5px solid var(--line);border-radius:10px;height:220px;display:grid;place-items:end center;overflow:hidden}
+  .you-art{height:205px;width:auto}
+  .youname{font-size:24px;font-weight:750;letter-spacing:-.02em;line-height:1.15}
+  .youhead{font-size:14px;margin-top:4px} .youmeta{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .youdirs{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:13px}
+  .youdirs span{display:inline-flex;align-items:center} .youdirs i{font-style:normal;color:var(--dim);margin-left:5px;font-size:11.5px}
+  .youpick{display:flex;gap:6px;margin-top:12px}
+  .youpick button,.youpick button:hover:not(:disabled){width:44px;height:52px;padding:2px;border:1.5px solid var(--hair);border-radius:8px;background:var(--tile);display:grid;place-items:end center;overflow:hidden}
+  .youpick button.on{border-color:var(--text);box-shadow:0 0 0 1.5px var(--text)}
+  .youpick svg{height:48px;width:auto}
+  .youlist{margin:4px 0 0;padding-left:20px;font-size:13px;color:var(--muted);line-height:1.6}
+  /* The You view's way to its analytics: big, top right, and fixed while the
+     page scrolls -- drawn only on You (feedback, 2026-10-19). */
+  .youswitch,.youswitch:hover:not(:disabled){position:fixed;top:16px;right:22px;z-index:30;display:inline-flex;align-items:center;gap:9px;
+    padding:12px 18px 12px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel);color:var(--text);
+    font-size:15px;font-weight:700;box-shadow:var(--shadow-md)}
+  .youswitch:hover:not(:disabled){background:var(--panel2)}
+  @media(max-width:900px){ .youswitch,.youswitch:hover:not(:disabled){top:10px;right:12px;padding:10px 14px 10px 12px;font-size:14px}
+    .youcard{grid-template-columns:110px minmax(0,1fr);gap:14px} .youfig{height:150px} .you-art{height:140px} .youname{font-size:20px} }
   /* To decide with the map as a layer: beside the list on a wide screen
      (sticky, so it stays while the list scrolls), on top of it on request
      below that. While a job is open its pane takes the map's place. */
@@ -1480,7 +1501,8 @@ const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'', editing:null });
 let ONB = blankOnb();
 let RANGE = null, TAB = 'unapplied', busy = false;   // To decide is home (feedback #21); the map lives inside it
-let MAPON = false;   // on a narrow screen, whether the map is open at the top of To decide
+let MAPON = false;
+let YOUSUB = 'me';   // the You view: 'me' (who you are, your CVs) or 'stats' (the analytics that were the Dashboard)   // on a narrow screen, whether the map is open at the top of To decide
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
@@ -6496,6 +6518,7 @@ const IC = {
   building:'<path d="M4 21V5l8-3v19M12 21V9l8 3v9M2 21h20M7.5 8h1M7.5 12h1M7.5 16h1M15.5 14h1M15.5 17h1"/>',
   chart:'<path d="M4 20h16M7 16v-5M12 16V7M17 16v-8"/>',
   more:'<path d="M5 12h.01M12 12h.01M19 12h.01" stroke-width="3.2"/>',
+  user:'<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.2 3.6-6.5 8-6.5s8 2.3 8 6.5"/>',
   values:'<path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.7A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/>'
 };
 const ic = n => `<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${IC[n]}</svg>`;
@@ -6954,6 +6977,49 @@ function byDirection(p){
       acts:`<button class="btn-sm" data-dashdir="${esc(x.t.id)}">Show on map</button>` })).join(''));
 }
 
+/* ═══ you ═══
+   The person, said back (feedback #22): a figure they pick from the cast, who
+   they are and the directions they are going in, the work model in full, and
+   every CV -- the one they gave and each one tailored to a job. The analytics
+   that were the Dashboard are one fixed button away (.youswitch). */
+const AVATARS = [['watch','The watcher'],['woman','The calm one'],['girl','The new start'],['man','The patient one'],['boy','The newcomer']];
+function renderYou(){
+  const p=P(), prof=p.profile, av=AVATARS.some(a=>a[0]===prof.avatar) ? prof.avatar : 'watch';
+  const tracks=prof.tracks||[];
+  const card=`<div class="youcard">
+    <div class="youfig">${artSvg(av,'you-art','Your figure')}</div>
+    <div class="youinfo">
+      <div class="youname">${esc(prof.name||'You')}</div>
+      <div class="youhead">${esc(prof.headline||'')}</div>
+      <div class="youmeta">${[prof.location, prof.seniority, prof.years_experience?`~${prof.years_experience} years`:''].filter(Boolean).map(esc).join(' · ')}</div>
+      ${tracks.length?`<div class="youdirs">${tracks.map(t=>`<span class="${t.id===p.track?'on':''}">${dirMark(t.id)}${esc(t.label)}${t.id===p.track?' <i>picked</i>':''}</span>`).join('')}</div>`:''}
+      <div class="btn-row" style="margin-top:10px"><button class="btn-sm" data-showprof>Your full profile</button><button class="btn-sm" data-wants>What you want</button></div>
+      <div class="youpick" aria-label="Pick your figure">${AVATARS.map(([k,l])=>`<button class="${k===av?'on':''}" data-avatar="${k}" title="${l}">${artSvg(k,'')}</button>`).join('')}</div>
+    </div></div>`;
+
+  const wm = workSet(prof)
+    ? rowCard({ title:'What matters to you at work', sub:'It decides which companies are worth your time, and how each one is explained.',
+        facts:[], acts:`<button class="btn-sm" data-workmodel>Change</button>`,
+        pop:'' }) + `<ul class="youlist">${workSummary(prof).map(l=>`<li>${esc(l)}</li>`).join('')}</ul>`
+    : rowCard({ acc:'go', title:'What matters to you at work?', sub:'Two minutes. It decides which companies are worth your time, and how each one is explained.',
+        acts:`<button class="btn-go btn-sm act-primary" data-workmodel>Build it</button>` });
+
+  const tailored=p.jobs.map((j,i)=>({j,i,cv:cvOf(j)})).filter(x=>x.cv).sort((a,b)=>String(b.cv.on).localeCompare(String(a.cv.on)));
+  const raw=String(p.raw||'');
+  const base=rowCard({ title:'The CV you gave', sub: raw ? esc(raw.split('\n').map(l=>l.trim()).filter(Boolean).slice(0,2).join(' · ').slice(0,140)) : 'None yet',
+    facts: raw ? [['length', `${raw.split(/\s+/).filter(Boolean).length} words`, 'quiet']] : [],
+    acts: raw ? `<button class="btn-sm" data-readcv>Read it</button>` : '' });
+  const rows=tailored.map(({j,i,cv})=>rowCard({ st:'new',
+    title:`${esc(j.title||'(untitled)')} <span style="color:var(--muted)">· ${esc(j.company||'')}</span>`,
+    sub: dirMark(dirKey(j),dirLabel(dirKey(j))) + (cv.gaps&&cv.gaps.length ? `Asks for, and your CV does not show: ${esc(cv.gaps.slice(0,3).join(' · '))}${cv.gaps.length>3?' …':''}` : 'Nothing it asks for is missing from your CV'),
+    facts:[['tailored', esc(mmdd(cv.on)), 'quiet'],['gaps', String((cv.gaps||[]).length), (cv.gaps||[]).length?'':'quiet']],
+    acts:`<button class="btn-go btn-sm act-primary" data-act="cvopen" data-i="${i}">Open</button><button class="btn-sm" data-act="cv" data-i="${i}">Tailor again</button>` })).join('');
+
+  return `${card}
+    ${sectOf('','Your work model','',1,wm)}
+    ${sectOf('','Your CVs',`The one you gave, and each one tailored to a job${tailored.length?'':' — tailor one from any job\u2019s pane: "Your CV for this job"'}.`,1+tailored.length, base+rows)}`;
+}
+
 /* The Dashboard's top (feedback #19, "more sleek, multi-dimensional"): the
    week in four numbers, the last eight weeks as one line per direction, and
    every direction against every stage as a grid that opens the map on that
@@ -7141,10 +7207,13 @@ function renderApp(){
     <!-- No Map view (2026-10-19, feedback #21): the map is a layer of To decide.
          #viewMap stays, hidden, so the command list's "Map" still works. -->
     <button id="viewMap" hidden></button>
+    <!-- The Dashboard is You's analytics now (feedback, 2026-10-19); #viewDash
+         stays, hidden, for the command list and anything that clicks it. -->
+    <button id="viewDash" hidden></button>
     ${[['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting · ${doneToday} of ${DAY_FLOOR} sent today`],
        ['companies','viewCompanies','building','Companies',`${coldCount} to approach`],
        ['applied','viewApplied','send','Applied',`${appliedCount} in play`],
-       ['dash','viewDash','chart','Dashboard','how it is going']].map(([t,id,icn,lab,sub])=>{
+       ['you','viewYou','user','You','profile, CVs, analytics']].map(([t,id,icn,lab,sub])=>{
       const n = t==='companies'?coldCount : t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
       return `<button class="r-it r-view${TAB===t?' on':''}" id="${id}" data-tab="${t}" title="${lab}">
         <span class="r-ic">${ic(icn)}${n?`<b class="r-bd${t==='applied'&&appliedDue?' due':''}">${n}</b>`:''}</span>
@@ -7156,11 +7225,6 @@ function renderApp(){
     <label class="r-it r-x2 r-dir" title="Direction — changing it re-ranks everything"><span class="r-ic">${ic('compass')}</span>
       <select id="trackSel" class="trkbar" aria-label="Direction">${(prof.tracks||[]).map(t=>
       `<option value="${esc(t.id)}" ${t.id===p.track?'selected':''}>${esc(t.label)} · ${esc(t.difficulty||'')}</option>`).join('')}</select><span class="r-lb">Direction</span></label>
-    <!-- The work model (feedback #16): what matters to the person at work. It
-         decides which companies are worth their time, so it sits beside the
-         direction, the other lens over everything. -->
-    <button class="r-it r-x2" id="btnWork" title="Your work model — what matters to you at work">
-      <span class="r-ic">${ic('values')}</span><span class="r-lb">Work model<small>${workSet(prof)?'what matters to you':'not built yet'}</small></span></button>
     <div class="r-sep"></div>
     <!-- Everything used now and then sits behind More (feedback #14: too many
          items, some of them not buttons at all). Hidden, not removed: the
@@ -7310,13 +7374,14 @@ function renderApp(){
       </div>`;
         const fig = n.art && NEXT_ART[n.art] ? NEXT_ART[n.art]() : '';
         return fig ? `<div class="nextrow">${banner}<div class="next-art${n.art==='clear'?' wide':''}" aria-hidden="true">${fig}</div></div>` : banner; })()}
-      <h2 class="viewh">${({companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
+      <h2 class="viewh">${TAB==='you'?(YOUSUB==='stats'?'Analytics':'You'):({companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div class="decide${MAPON?' mapon':''}">
         <div class="dlist">${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>
         <div class="dmap">${renderMap()}</div></div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
-      ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
+      ${TAB!=='you'       ? '' : `<div>${YOUSUB==='stats' ? renderDash() : renderYou()}</div>
+        <button class="youswitch" data-yousub="${YOUSUB==='stats'?'me':'stats'}">${ic(YOUSUB==='stats'?'user':'chart')}<span>${YOUSUB==='stats'?'Back to you':'Analytics'}</span></button>`}
     </div>
     ${selJob?`<aside class="pane" id="pane" aria-label="The job you are deciding on">
       <div class="pane-head">
@@ -7334,7 +7399,7 @@ function renderApp(){
 `;
 
   if(SOFT) softNote(SOFT);
-  document.querySelectorAll('.tab[data-tab], .r-view[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SEL_JOB=null; render(); });
+  document.querySelectorAll('.tab[data-tab], .r-view[data-tab]').forEach(t=>t.onclick=()=>{ if(t.dataset.tab==='you' && TAB!=='you') YOUSUB='me'; TAB=t.dataset.tab; SEL_JOB=null; render(); });
   if($('#viewMap')) $('#viewMap').onclick=()=>{ TAB='unapplied'; SEL_JOB=null; MAPON=true; render(); window.scrollTo(0,0); };
   if(TAB==='companies') bindCompanies();
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
@@ -7476,7 +7541,7 @@ function renderApp(){
   $('#railTog').onclick=toggleRail;
   $('#railMore').onclick=()=>{ RAILMORE=!RAILMORE; $('#rail').classList.toggle('more',RAILMORE); $('#railMore').setAttribute('aria-expanded',RAILMORE); };
   $('#btnRailProfile').onclick=showProfile;
-  if($('#btnWork')) $('#btnWork').onclick=()=>{ track('work_model_open',{ from:'rail' }); workModelDialog(); };
+  if($('#viewDash')) $('#viewDash').onclick=()=>{ TAB='you'; YOUSUB='stats'; SEL_JOB=null; render(); window.scrollTo(0,0); };
   $('#railGrab').onclick=toggleRail;
   { /* The pull: a swipe up on the strip opens it, a swipe down on the sheet's
        top closes it. Vertical only, and only where the rail is a strip. */
@@ -8804,8 +8869,10 @@ function commands(){
     ['View','Send feedback','#fbFab']
   ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
   // The four views are state rather than controls, so these set it directly.
-  [['To decide','unapplied'],['Companies','companies'],['Applied','applied'],['Dashboard','dash']]
+  [['To decide','unapplied'],['Companies','companies'],['Applied','applied']]
     .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  list.push({ g:'Go to', label:'You', run:()=>{ TAB='you'; YOUSUB='me'; render(); } });
+  list.push({ g:'Go to', label:'Analytics (dashboard)', run:()=>{ TAB='you'; YOUSUB='stats'; render(); } });
   // The map is To decide's layer now; "Map" opens it there.
   list.push({ g:'Go to', label:'Map', run:()=>{ TAB='unapplied'; MAPON=true; SEL_JOB=null; render(); window.scrollTo(0,0); } });
   list.push({ g:'Profile', label:'What I want', run:askWants });
@@ -8886,6 +8953,16 @@ document.addEventListener('mouseover',e=>{
   t.style.top=Math.max(4, r.top-box.top-t.offsetHeight-8)+'px';
 });
 document.addEventListener('click',e=>{
+  const ys=e.target.closest && e.target.closest('[data-yousub]');
+  if(ys){ YOUSUB=ys.dataset.yousub; track('you_sub',{ to:YOUSUB }); render(); window.scrollTo(0,0); return; }
+  const av=e.target.closest && e.target.closest('[data-avatar]');
+  if(av){ const p=P(); p.profile.avatar=av.dataset.avatar; track('avatar',{ k:av.dataset.avatar }); save(); return render(); }
+  if(e.target.closest && e.target.closest('[data-readcv]')){ const p=P();
+    return modal(`<div class="eyebrow">Your CV</div><h2 style="margin:6px 0 10px">As you gave it</h2>
+      <div class="cvdoc" style="white-space:pre-wrap">${esc(p.raw||'')}</div>
+      <div class="btn-row" style="margin-top:12px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`); }
+  if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
+  if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
   if(e.target.closest && e.target.closest('[data-mapclear]')){ MAPSEL=null; ZOOM=[]; return render(); }
   if(e.target.closest && e.target.closest('#mapToggle')){ MAPON=!MAPON; track('map_toggle',{ on:MAPON }); render(); if(MAPON) window.scrollTo(0,0); return; }
   const wm=e.target.closest && e.target.closest('[data-workmodel]');
