@@ -48,6 +48,9 @@ if (!SB || !KEY) {
   const since = new Date(Date.now() - SINCE * 864e5).toISOString().slice(0, 10);
   const where = [
     'job_key=like.u:*',                       // keyed by url; 't:' rows have none
+    // A stable order across pages: Range without one can skip or repeat rows
+    // while push-index.js is upserting, and a skipped row loses its slug silently.
+    'order=job_key.asc',
     ALL ? null : `first_indexed=gte.${since}`,
     SOURCE ? `source=eq.${encodeURIComponent(SOURCE)}` : null,
   ].filter(Boolean).join('&');

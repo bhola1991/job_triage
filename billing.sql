@@ -225,7 +225,9 @@ grant execute on function public.add_credits(uuid, integer)   to service_role;
 grant execute on function public.mark_order_paid(text, text)  to service_role;
 
 -- For databases created before the default above changed (safe to re-run).
-alter table public.credits alter column free_llm set default 60;
+-- It said 60 until 2026-10-19 -- the very value the table's comment explains
+-- was too low -- so re-running this file quietly undid the raise to 100.
+alter table public.credits alter column free_llm set default 100;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Usage ledger: what every search actually costs, and what each source yields.

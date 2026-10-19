@@ -152,6 +152,16 @@ const ABSENT_RUNS_TO_CLOSE = 2;
 
 let fresh = 0, open = 0, closed = 0, reposted = 0, unseen = 0, waiting = 0;
 
+// Read before the seen loop, which needs it: see "declared and still listed" below.
+const declared = new Set();
+const expiredFile = arg('expired', '');
+if (expiredFile) {
+  for (const line of fs.readFileSync(expiredFile, 'utf8').split('\n')) {
+    const t = line.trim(); if (!t) continue;
+    try { const r = JSON.parse(t); if (r && r.url) declared.add(r.url); } catch { /* skip */ }
+  }
+  console.log(`  read ${declared.size} declared-expired url(s) from ${path.relative(ROOT, expiredFile)}`);
+}
 for (const [url, row] of seen) {
   const j = store.jobs[url];
   if (!j) {
@@ -163,7 +173,12 @@ for (const [url, row] of seen) {
   } else {
     // Back after an absence. The gap is the interesting part: a role taken down
     // and re-advertised is either hard to fill or was never being filled.
-    if (j.closed_on) { j.reposts++; j.closed_on = null; j.closed_src = null; reposted++; }
+    // Declared and still listed: the board says it is over but has not taken
+    // the page down yet. That is not a repost -- leave it closed, or it would
+    // flip closed -> reposted -> closed every run and fake a churn count.
+    if (j.closed_on && !(j.closed_src === 'declared' && declared.has(url))) {
+      j.reposts++; j.closed_on = null; j.closed_src = null; reposted++;
+    }
     // Seen. Whatever run of absences was building, it is over -- consecutive
     // is the whole point, or a posting missing one run a month would eventually
     // close from misses that were never next to each other.
@@ -185,15 +200,6 @@ for (const [url, row] of seen) {
    So both are recorded and which one closed a row is kept, because a render
    that says "gone from the board" should be able to tell knowing from
    guessing. Declared wins: it can close a row this run still saw. */
-const declared = new Set();
-const expiredFile = arg('expired', '');
-if (expiredFile) {
-  for (const line of fs.readFileSync(expiredFile, 'utf8').split('\n')) {
-    const t = line.trim(); if (!t) continue;
-    try { const r = JSON.parse(t); if (r && r.url) declared.add(r.url); } catch { /* skip */ }
-  }
-  console.log(`  read ${declared.size} declared-expired url(s) from ${path.relative(ROOT, expiredFile)}`);
-}
 let expired = 0;
 for (const url of declared) {
   const j = store.jobs[url];

@@ -57,10 +57,16 @@ node scripts/index/probe-boards.js --from-profiles || echo "  probe skipped: $?"
 # Not allowed to stop the night: set -e would cancel the deposit below over one
 # board misbehaving. On failure the file from the last good run is still there.
 node scripts/index/jsonld-boards.js scripts/index/jsonld.jsonl || echo "  jsonld-boards failed ($?); depositing without it"
+# "The file from the last good run is still there" is not true on a first run,
+# or on a fresh runner without it. Then leave it out of the two steps below
+# entirely: an ENOENT would stop the whole night under set -e, and an empty
+# stand-in file would read as "every jsonld board closed everything".
+JSONLD=()
+if [ -s scripts/index/jsonld.jsonl ]; then JSONLD=(scripts/index/jsonld.jsonl); else echo "  no jsonld.jsonl; deposit and verify go on without it"; fi
 
 say "5/7  Deposit into the shared corpus"
 node scripts/index/push-index.js \
-  scripts/index/naukri.jsonl scripts/index/index.jsonl scripts/index/jsonld.jsonl $DRY
+  scripts/index/naukri.jsonl scripts/index/index.jsonl "${JSONLD[@]}" $DRY
 
 say "6/7  Harvest ATS slugs out of what the corpus just took in"
 # The loop that makes acquisition get cheaper as it runs. A paid search row is
@@ -91,7 +97,7 @@ say "7/7  What is still real"
 # month has already given up its decay statistics, and anything a user tracks
 # is exempt. Without it the measured intake fills the tier in about two weeks.
 node --max-old-space-size=4096 scripts/index/verify.js \
-  scripts/index/naukri.jsonl scripts/index/index.jsonl scripts/index/jsonld.jsonl \
+  scripts/index/naukri.jsonl scripts/index/index.jsonl "${JSONLD[@]}" \
   --expired scripts/index/expired.jsonl --prune 30 $PUSH
 
 # ── is the live system actually working? ────────────────────────────────────

@@ -69,8 +69,6 @@ const ATS = {
     rows: (d) => (Array.isArray(d) ? d.length : 0) },
   ashby: { url: (s) => `https://api.ashbyhq.com/posting-api/job-board/${s}`,
     rows: (d) => (d && Array.isArray(d.jobs) ? d.jobs.length : 0) },
-  workable: { url: (s) => `https://apply.workable.com/api/v1/widget/accounts/${s}?details=true`,
-    rows: (d) => (d && Array.isArray(d.jobs) ? d.jobs.length : 0) },
   smartrecruiters: { url: (s) => `https://api.smartrecruiters.com/v1/companies/${s}/postings`,
     rows: (d) => (d && Array.isArray(d.content) ? d.content.length : 0) },
   recruitee: { url: (s) => `https://${s}.recruitee.com/api/offers/`,

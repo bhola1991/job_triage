@@ -243,7 +243,10 @@ async function rowsFrom(src, depth = 0) {
      ambiguous between "clean run" and "old crawler", and verify.js should not
      have to guess which. */
   fs.writeFileSync(OUT.replace(/\.jsonl$/, '') + '.meta.json',
-    JSON.stringify({ at: new Date().toISOString(), parts: [...new Set(all.map((r) => r.part).filter(Boolean))], failed: FAILED }, null, 2) + '\n');
+    JSON.stringify({ at: new Date().toISOString(), parts: [...new Set(all.map((r) => r.part).filter(Boolean))], failed: FAILED,
+      // --limit or --max-age leaves rows out of the file that the board still
+      // lists. Say so, or verify.js reads their absence as closure evidence.
+      ...((LIMIT || MAX_AGE) ? { partial: [...new Set([...byUrl.values()].map((r) => r.source).filter(Boolean))] } : {}) }, null, 2) + '\n');
   if (FAILED.length) console.log(`  ${FAILED.length} file(s) unreadable this run: ${FAILED.join(', ')}`);
 
   const named = jobs.filter((j) => j.company).length;

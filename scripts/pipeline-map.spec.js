@@ -104,7 +104,7 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-    intro: 'One POST, fourteen actions, a service-role key. The server is a credential broker and a meter for thirteen of them \u2014 it holds no per-user job table, and the one action that does read jobs, index_search, reads the SHARED corpus that belongs to nobody.',
+    intro: 'One POST, sixteen actions, a service-role key. The server is a credential broker and a meter for fifteen of them \u2014 it holds no per-user job table, and the one action that does read jobs, index_search, reads the SHARED corpus that belongs to nobody.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
@@ -482,7 +482,9 @@ module.exports = {
     // branches of a fourteen-way router and the anchor check stayed green,
     // because an orphaned node still resolves. Adding an action means adding it
     // here too.
-    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'idxsearch', 'mantiks', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    // It went stale a second time: direction_fill and company_pulse (2026-10)
+    // had nodes and no edge, until CodeRabbit noticed on 2026-10-19.
+    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'mantiks', 'fill', 'pulse', 'idxsearch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'st.index', to: 'st.checks', label: 'still listed?' },
     { from: 'sv.idxsearch', to: 'st.search', label: 'search_index()' },

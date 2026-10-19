@@ -121,6 +121,13 @@ for (const [label, block, surface] of [['dark', kitDark, '--panel2'], ['light', 
        in the app). The chip sits on an arbitrary surface, so it is measured
        against the lightest one it can land on; the row only ever sits on the
        page, so it is measured against --ink. */
+    /* Colour-law rule 3: the accent is on the row's EDGE and the card stays
+       plain, so every --*-row equals --panel in both themes. A translucent row
+       can still clear the contrast test below, so that test alone would pass a
+       regression back to tinted rows. */
+    const rowV = t[`${tone}-row`], panelV = t.panel;
+    if (rowV && panelV && rowV.toUpperCase() !== panelV.toUpperCase())
+      fail(`${label}: --${tone}-row is ${rowV}, but rows stay plain: it must equal --panel (${panelV})`);
     for (const [part, against] of [['tint', surface], ['row', '--ink']]) {
       const value = t[`${tone}-${part}`];
       if (!value) { fail(`${label}: --${tone}-${part} missing`); continue; }

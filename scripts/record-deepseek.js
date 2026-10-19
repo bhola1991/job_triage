@@ -60,9 +60,13 @@ const T = new Function(
   grab(/function grabJSON[\s\S]*?\n}\n/) +
   grab(/function saneDate[\s\S]*?\n}\n/) +
   grab(/function sysPrompt[\s\S]*?\n}\n/) +
-  ';return {sysPrompt,grabJSON,normFlags,CONF_CODES,saneDate};')();
+  // The tier -> model map comes from the app too (record-eval.ts does the
+  // same): restated here, a model change in index.html would leave this
+  // measuring the old model under the new tier's name.
+  grab(/const DS_MODELS = [^\n]*\n/) +
+  ';return {sysPrompt,grabJSON,normFlags,CONF_CODES,saneDate,DS_MODELS};')();
 
-const MODELS = { pro: 'deepseek-v4-pro', flash: 'deepseek-flash' };
+const MODELS = T.DS_MODELS;
 const model = MODELS[TIER];
 if (!model) { console.error(`--tier must be one of ${Object.keys(MODELS).join(', ')}`); process.exit(1); }
 

@@ -165,7 +165,8 @@ async function verify(platform, slug) {
     let n = null;
     try { const rows = ATS[platform].rows(d); if (Array.isArray(rows)) n = rows.length; } catch { /* generic below */ }
     if (n === null) {
-      const rows = Array.isArray(d) ? d : (d.jobs || d.data || d.results || d.postings || d.content || []);
+      // Recruitee answers {offers: [...]}; without it every Recruitee board read as empty.
+      const rows = Array.isArray(d) ? d : (d.jobs || d.offers || d.data || d.results || d.postings || d.content || []);
       n = Array.isArray(rows) ? rows.length : 0;
     }
     return n > 0 ? { ok: true, n } : { ok: false, why: 'board is empty' };

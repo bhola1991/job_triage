@@ -43,7 +43,9 @@ const KIND = arg('kind', null);
 const SINCE = arg('since', null);
 
 const rest = async (q) => {
-  const r = await fetch(`${SB}/rest/v1/${q}`, { headers: { apikey: SR, Authorization: `Bearer ${SR}` } });
+  // A timeout: morning.sh runs this unattended, and a socket that never answers
+  // would hang the unit the way the crawl once froze for a day.
+  const r = await fetch(`${SB}/rest/v1/${q}`, { headers: { apikey: SR, Authorization: `Bearer ${SR}` }, signal: AbortSignal.timeout(30e3) });
   if (!r.ok) throw new Error(`PostgREST ${r.status}: ${(await r.text()).slice(0, 200)}`);
   return r.json();
 };

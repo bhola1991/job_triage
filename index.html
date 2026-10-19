@@ -1,3 +1,4 @@
+<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Job Triage</title>
@@ -6298,7 +6299,10 @@ function jobDetail(j,i,acc){
   const age=ageOf(j), silent=daysSilent(j), scored=isScored(j), due=isDue(j);
   const btn=(act,label,cls)=>`<button class="btn-sm ${cls||''}" data-act="${act}" data-i="${i}">${label}</button>`;
   // CSV imports write a missing link as the literal text "nan".
-  const url=String(j.url||'').trim().toLowerCase()==='nan' ? '' : String(j.url||'').trim();
+  // httpUrl, like every other href here: esc() stops a quote breaking out of
+  // the attribute but not a javascript: link, and this url can arrive from a
+  // CSV import or a shared backup.
+  const url=String(j.url||'').trim().toLowerCase()==='nan' ? '' : httpUrl(String(j.url||'').trim());
 
   const eyebrow =
       st==='closed'     ? 'closed'
