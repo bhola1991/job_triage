@@ -167,10 +167,16 @@ function coveredBoards() {
 }
 
 async function wantedBoards() {
-  const env = {};
-  for (const l of fs.readFileSync(require('path').join(__dirname, '../../supabase/.env'), 'utf8').split('\n')) {
-    const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(l); if (m) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+  // The environment first (GitHub Actions passes the keys as secrets), then
+  // supabase/.env on a machine that has one.
+  const env = { SUPABASE_URL: process.env.SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY };
+  const file = require('path').join(__dirname, '../../supabase/.env');
+  if ((!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) && fs.existsSync(file)) {
+    for (const l of fs.readFileSync(file, 'utf8').split('\n')) {
+      const m = /^\s*([A-Z0-9_]+)\s*=\s*(.*)$/.exec(l); if (m && !env[m[1]]) env[m[1]] = m[2].trim().replace(/^["']|["']$/g, '');
+    }
   }
+  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not set (environment or supabase/.env)');
   const H = { apikey: env.SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}` };
   const q = async (p) => { const r = await fetch(`${env.SUPABASE_URL}/rest/v1/${p}`, { headers: H, signal: AbortSignal.timeout(60000) }); if (!r.ok) throw new Error(`${p.split('?')[0]} ${r.status}`); return r.json(); };
   const want = new Map();

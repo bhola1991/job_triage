@@ -621,7 +621,11 @@ supabase/functions/reap-apify/      Cancels Apify runs nobody is polling. Needs 
 supabase/migrations/                What has actually been applied to the live project, newest last. schema.sql is the shape; these are the history.
 scripts/index/                      The OFFLINE CRAWLER, and the reason the corpus exists: 99.8% of job_index comes
                                     from here, not from a user's search. Parked outside the app -- nothing in
-                                    index.html reads it -- and run nightly by a systemd timer (§8 of STATUS.md).
+                                    index.html reads it -- and run nightly at 05:00 IST by GitHub Actions
+                                    (.github/workflows/crawl.yml) since 2026-10-19; the laptop's systemd
+                                    timer is disabled (it missed nights asleep). State between nights is in
+                                    a PRIVATE Supabase Storage bucket, crawl-state (state.sh) -- never the
+                                    repo, which is public. A manual run is dry unless dry=false.
   ingest.js                         Crawls 324 ATS boards across 6 platforms + 3 aggregator feeds. Per-host pacing.
   push-index.js                     Pushes to job_index: 35-day cap, thin-row refusal, retry-then-halve, 120s timeout.
   verify.js                         Liveness: a set difference over daily snapshots. Two absences close a posting.
@@ -631,6 +635,9 @@ scripts/index/                      The OFFLINE CRAWLER, and the reason the corp
   jsonld-boards.js                  Reads the boards sources.json "jsonld" lists: job sitemap, then JobPosting data or labelled fields per page. New pages only, cached.
   retrieve.js  validate.js          Local read and check helpers. No network.
   refresh.sh                        What the timer runs. Waits on the above, so a hang there cancels every later night.
+  state.sh                          pull/push the crawl's state (checks.json, jsonld cache, sources.json, probe results)
+                                    to the crawl-state bucket. pull REFUSES without checks.json: a fresh store re-dates
+                                    every posting. Never run two crawls on one day -- the second doubles every absence.
   sources.json                      The board catalogue: greenhouse 150, ashby 84, lever 40, smartrecruiters 23, recruitee 19, workable 8.
 scripts/compare-tiers.js            Top-K overlap between two models' rankings, from ai_model. A measurement.
 scripts/record-deepseek.js          Scores the eval cases on a named tier (DEEPSEEK_API_KEY, from the SHELL).
