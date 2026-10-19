@@ -609,17 +609,34 @@
   @media(max-width:900px){ .youswitch,.youswitch:hover:not(:disabled){top:10px;right:12px;padding:10px 14px 10px 12px;font-size:14px}
     .youcard{grid-template-columns:110px minmax(0,1fr);gap:14px} .youfig{height:150px} .you-art{height:140px} .youname{font-size:20px} }
   /* To decide with the map as a layer: beside the list on a wide screen
-     (sticky, so it stays while the list scrolls), on top of it on request
-     below that. While a job is open its pane takes the map's place. */
+     (sticky, so it stays while the list scrolls). Below 1100px the list is a
+     SHUTTER over the map: it sits on top, covering it, and pulling it down by
+     its handle (or tapping the handle) slides it down to reveal the map
+     underneath; pushing it up closes it. --maph is the map's height, set after
+     each render. While a job is open its pane takes the map's place. */
   .decide{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
-  .dmap{display:none}
-  .decide.mapon .dmap{display:block;order:-1}
+  .shutter{display:none}
+  @media(max-width:1099px){
+    .decide{display:flex;flex-direction:column;gap:0;position:relative}
+    .dmap{display:block;order:-1}            /* the map first, so the list can lie over it */
+    .dlist{position:relative;z-index:3;background:var(--ink);margin-top:calc(-1 * var(--maph, 0px));
+      border-top:1.5px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -10px 24px rgba(0,0,0,.28);
+      transition:margin-top .3s cubic-bezier(.2,.8,.2,1)}
+    .decide.mapon .dlist{margin-top:14px}
+    .dlist.dragging{transition:none}
+    .shutter,.shutter:hover:not(:disabled){display:flex;flex-direction:column;align-items:center;gap:6px;width:100%;padding:10px 12px 12px;
+      margin:0 0 6px;border:0;border-radius:18px 18px 0 0;background:none;color:var(--text);touch-action:none;cursor:grab}
+    .shutter i{width:52px;height:6px;border-radius:3px;background:var(--dim)}
+    .shutter span{display:inline-flex;align-items:center;gap:8px;font-size:14px;font-weight:700}
+    .shutter span svg{width:18px;height:18px}
+    .shutter small{font-size:11.5px;color:var(--muted);font-weight:400}
+  }
+  @media(prefers-reduced-motion:reduce){ .dlist{transition:none} }
   .mapnote{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:0 0 10px;padding:7px 10px;
     border:1.5px solid var(--line);border-radius:8px;background:var(--panel2);font-size:12.5px}
   @media(min-width:1100px){
     .decide{grid-template-columns:minmax(0,1.12fr) minmax(0,1fr)}
     .dmap{display:block;position:sticky;top:12px;order:0}
-    .maptog{display:none}
     .wrap.paned .decide{grid-template-columns:minmax(0,1fr)}
     .wrap.paned .dmap{display:none}
   }
@@ -6892,7 +6909,6 @@ function renderUnapplied(){
   const mapNote = narrow ? `<div class="mapnote"><span>Showing the <b>${all.length}</b> in the map's view${MAPSEL?` · ${esc(MAPSEL.l)}`:''}</span><button class="btn-sm" data-mapclear>Show all</button></div>` : '';
   return `${mapNote}<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
-      <button class="btn-sm maptog" id="mapToggle" aria-expanded="${MAPON}">${MAPON?'Hide the map':'Map'}</button>
       <button class="btn-sm" data-findmore style="margin-left:10px" title="Search the boards for more">Find more work</button>
       ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
         title="${esc(gated.map(x=>x.gated).filter((v,i,a)=>a.indexOf(v)===i).slice(0,4).join(' · '))}">${
@@ -6975,6 +6991,44 @@ function byDirection(p){
       sub: dirMark(x.t.id)+`${x.found} found · ${x.sent} sent · ${x.back} ${x.back===1?'reply':'replies'}`,
       facts:[['sent / back',`${x.sent} / ${x.back}`,''],['reply rate',x.rate===null?'—':x.rate+'%',x.rate===null?'quiet':'']],
       acts:`<button class="btn-sm" data-dashdir="${esc(x.t.id)}">Show on map</button>` })).join(''));
+}
+
+/* The list as a shutter over the map (below 1100px). Dragging moves the list
+   with the finger; let go past 70px and it snaps open (or shut, pushing up).
+   A pull on the list itself counts only from the top of the page and only when
+   the finger moves mostly downward, so the swipe deck's sideways swipes and
+   ordinary scrolling are left alone. */
+let SHUT_DRAGGED = false;
+function bindShutter(){
+  const dc=document.querySelector('.decide'); if(!dc) return;
+  const map=dc.querySelector('.dmap'), list=dc.querySelector('.dlist'), handle=dc.querySelector('.shutter');
+  if(!map||!list||!handle) return;
+  dc.style.setProperty('--maph', map.offsetHeight+'px');
+  if(window.innerWidth>=1100) return;
+  let y0=null, x0=0, dy=0, live=false;
+  const start=(t,fromHandle)=>{ if(!fromHandle && (window.scrollY>2 || MAPON)) return; y0=t.clientY; x0=t.clientX; dy=0; live=fromHandle; };
+  const move=(ev,t)=>{
+    if(y0===null) return;
+    dy=t.clientY-y0;
+    if(!live){ if(Math.abs(dy)<8) return; if(dy<0 || Math.abs(t.clientX-x0)*1.5>Math.abs(dy)){ y0=null; return; } live=true; }
+    ev.preventDefault();
+    const max=map.offsetHeight+14, lo=MAPON?-max:0, hi=MAPON?0:max;
+    list.classList.add('dragging');
+    list.style.transform=`translateY(${Math.max(lo,Math.min(hi,dy))}px)`;
+  };
+  const end=()=>{
+    if(y0===null) return; y0=null;
+    list.classList.remove('dragging'); list.style.transform='';
+    if(!live) return;
+    if(Math.abs(dy)>6) SHUT_DRAGGED=true;           // a drag is not also a tap on the handle
+    if(!MAPON && dy>70){ MAPON=true; track('map_toggle',{ on:true, by:'pull' }); render(); window.scrollTo(0,0); }
+    else if(MAPON && dy<-70){ MAPON=false; track('map_toggle',{ on:false, by:'push' }); render(); }
+    setTimeout(()=>{ SHUT_DRAGGED=false; },350);
+  };
+  handle.addEventListener('touchstart',ev=>start(ev.touches[0],true),{passive:true});
+  list.addEventListener('touchstart',ev=>{ if(!ev.target.closest('.shutter')) start(ev.touches[0],false); },{passive:true});
+  list.addEventListener('touchmove',ev=>move(ev,ev.touches[0]),{passive:false});
+  list.addEventListener('touchend',end); list.addEventListener('touchcancel',end);
 }
 
 /* ═══ you ═══
@@ -7377,7 +7431,8 @@ function renderApp(){
       <h2 class="viewh">${TAB==='you'?(YOUSUB==='stats'?'Analytics':'You'):({companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div class="decide${MAPON?' mapon':''}">
-        <div class="dlist">${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>
+        <div class="dlist"><button class="shutter" id="mapToggle" aria-expanded="${MAPON}" aria-label="${MAPON?'Push the list up to close the map':'Pull the list down to see the map'}">
+          <i></i><span>${ic('map')}${MAPON?'Push up to close the map':'Pull down for the map'}</span><small>${MAPON?'or tap here':'or tap here · zoom it to narrow this list'}</small></button>${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>
         <div class="dmap">${renderMap()}</div></div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='you'       ? '' : `<div>${YOUSUB==='stats' ? renderDash() : renderYou()}</div>
@@ -7543,6 +7598,7 @@ function renderApp(){
   $('#btnRailProfile').onclick=showProfile;
   if($('#viewDash')) $('#viewDash').onclick=()=>{ TAB='you'; YOUSUB='stats'; SEL_JOB=null; render(); window.scrollTo(0,0); };
   $('#railGrab').onclick=toggleRail;
+  bindShutter();
   { /* The pull: a swipe up on the strip opens it, a swipe down on the sheet's
        top closes it. Vertical only, and only where the rail is a strip. */
     const r=$('#rail'); let y0=null;
@@ -8964,7 +9020,7 @@ document.addEventListener('click',e=>{
   if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
   if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
   if(e.target.closest && e.target.closest('[data-mapclear]')){ MAPSEL=null; ZOOM=[]; return render(); }
-  if(e.target.closest && e.target.closest('#mapToggle')){ MAPON=!MAPON; track('map_toggle',{ on:MAPON }); render(); if(MAPON) window.scrollTo(0,0); return; }
+  if(e.target.closest && e.target.closest('#mapToggle')){ if(SHUT_DRAGGED){ SHUT_DRAGGED=false; return; } MAPON=!MAPON; track('map_toggle',{ on:MAPON, by:'tap' }); render(); if(MAPON) window.scrollTo(0,0); return; }
   const wm=e.target.closest && e.target.closest('[data-workmodel]');
   if(wm){ track('work_model_open',{ from:TAB }); return workModelDialog(); }
   const fm=e.target.closest && e.target.closest('[data-findmore]');
