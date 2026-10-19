@@ -1,0 +1,59 @@
+# The nightly corpus refresh (scripts/index/refresh.sh), on GitHub's machines
+# instead of a laptop that sleeps through some nights. Moved 2026-10-19 after
+# three of seven nights that week added nothing because the laptop was off.
+#
+# State between nights lives in a private Supabase Storage bucket, not here:
+# see scripts/index/state.sh for why, and why a run without it is refused.
+#
+# Secrets (Settings -> Secrets and variables -> Actions): SUPABASE_URL and
+# SUPABASE_SERVICE_ROLE_KEY. Nothing else: the heartbeat skips the DeepSeek and
+# Mantiks checks without their keys, and those still run every morning from
+# scripts/morning.sh on the laptop.
+name: Nightly crawl
+
+on:
+  schedule:
+    - cron: '30 23 * * *'        # 05:00 IST, after the boards' overnight churn
+  workflow_dispatch:
+    inputs:
+      dry:
+        description: 'Crawl and diff only: push nothing, save no state'
+        type: boolean
+        default: true
+
+# One crawl at a time: two would race on the same state.
+concurrency:
+  group: crawl
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  crawl:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # A scheduled run is always real; a manual one is dry unless asked.
+      DRY: ${{ github.event_name == 'workflow_dispatch' && inputs.dry }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Restore yesterday's state
+        run: scripts/index/state.sh pull
+
+      - name: Crawl, deposit, harvest, verify
+        run: |
+          if [ "$DRY" = "true" ]; then scripts/index/refresh.sh --no-push; else scripts/index/refresh.sh; fi
+
+      # Saved even when the heartbeat fails the run: by then verify.js has
+      # already written today's checks.json, and losing it would cost the day.
+      # Not saved on a dry run, which must change nothing.
+      - name: Save today's state
+        if: ${{ always() && env.DRY != 'true' && hashFiles('scripts/index/checks.json') != '' }}
+        run: scripts/index/state.sh push
