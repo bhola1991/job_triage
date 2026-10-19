@@ -586,6 +586,32 @@
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
   }
   .qfacts{align-items:center}
+  .dstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:2px 0 12px}
+  .dstat{padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
+  .dstat .num{font-size:26px;line-height:1.1;color:var(--text)}
+  .dstat .dl{font-size:12.5px;font-weight:650;margin-top:4px} .dstat .ds{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .dpanes{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px;margin-bottom:26px}
+  /* .dpane, not .dcard: .dcard is the phone swipe deck's card. */
+  .dpane{padding:12px 14px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel);min-width:0}
+  .dch{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 10px;margin-bottom:6px}
+  .dch b{font-size:14px} .dch span{font-size:11.5px;color:var(--muted)}
+  .dleg{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:12px;margin:2px 0 4px}
+  .dleg span{display:inline-flex;align-items:center}
+  .dchart{position:relative} .dchart svg{display:block;width:100%;height:auto}
+  .dchart [data-tip]{cursor:default}
+  .dax{font:10px var(--mono);fill:var(--dim)} .dlab{font-size:11.5px;fill:var(--text)}
+  .dgrid{display:grid;gap:4px;align-items:stretch;margin-top:8px}
+  .dgh{font:10px var(--mono);letter-spacing:.06em;text-transform:uppercase;color:var(--dim);text-align:center;align-self:end;padding-bottom:2px}
+  .dgr,.dgr:hover:not(:disabled){display:flex;align-items:center;gap:2px;min-width:0;padding:6px 4px;border:0;border-radius:6px;background:none;
+    color:var(--text);font-size:12.5px;font-weight:600;text-align:left}
+  .dgr span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .dgr:not(:disabled):hover{background:var(--panel2)}
+  .dcell,.dcell:hover:not(:disabled){min-height:38px;border:1.5px solid var(--hair);border-radius:7px;background:none;color:var(--text);padding:0}
+  .dcell:not(:disabled):hover{border-color:var(--line)}
+  .dcell:disabled{color:var(--dim)}
+  .dcell .num{font-size:14px}
+  @media(max-width:1080px){ .dpanes{grid-template-columns:minmax(0,1fr)} }
+  @media(max-width:640px){ .dstats{grid-template-columns:repeat(2,minmax(0,1fr))} .dgh{font-size:8.5px;letter-spacing:0} }
   .wmstrip{display:flex;align-items:center;gap:12px;margin:0 0 14px;padding:8px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   .wmstrip .wm-ic{flex:0 0 32px;width:32px;height:32px;border-radius:9px}
   .wmstrip .wm-t{flex:1;min-width:0;font-size:12.5px;color:var(--muted)} .wmstrip .wm-t b{color:var(--text);font-weight:650}
@@ -6877,6 +6903,93 @@ function byDirection(p){
       acts:`<button class="btn-sm" data-dashdir="${esc(x.t.id)}">Show on map</button>` })).join(''));
 }
 
+/* The Dashboard's top (feedback #19, "more sleek, multi-dimensional"): the
+   week in four numbers, the last eight weeks as one line per direction, and
+   every direction against every stage as a grid that opens the map on that
+   slice. Below it, the rows stay for detail.
+
+   Colour: the lines and the grid's row marks are direction hues (identity);
+   counts are grey, because a number is not an instruction. Shape doubles the
+   hue (dirMark) so the lines part for someone who cannot tell the hues apart. */
+const DASH_WEEKS = 8;
+const sentOn = j => listOf(j,'events').filter(e=>e.kind==='sent').map(e=>String(e.on).slice(0,10)).sort()[0] || j.date_applied || '';
+function dashTop(p){
+  const jobs=p.jobs, tracks=p.profile.tracks||[], multi=tracks.length>1, T=today(), W=DASH_WEEKS;
+  const ids = multi ? tracks.map(t=>t.id) : [''];
+  const idOf = j => multi ? dirKey(j) : '';
+  // Rolling 7-day windows ending today: index W-1 is the last seven days.
+  const wk = d => { const n=dayDiff(String(d).slice(0,10), T); return n>=0 && n<W*7 ? W-1-Math.floor(n/7) : -1; };
+  const dayAgo = n => new Date(Date.parse(T)-n*86400000).toISOString().slice(0,10);
+  const S={}; ids.forEach(id=>S[id]={ sent:Array(W).fill(0), back:Array(W).fill(0) });
+  jobs.forEach(j=>{ const s=S[idOf(j)]; if(!s) return;
+    const so=sentOn(j); if(so){ const w=wk(so); if(w>=0) s.sent[w]++; }
+    listOf(j,'events').forEach(e=>{ if(e.kind==='reply'){ const w=wk(e.on); if(w>=0) s.back[w]++; } }); });
+  const sum=(k,w)=>ids.reduce((n,id)=>n+S[id][k][w],0);
+  const sentAll=jobs.filter(j=>sentOn(j)).length;
+  const backAll=jobs.filter(j=>stOf(j)==='live'||listOf(j,'events').some(e=>e.kind==='reply')).length;
+  const waiting=jobs.filter(j=>isOpen(j)&&stOf(j)==='new').length;
+  const delta=(a,b)=>a===b?'same as the week before':`${a>b?'up':'down'} from ${b} the week before`;
+  const tile=(n,l,sub)=>`<div class="dstat"><div class="num">${n}</div><div class="dl">${l}</div><div class="ds">${sub}</div></div>`;
+  const stats=`<div class="dstats">
+    ${tile(sum('sent',W-1),'sent this week',delta(sum('sent',W-1),sum('sent',W-2)))}
+    ${tile(sum('back',W-1),'replies this week',delta(sum('back',W-1),sum('back',W-2)))}
+    ${tile(sentAll?Math.round(backAll/sentAll*100)+'%':'—','reply rate',sentAll?`${backAll} of ${sentAll} sent, ever`:'nothing sent yet')}
+    ${tile(waiting,'waiting on you','scored, not yet decided')}</div>`;
+
+  // ── eight weeks, one line per direction ──
+  const VW=560, VH=210, L=34, R=118, Tp=14, B=28, pw=VW-L-R, ph=VH-Tp-B;
+  const max=Math.max(1,...ids.flatMap(id=>S[id].sent)), step=Math.max(1,Math.round(niceStep(max)||1)),   // counts: whole steps only
+    top=Math.ceil(max/step)*step;
+  const X=i=>L+i*pw/(W-1), Y=v=>Tp+ph-(v/top)*ph;
+  const col=id=>multi?`var(--dir-${dirIdx(id)})`:'var(--text)';
+  const lab=id=>multi?dirLabel(id):'All directions';
+  let g='';
+  for(let v=0; v<=top+1e-9; v+=step) g+=`<line x1="${L}" x2="${L+pw}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" stroke="var(--hair)" stroke-width="1"/>
+    <text x="${L-8}" y="${(Y(v)+3.5).toFixed(1)}" text-anchor="end" class="dax">${+v.toFixed(1)}</text>`;
+  for(let i=0;i<W;i++) g+=`<text x="${X(i).toFixed(1)}" y="${VH-8}" text-anchor="middle" class="dax">${i===W-1?'this wk':mmdd(dayAgo((W-1-i)*7+6))}</text>`;
+  // Direct labels at the line ends, nudged apart so two equal lines do not overprint.
+  const ends=ids.map(id=>({id,y:Y(S[id].sent[W-1])})).sort((a,b)=>a.y-b.y);
+  for(let k=1;k<ends.length;k++) if(ends[k].y-ends[k-1].y<13) ends[k].y=ends[k-1].y+13;
+  ids.forEach(id=>{
+    const s=S[id], pts=s.sent.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+    g+=`<polyline points="${pts}" fill="none" stroke="${col(id)}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>`;
+    s.sent.forEach((v,i)=>{
+      const tip=`${lab(id)} · week to ${mmdd(dayAgo((W-1-i)*7))}: ${v} sent${s.back[i]?`, ${s.back[i]} ${s.back[i]===1?'reply':'replies'}`:''}`;
+      if(s.back[i]) g+=`<circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="8" fill="none" stroke="${col(id)}" stroke-width="1.6"/>`;
+      // The point in the direction's own shape, as on the map: two lines on the
+      // same count still part by shape where their colours overlap.
+      const sh=multi?dirShape(id):'circle', px=X(i), py=Y(v);
+      g+= sh==='circle' ? `<circle cx="${px.toFixed(1)}" cy="${py.toFixed(1)}" r="4" fill="${col(id)}" stroke="var(--panel)" stroke-width="2" data-tip="${esc(tip)}"/>`
+        : `<path d="${shapePath(sh,px,py,4.4)}" fill="${col(id)}" stroke="var(--panel)" stroke-width="1.5" stroke-linejoin="round" data-tip="${esc(tip)}"/>`;
+      g+=`
+        <circle cx="${X(i).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="12" fill="transparent" data-tip="${esc(tip)}"/>`;
+    });
+    const e=ends.find(x=>x.id===id);
+    g+=`<text x="${L+pw+10}" y="${(e.y+4).toFixed(1)}" class="dlab">${esc(lab(id).length>14?lab(id).slice(0,13)+'…':lab(id))}</text>`;
+  });
+  const anySent=ids.some(id=>S[id].sent.some(Boolean));
+  const chart=`<div class="dpane"><div class="dch"><b>Sent each week</b><span>last ${W} weeks · a ring means a reply came that week</span></div>
+    ${multi?`<div class="dleg">${ids.map(id=>`<span>${dirMark(id)}${esc(lab(id))}</span>`).join('')}</div>`:''}
+    ${anySent?`<div class="dchart"><svg viewBox="0 0 ${VW} ${VH}" role="img" aria-label="Applications sent per week for the last ${W} weeks">${g}</svg><div class="maptip" id="dTip" hidden></div></div>`
+      :`<p class="hint" style="margin:18px 0">Nothing sent in the last ${W} weeks. Each application you mark sent draws a point here.</p>`}</div>`;
+
+  // ── every direction against every stage ──
+  const COLS=[['To decide',['decide','cold']],['Waiting',['sent']],['Overdue',['due']],['Replied',['live']],['Closed',['closed']]];
+  const K=mapItems(true).map(x=>dotKeys(x.j));
+  const cnt=(id,st)=>K.filter(k=>(!multi||k.dir===id)&&st.includes(k.st)).length;
+  const cmax=Math.max(1,...ids.flatMap(id=>COLS.map(([,st])=>cnt(id,st))));
+  const cell=(id,c)=>{ const n=cnt(id,c[1]), a=n?Math.round(8+34*n/cmax):0;
+    return `<button class="dcell" ${n?'':'disabled'} data-dd="${esc(id)}" data-ds="${c[1].join(',')}" data-dl="${esc(lab(id)+' · '+c[0])}"
+      style="${n?`background:color-mix(in srgb, var(--text) ${a}%, transparent)`:''}" title="${n?`Show these ${n} on the map`:'None'}"><span class="num">${n||'·'}</span></button>`; };
+  const grid=`<div class="dpane"><div class="dch"><b>Where everything stands</b><span>by direction · click a number to see those on the map</span></div>
+    <div class="dgrid" style="grid-template-columns:minmax(0,1.4fr) repeat(${COLS.length},minmax(0,1fr))">
+      <span></span>${COLS.map(c=>`<span class="dgh">${c[0]}</span>`).join('')}
+      ${ids.map(id=>`<button class="dgr" ${multi?`data-dd="${esc(id)}" data-dl="${esc(lab(id))}"`:'disabled'} title="${multi?'Show this direction on the map':''}">${dirMark(id)}<span>${esc(lab(id))}</span></button>${COLS.map(c=>cell(id,c)).join('')}`).join('')}
+    </div></div>`;
+
+  return `${stats}<div class="dpanes">${chart}${grid}</div>`;
+}
+
 function renderDash(){
   const p=P(), jobs=p.jobs;
   if(!jobs.length) return `<div class="empty">${artSvg('woman','empty-art')}<b>Nothing to summarise yet</b>
@@ -6911,7 +7024,7 @@ function renderDash(){
   const funnel=`<div class="pbar" role="img" aria-label="${bar.map(([n,l])=>`${n} ${l}`).join(', ')}">${
       bar.filter(b=>b[0]).map(([n,l,c])=>`<i style="flex:${n};background:${c}" title="${n} ${l}"></i>`).join('')}</div>
     <div class="pbar-l">${bar.map(([n,l,c])=>`<span><i style="background:${c}"></i>${n} ${l}</span>`).join('')}</div>`;
-  return `${sectOf('','Pipeline',`Where everything stands, across ${nDirs>1?`all ${nDirs} directions`:'every row'}${nCold?` and the ${nCold} compan${nCold===1?'y':'ies'} to approach`:''}. A live conversation is worth more than any number of new rows.`,jobs.length,
+  return `${dashTop(p)}${sectOf('','Pipeline',`Where everything stands, across ${nDirs>1?`all ${nDirs} directions`:'every row'}${nCold?` and the ${nCold} compan${nCold===1?'y':'ies'} to approach`:''}. A live conversation is worth more than any number of new rows.`,jobs.length,
       funnel
       + stageRow(nNew,'To decide',nDirs>1?`Waiting on you in every direction · ${nDir} in the one open now`:'Scored and waiting on you',pct(nNew),'','unapplied','Open')
       + stageRow(nSent,'Sent','Applied; the next move is theirs',pct(nSent),nSent?'awaiting':'','applied','Open')
@@ -7971,9 +8084,13 @@ function fitFrame(js){
 /* Click a Key line (or a Dashboard direction): the map BECOMES that class --
    only its dots, framed to fit -- and stays so until another line is picked
    or "Everything" is. Hover still only lights; a click is a choice. */
-function selectClass(a,v,l){
-  const js=mapItems(true).filter(x=>dotKeys(x.j)[a]===v).map(x=>x.j); if(!js.length) return false;
-  MAPSEL={ a, v, l, frame:fitFrame(js) }; ZOOM=[]; return true;
+function selectClass(a,v,l,more){
+  // v may be a list (a column of the Dashboard's grid: "to decide" is two
+  // stages), and `more` narrows it by a second class: {a,v}.
+  const has=(k,a1,v1)=>Array.isArray(v1)?v1.includes(k[a1]):k[a1]===v1;
+  const test=k=>has(k,a,v) && (!more || has(k,more.a,more.v));
+  const js=mapItems(true).filter(x=>test(dotKeys(x.j))).map(x=>x.j); if(!js.length) return false;
+  MAPSEL={ a, v, l, test, frame:fitFrame(js) }; ZOOM=[]; return true;
 }
 const isFull = D => D.f0===0 && D.f1===100 && D.r0===0 && D.r1===100;
 
@@ -8020,7 +8137,7 @@ function mapItems(all){
   const p=P(); if(!p) return [];
   const L=p.jobs.map((j,i)=>({j,i})).filter(x=>isScored(x.j) &&
     (isOpen(x.j) || ['sent','live'].includes(stOf(x.j)) || (stOf(x.j)==='closed'&&x.j.date_applied)));
-  return all || !MAPSEL ? L : L.filter(x=>dotKeys(x.j)[MAPSEL.a]===MAPSEL.v);
+  return all || !MAPSEL ? L : L.filter(x=>MAPSEL.test(dotKeys(x.j)));
 }
 /* The classes the key picks out, per dot. Every one of them is also a data-
    attribute on the dot, so a hover in the key is one attribute comparison. */
@@ -8703,12 +8820,29 @@ function renderPalette(){
 
 /* Opened from the keyboard, or from the top bar -- a shortcut alone would make
    the whole surface unreachable on a phone, where there is no ⌘ to press. */
+/* The Dashboard chart's points explain themselves on hover, like the map's dots. */
+document.addEventListener('mouseover',e=>{
+  const t=$('#dTip'); if(!t) return;
+  const pt=e.target.closest && e.target.closest('.dchart [data-tip]');
+  if(!pt){ t.hidden=true; return; }
+  const box=pt.closest('.dchart').getBoundingClientRect(), r=pt.getBoundingClientRect();
+  t.textContent=pt.dataset.tip; t.hidden=false;
+  t.style.left=Math.max(4, Math.min(box.width-t.offsetWidth-4, r.left-box.left+r.width/2-t.offsetWidth/2))+'px';
+  t.style.top=Math.max(4, r.top-box.top-t.offsetHeight-8)+'px';
+});
 document.addEventListener('click',e=>{
   const wm=e.target.closest && e.target.closest('[data-workmodel]');
   if(wm){ track('work_model_open',{ from:TAB }); return workModelDialog(); }
   const fm=e.target.closest && e.target.closest('[data-findmore]');
   if(fm){ TOOLS=true; if(window.innerWidth<=900) RAIL=false; track('find_more',{ tab:TAB }); return render(); }
   const g=e.target.closest && e.target.closest('[data-dashgo]'); if(g){ TAB=g.dataset.dashgo; SEL_JOB=null; return render(); }
+  // The Dashboard's grid: a cell is a direction narrowed to a stage; a row head is the direction.
+  const dc=e.target.closest && e.target.closest('[data-dd]');
+  if(dc && !dc.disabled){ const id=dc.dataset.dd, st=dc.dataset.ds;
+    const ok = st ? (id ? selectClass('dir', id, dc.dataset.dl, {a:'st', v:st.split(',')}) : selectClass('st', st.split(','), dc.dataset.dl))
+                  : selectClass('dir', id, dc.dataset.dl);
+    if(ok){ TAB='map'; SEL_JOB=null; track('dash_grid',{ stage:st||'' }); render(); }
+    return; }
   const d=e.target.closest && e.target.closest('[data-dashdir]'); if(!d) return;
   TAB='map'; SEL_JOB=null; selectClass('dir', d.dataset.dashdir, dirLabel(d.dataset.dashdir)); track('dash_direction'); render();
 });
