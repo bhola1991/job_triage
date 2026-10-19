@@ -586,6 +586,12 @@
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
   }
   .qfacts{align-items:center}
+  .qd-cv{margin:0 0 16px} .qd-cv .btn-row{margin-top:6px}
+  .cvgap{margin:10px 0;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel2);font-size:12.5px;line-height:1.5}
+  .cvdoc{max-height:52vh;overflow:auto;padding:16px 18px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;line-height:1.5}
+  .cvdoc h1{font-size:19px;margin:0 0 2px} .cvdoc h2{font:700 11px var(--mono);letter-spacing:.08em;text-transform:uppercase;color:var(--muted);
+    border-bottom:1px solid var(--hair);padding-bottom:3px;margin:14px 0 6px}
+  .cvdoc p{margin:3px 0} .cvdoc ul{margin:3px 0 6px;padding-left:18px} .cvdoc li{margin:2px 0}
   .dstats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:2px 0 12px}
   .dstat{padding:12px 14px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   .dstat .num{font-size:26px;line-height:1.1;color:var(--text)}
@@ -801,7 +807,9 @@
     background:repeating-linear-gradient(180deg,transparent 0 4px,var(--gnd) 4px 5.5px)}
   .empty b{display:block;color:var(--text);font-size:15px;font-weight:500;margin-bottom:6px}
 
-  .modal{position:fixed;inset:0;background:var(--veil);display:flex;
+  /* Dialogs are appended to <body>, outside #app where the font is set, so they
+     take it here; without this every dialog fell back to the browser's serif. */
+  .modal{font-family:var(--disp);color:var(--text);position:fixed;inset:0;background:var(--veil);display:flex;
     align-items:center;justify-content:center;padding:20px;z-index:50}
   .modal .box{background:var(--panel);border:1px solid var(--line);border-radius:5px;
     max-width:620px;width:100%;max-height:84vh;overflow:auto;padding:22px;
@@ -1899,7 +1907,7 @@ function jobRow(j){
   JOB_JSON.forEach(c => { r[c] = jsonOut(j[c], extras, c); });
   // A company's website and what was last read about it (Companies tab):
   // no column of their own, so they ride in extras, which the read side restores.
-  ['site','pulse','dir'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
+  ['site','pulse','dir','cvt'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
   r.extras = extras;
   return r;
 }
@@ -6389,6 +6397,11 @@ function jobDetail(j,i,acc){
 
     <div class="qd-rail">
       ${advice?`<div class="qd-callout ${advice[0]}">${esc(advice[1])}</div>`:''}
+      ${(()=>{ const cv=cvOf(j); return `<div class="qd-cv"><div class="qd-h">Your CV for this job</div>
+        ${cv ? `<p class="qd-p">Tailored ${esc(cv.on)}${cv.gaps&&cv.gaps.length?` · ${cv.gaps.length} thing${cv.gaps.length===1?'':'s'} it asks for that your CV does not show`:''}.</p>
+          <div class="btn-row">${btn('cvopen','Open it')}${btn('cv','Tailor again')}</div>`
+             : `<p class="qd-p">Your CV, reordered and reworded around what this job asks for. Nothing is added that your CV does not say.</p>
+          <div class="btn-row">${btn('cv','Tailor my CV to this job')}</div>`}</div>`; })()}
       ${url
         ? `<a class="lnk" href="${esc(url)}" target="_blank" rel="noopener" data-applyask="${i}">open the original posting ↗</a>`
         : `<a class="lnk" href="https://www.google.com/search?q=${encodeURIComponent([j.title,j.company,j.location,'job'].filter(Boolean).join(' '))}" target="_blank" rel="noopener">no link saved — search Google for it ↗</a>`}
@@ -6614,6 +6627,7 @@ function jobCard(j,i){
                         + more([btn('save', isSaved(j)?'Take off saved':'Save for later'),
                                 url?btn('sent','Mark applied without opening'):'',
                                 btn('pitch','Draft outreach'),
+                                btn('cv','Tailor my CV to this'),
                                 btn('hrfind','Find contacts'),
                                 btn('close','Not interested')]))
     : st==='sent' ? btn('live','They replied') + details + pri
@@ -9042,6 +9056,118 @@ async function draftMessage(o){
   }
 }
 
+/* ═══ the CV, tailored to one job ═══
+   Your CV, reordered and reworded around what one posting asks for. The model
+   may move, cut, merge and rephrase what the CV already says, and use the
+   posting's own words where the CV genuinely backs them; it may not add a
+   skill, a number, a title, an employer or a date. What the posting asks for
+   and the CV does not show is returned separately as "gaps" -- said to the
+   person, never written into the CV. Saved with the job (j.cvt, in extras),
+   so it is there next time and travels with the row. */
+const cvOf = j => { try{ return j && j.cvt ? JSON.parse(j.cvt) : null; }catch(e){ return null; } };
+/* The CV's own small markup -> HTML: # name, ## section, - bullet, **bold**. */
+function cvHtml(md){
+  const inl=t=>esc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
+  let out='', list=false;
+  for(const raw of String(md||'').split('\n')){
+    const l=raw.trim();
+    const close=()=>{ if(list){ out+='</ul>'; list=false; } };
+    if(!l){ close(); continue; }
+    if(/^#\s/.test(l)){ close(); out+=`<h1>${inl(l.slice(2))}</h1>`; }
+    else if(/^##\s/.test(l)){ close(); out+=`<h2>${inl(l.slice(3))}</h2>`; }
+    else if(/^[-*•]\s/.test(l)){ if(!list){ out+='<ul>'; list=true; } out+=`<li>${inl(l.slice(2))}</li>`; }
+    else { close(); out+=`<p>${inl(l)}</p>`; }
+  }
+  return out+(list?'</ul>':'');
+}
+async function tailorCv(i){
+  const p=P(), j=p.jobs[i]; if(!j) return;
+  if(!String(p.raw||'').trim()){
+    return modal(`<div class="eyebrow">Your CV for this job</div><h2 style="margin:6px 0 8px">Add your CV first</h2>
+      <p style="color:var(--muted)">This rewrites your own CV around the job, so it needs your CV to start from. Add it from your profile.</p>
+      <div class="btn-row" style="margin-top:12px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  }
+  const d=modal(`<div class="eyebrow">Your CV for this job</div><h2 style="margin:6px 0 14px">${esc(j.title)} · ${esc(j.company)}</h2>
+    <p style="color:var(--muted)"><span class="spin"></span> Reading the posting against your CV…</p>`);
+  try{
+    const txt=await claude(`Tailor a job seeker's CV to one job posting.
+
+THE CV (the ONLY source of facts):
+${String(p.raw).slice(0,12000)}
+
+THE JOB:
+Title: ${j.title}
+Company: ${j.company}
+${j.location?`Location: ${j.location}\n`:''}Posting: ${String(j.description||'(no description saved)').slice(0,5000)}
+
+Rules -- these are absolute:
+- Use ONLY facts in the CV. Never add a skill, tool, number, metric, title, employer, date, degree or responsibility the CV does not state. If the CV says "managed a team", do not write "managed a team of 8".
+- You MAY reorder sections and bullets so what matters to this job comes first, cut what is irrelevant, merge bullets, and reword a bullet so it uses the posting's own language -- but only where the CV genuinely supports that wording.
+- Keep every job the CV lists, with its real title, employer and dates. Less relevant ones may be shortened to one line, never removed or renamed.
+- Start with a 2-3 line summary aimed at this job, built only from the CV.
+- Plain, specific, active. No buzzwords, no "passionate", no "results-driven".
+- Fit on one page if the CV allows it; never more than two.
+- Keep the name and contact lines exactly as the CV has them.
+
+Markup for "cv": "# " the person's name, a plain line for contact details, "## " each section heading, "- " each bullet, **text** for bold. Nothing else.
+
+Return ONLY this JSON:
+{"cv": "the tailored CV in the markup above",
+ "changes": ["what you moved or reworded and why, in plain words -- 3 to 6 items"],
+ "gaps": ["each thing the posting asks for that the CV does not show -- 0 to 6 items, short; these are NOT added to the CV"]}`, TOK_CAP);
+    const r=grabJSON(txt);
+    if(!r || !String(r.cv||'').trim()) throw new Error('the answer came back empty');
+    j.cvt=JSON.stringify({ on:today(), md:String(r.cv), changes:[].concat(r.changes||[]).map(String).slice(0,8), gaps:[].concat(r.gaps||[]).map(String).slice(0,8) });
+    logEvent(j,'note','tailored the CV to this job');
+    track('cv_tailored',{ gaps:(r.gaps||[]).length });
+    await save(); d.remove(); render(); showCv(i);
+  }catch(e){
+    d.remove();
+    if(e.message==='NEEDKEY'){ keyDialog(()=>tailorCv(i)); return; }
+    modal(`<div class="eyebrow">Your CV for this job</div><p class="err">Couldn't tailor it. ${esc(e.message)}</p>
+      <div class="btn-row"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  }
+}
+/* The saved CV: read it, edit it, copy it, or print it to PDF. Edits are saved
+   back to the job, so the version you sent is the version that is kept. */
+function showCv(i){
+  const p=P(), j=p.jobs[i], cv=cvOf(j); if(!cv) return tailorCv(i);
+  const d=modal(`<div class="eyebrow">Your CV for ${esc(j.title)} · ${esc(j.company)}</div>
+    <h2 style="margin:6px 0 4px">Tailored ${esc(cv.on)}</h2>
+    ${cv.gaps&&cv.gaps.length?`<div class="cvgap"><b>It asks for, and your CV does not show:</b> ${cv.gaps.map(esc).join(' · ')}. Not added: if you have these, put them in your CV and tailor again.</div>`:''}
+    ${cv.changes&&cv.changes.length?`<details style="margin:6px 0 10px"><summary style="cursor:pointer;color:var(--muted);font-size:12.5px">What was changed</summary>
+      <ul style="font-size:12.5px;color:var(--muted)">${cv.changes.map(c=>`<li>${esc(c)}</li>`).join('')}</ul></details>`:''}
+    <div class="cvdoc" id="cvView">${cvHtml(cv.md)}</div>
+    <textarea id="cvEdit" rows="18" style="display:none;font-family:var(--mono);font-size:12px">${esc(cv.md)}</textarea>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn-go btn-sm" id="cvPrint">Download as PDF</button>
+      <button class="btn-sm" id="cvCopy">Copy text</button>
+      <button class="btn-sm" id="cvEditBtn">Edit</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  const view=d.querySelector('#cvView'), ed=d.querySelector('#cvEdit'), eb=d.querySelector('#cvEditBtn');
+  const current=()=>ed.style.display==='none' ? cv.md : ed.value;
+  eb.onclick=async()=>{
+    if(ed.style.display==='none'){ ed.style.display=''; view.style.display='none'; eb.textContent='Save edits'; return; }
+    cv.md=ed.value; j.cvt=JSON.stringify(cv); await save();
+    view.innerHTML=cvHtml(cv.md); ed.style.display='none'; view.style.display=''; eb.textContent='Edit';
+  };
+  d.querySelector('#cvCopy').onclick=()=>{ navigator.clipboard.writeText(current()).then(()=>{ d.querySelector('#cvCopy').textContent='Copied'; },()=>{}); };
+  // A print window rather than a PDF library: the browser's own "Save as PDF"
+  // makes a real, selectable PDF and adds no dependency (CLAUDE.md §3).
+  d.querySelector('#cvPrint').onclick=()=>{
+    const w=window.open('','_blank'); if(!w){ alert('Allow pop-ups for this site to download the PDF.'); return; }
+    const name=(String(current()).match(/^#\s+(.+)$/m)||[])[1]||'CV';
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(name)} — ${esc(j.title)}</title><style>
+      @page{size:A4;margin:16mm 16mm}
+      body{font:10.5pt/1.45 Georgia,'Times New Roman',serif;color:#111;max-width:178mm;margin:0 auto}
+      h1{font:600 20pt/1.1 system-ui,-apple-system,'Segoe UI',sans-serif;margin:0 0 2pt}
+      h2{font:700 9pt system-ui,sans-serif;letter-spacing:.08em;text-transform:uppercase;border-bottom:.6pt solid #888;padding-bottom:2pt;margin:11pt 0 5pt}
+      p{margin:2pt 0} ul{margin:2pt 0 4pt;padding-left:13pt} li{margin:1.5pt 0} b{font-weight:700}
+    </style></head><body>${cvHtml(current())}<script>window.onload=()=>{window.print()}<\/script></body></html>`);
+    w.document.close(); track('cv_pdf');
+  };
+}
+
 async function draftPitch(i,isChase){
   const p=P(), j=p.jobs[i]; if(!j) return;
   const prof=p.profile;
@@ -9163,6 +9289,8 @@ document.addEventListener('click',async e=>{
     undoToast(j, undo, isSaved(j)?'Saved for later':'Taken off saved');
   }
   if(a==='pitch')  return draftPitch(i,false);
+  if(a==='cv')     return tailorCv(i);
+  if(a==='cvopen') return showCv(i);
   if(a==='chase')  return draftPitch(i,true);
   if(a==='note')   return noteDialog(i);
   if(a==='logadd') return noteDialog(i);
