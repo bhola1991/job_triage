@@ -587,6 +587,21 @@
     .qitem.sel .qmini,.qitem.sel .qhist{display:none}
   }
   .qfacts{align-items:center}
+  /* To decide with the map as a layer: beside the list on a wide screen
+     (sticky, so it stays while the list scrolls), on top of it on request
+     below that. While a job is open its pane takes the map's place. */
+  .decide{display:grid;grid-template-columns:minmax(0,1fr);gap:18px;align-items:start}
+  .dmap{display:none}
+  .decide.mapon .dmap{display:block;order:-1}
+  .mapnote{display:flex;align-items:center;gap:10px;justify-content:space-between;margin:0 0 10px;padding:7px 10px;
+    border:1.5px solid var(--line);border-radius:8px;background:var(--panel2);font-size:12.5px}
+  @media(min-width:1100px){
+    .decide{grid-template-columns:minmax(0,1.12fr) minmax(0,1fr)}
+    .dmap{display:block;position:sticky;top:12px;order:0}
+    .maptog{display:none}
+    .wrap.paned .decide{grid-template-columns:minmax(0,1fr)}
+    .wrap.paned .dmap{display:none}
+  }
   .qd-cv{margin:0 0 16px} .qd-cv .btn-row{margin-top:6px}
   .cvgap{margin:10px 0;padding:9px 12px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel2);font-size:12.5px;line-height:1.5}
   .cvdoc{max-height:52vh;overflow:auto;padding:16px 18px;border:1.5px solid var(--line);border-radius:8px;background:var(--panel);font-size:13px;line-height:1.5}
@@ -1231,6 +1246,13 @@ svg.plot.hl .dot:not(.lit){ opacity:.1 }
   .mapstage.keyon .mapkey{ position:static; width:auto; overflow:visible }
   .mapstage.keyon .keytab.on{ right:250px }
 }
+/* Inside To decide the map is a half-width column (or a phone's width), so a
+   pinned key goes UNDER the plot, full width, instead of taking 250px beside
+   it -- which left the plot a stub. Its lines flow in two columns there. */
+.dmap .mapstage.keyon{ display:block; padding-right:0 }
+.dmap .mapstage.keyon .mapkey{ position:static; width:auto; margin-top:10px; box-shadow:none; overflow:visible; columns:2 220px; column-gap:14px }
+.dmap .mapstage.keyon .mapkey .kg{ break-inside:avoid }
+.dmap .mapstage.keyon .keytab, .dmap .mapstage.keyon .keytab.on{ right:0 }
 /* (A direction's name wraps, below, rather than trailing off: two directions
    that start alike cannot be told apart once cut.) */
 .mapkey .kg+.kg{ margin-top:8px; padding-top:8px; border-top:1px solid var(--hair) }
@@ -1457,7 +1479,8 @@ let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'', editing:null });
 let ONB = blankOnb();
-let RANGE = null, TAB = 'map', busy = false;   // the map is home
+let RANGE = null, TAB = 'unapplied', busy = false;   // To decide is home (feedback #21); the map lives inside it
+let MAPON = false;   // on a narrow screen, whether the map is open at the top of To decide
 /* Narrow screens only: is the tools sheet showing. Never read above 900px,
    where the sidebar is simply a column and the sheet CSS does not apply. */
 let TOOLS = false;
@@ -6158,11 +6181,13 @@ function sizePlot(){
   // A phone opens on where the jobs actually are, not on the empty 0-100 grid
   // squeezed into a thumb's width (feedback #18).
   BASE = PHONE() ? fitFrame(mapItems(true).map(x=>x.j)) : FULL;
-  const avail=Math.max(300, Math.min(vw-(vw>900?110:44), 1320) - (KEYOPEN&&vw>900?262:0));
+  const SIDE = vw>=1100;   // To decide's right-hand column (the map is only ever drawn there now)
+  const avail = SIDE ? Math.max(380, Math.round((Math.min(vw-110,1320) - (SEL_JOB?400:0)) * 0.46))
+                     : Math.max(300, Math.min(vw-(vw>900?110:44), 1320) - (KEYOPEN&&vw>900?262:0));
   // On a phone the plot is taller than it is wide (most of the screen), so the
   // box may be narrower than the desktop's 640.
-  const room=PHONE() ? Math.min(.62*vh, avail*1.25) : Math.min(.58*vh, avail*.66);
-  PLW=Math.round(Math.max(PHONE()?340:640, Math.min(1000, 420*avail/room)));
+  const room=PHONE() ? Math.min(.62*vh, avail*1.25) : SIDE ? Math.min(.66*vh, avail*1.05) : Math.min(.58*vh, avail*.66);
+  PLW=Math.round(Math.max(PHONE()?340:SIDE?400:640, Math.min(1000, 420*avail/room)));
   PLK=Math.max(1, Math.min(1.8, PLW/avail));
   const left=Math.round(56*PLK), bottom=Math.round(60*PLK);
   PL={x:left, y:20, w:PLW-left-40, h:420-20-bottom};
@@ -6794,13 +6819,19 @@ function renderUnapplied(){
   const p=P();
   const open=p.jobs.map((j,i)=>({j,i}))
     .filter(x=>isOpen(x.j) && stOf(x.j)==='new' && (CHFILT==='all'||chOf(x.j)===CHFILT));
-  const all=open.filter(x=>inDir(x.j,p));
+  /* The map is a layer over this list (feedback #21): while it is zoomed or
+     filtered to a Key line, the list is exactly the jobs in its view, from
+     every direction -- the map's own lens replaces the direction lens -- and a
+     line above the list says so and undoes it. */
+  const narrow = ZOOM.length>0 || !!MAPSEL;
+  const inMap = x => inDomain(x.j, DOMAIN()) && (!MAPSEL || MAPSEL.test(dotKeys(x.j)));
+  const all = narrow ? open.filter(x=>isScored(x.j) && inMap(x)) : open.filter(x=>inDir(x.j,p));
   /* Another direction's jobs: not in this list (switching direction changes
      it), but the good ones are one fold away, named by their direction, since
      a strong role elsewhere can beat a middling one here. Its score was made
      against that direction, so it is labelled rather than ranked in. */
   const dirName=id=>((p.profile.tracks||[]).find(t=>t.id===id)||{}).label||'another direction';
-  const elsewhere=sortList(open.filter(x=>!inDir(x.j,p) && isScored(x.j) && overBar(x.j,p.profile) && !redLine(x.j,p.profile)));
+  const elsewhere=narrow ? [] : sortList(open.filter(x=>!inDir(x.j,p) && isScored(x.j) && overBar(x.j,p.profile) && !redLine(x.j,p.profile)));
   const elseFold=foldSect('elsewhere','Strong in your other directions',
     `Over the bar for ${[...new Set(elsewhere.map(x=>dirName(x.j.dir)))].join(', ')}. Scored for that direction, not this one; switch direction to rank them.`,elsewhere);
   /* The red lines, applied HERE and nowhere else: at read time, over the list
@@ -6835,8 +6866,10 @@ function renderUnapplied(){
   const worth  =sortList(scored.filter(x=>!isClosing(x.j)&&!isStrong(x.j,p.profile)&&overBar(x.j,p.profile)));
   const below  =sortList(scored.filter(x=>!overBar(x.j,p.profile)));
 
-  return `<div class="listhead">
+  const mapNote = narrow ? `<div class="mapnote"><span>Showing the <b>${all.length}</b> in the map's view${MAPSEL?` · ${esc(MAPSEL.l)}`:''}</span><button class="btn-sm" data-mapclear>Show all</button></div>` : '';
+  return `${mapNote}<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
+      <button class="btn-sm maptog" id="mapToggle" aria-expanded="${MAPON}">${MAPON?'Hide the map':'Map'}</button>
       <button class="btn-sm" data-findmore style="margin-left:10px" title="Search the boards for more">Find more work</button>
       ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
         title="${esc(gated.map(x=>x.gated).filter((v,i,a)=>a.indexOf(v)===i).slice(0,4).join(' · '))}">${
@@ -7105,9 +7138,11 @@ function renderApp(){
     <!-- The views. They were a row of tabs above the list; here they are one
          place to look, each with its own count, and the main area is just the
          view. Ids kept stable for the command list. -->
-    ${[['map','viewMap','map','Map','where everything sits'],
+    <!-- No Map view (2026-10-19, feedback #21): the map is a layer of To decide.
+         #viewMap stays, hidden, so the command list's "Map" still works. -->
+    <button id="viewMap" hidden></button>
+    ${[['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting · ${doneToday} of ${DAY_FLOOR} sent today`],
        ['companies','viewCompanies','building','Companies',`${coldCount} to approach`],
-       ['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting · ${doneToday} of ${DAY_FLOOR} sent today`],
        ['applied','viewApplied','send','Applied',`${appliedCount} in play`],
        ['dash','viewDash','chart','Dashboard','how it is going']].map(([t,id,icn,lab,sub])=>{
       const n = t==='companies'?coldCount : t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
@@ -7262,7 +7297,7 @@ function renderApp(){
     <div class="main">
       ${(()=>{ /* The next step, on the two views it is about: the map (home)
                   and Applied. Repeated on every view it was furniture. */
-        let n=(TAB==='map'||TAB==='applied')&&nextStep();
+        let n=(TAB==='unapplied'||TAB==='applied')&&nextStep();
         /* Applied opens with the very rows a follow-up nudge points at (Overdue,
            In conversation), so on that view the banner only repeats them. */
         if(n && TAB==='applied' && n.act==='follow') n=null;
@@ -7275,10 +7310,11 @@ function renderApp(){
       </div>`;
         const fig = n.art && NEXT_ART[n.art] ? NEXT_ART[n.art]() : '';
         return fig ? `<div class="nextrow">${banner}<div class="next-art${n.art==='clear'?' wide':''}" aria-hidden="true">${fig}</div></div>` : banner; })()}
-      <h2 class="viewh">${({map:'Map',companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
-      ${TAB!=='map'?'':`${workStrip(prof)}<div>${renderMap()}</div>`}
+      <h2 class="viewh">${({companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
       ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
-      ${TAB!=='unapplied' ? '' : `<div>${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>`}
+      ${TAB!=='unapplied' ? '' : `<div class="decide${MAPON?' mapon':''}">
+        <div class="dlist">${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>
+        <div class="dmap">${renderMap()}</div></div>`}
       ${TAB!=='applied'   ? '' : `<div>${renderApplied()}</div>`}
       ${TAB!=='dash'      ? '' : `<div>${renderDash()}</div>`}
     </div>
@@ -7299,6 +7335,7 @@ function renderApp(){
 
   if(SOFT) softNote(SOFT);
   document.querySelectorAll('.tab[data-tab], .r-view[data-tab]').forEach(t=>t.onclick=()=>{ TAB=t.dataset.tab; SEL_JOB=null; render(); });
+  if($('#viewMap')) $('#viewMap').onclick=()=>{ TAB='unapplied'; SEL_JOB=null; MAPON=true; render(); window.scrollTo(0,0); };
   if(TAB==='companies') bindCompanies();
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
   document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
@@ -8302,9 +8339,7 @@ function renderMap(){
     </div>
     <p class="hint" style="margin:6px 0 0">${PHONE()?'Pinch to zoom, drag to move once zoomed, double-tap to step back. Tap a dot to decide on it.'
       :'Scroll to zoom where the pointer is. Drag a box to zoom into it. Click a dot to decide on it.'}</p></div>
-    <div style="margin-top:22px">${sectOf('','In view',`Exactly what is on the map above, best first.${inView.length>30?` Showing 30 of ${inView.length} — zoom in to narrow it.`:''}`,inView.length,
-      inView.slice(0,30).map(({j,i})=>jobCard(j,i)).join(''))}</div>
-    ${!inView.length&&items.length?'<p class="hint">Nothing in this part of the map. Zoom out.</p>':''}`;
+    ${!inView.length&&items.length?'<p class="hint" style="margin:8px 0 0">Nothing in this part of the map. Zoom out.</p>':''}`;
 }
 
 let BOX = null, WHEEL_T = null;
@@ -8742,7 +8777,7 @@ let PAL = null;   // null closed, else { q, sel }
 
 function commands(){
   const list=[
-    ['Go','Map','#viewMap'], ['Go','Companies','#viewCompanies'], ['Go','To decide','#viewDecide'],
+    ['Go','Companies','#viewCompanies'], ['Go','To decide','#viewDecide'],
     ['Go','Applied','#viewApplied'], ['Go','Dashboard','#viewDash'],
     ['Find work', 'Search the job boards','#btnBoards'],
     /* Only exists while an offer is live, so most of the time this resolves to
@@ -8769,8 +8804,10 @@ function commands(){
     ['View','Send feedback','#fbFab']
   ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
   // The four views are state rather than controls, so these set it directly.
-  [['Unapplied','unapplied'],['Applied','applied'],['Map','map'],['Dashboard','dash']]
+  [['To decide','unapplied'],['Companies','companies'],['Applied','applied'],['Dashboard','dash']]
     .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  // The map is To decide's layer now; "Map" opens it there.
+  list.push({ g:'Go to', label:'Map', run:()=>{ TAB='unapplied'; MAPON=true; SEL_JOB=null; render(); window.scrollTo(0,0); } });
   list.push({ g:'Profile', label:'What I want', run:askWants });
   if(CLOUD&&USER){
     list.push({ g:'Account', label:'Credits', el:'#btnCredits' });
@@ -8849,6 +8886,8 @@ document.addEventListener('mouseover',e=>{
   t.style.top=Math.max(4, r.top-box.top-t.offsetHeight-8)+'px';
 });
 document.addEventListener('click',e=>{
+  if(e.target.closest && e.target.closest('[data-mapclear]')){ MAPSEL=null; ZOOM=[]; return render(); }
+  if(e.target.closest && e.target.closest('#mapToggle')){ MAPON=!MAPON; track('map_toggle',{ on:MAPON }); render(); if(MAPON) window.scrollTo(0,0); return; }
   const wm=e.target.closest && e.target.closest('[data-workmodel]');
   if(wm){ track('work_model_open',{ from:TAB }); return workModelDialog(); }
   const fm=e.target.closest && e.target.closest('[data-findmore]');
@@ -8859,10 +8898,10 @@ document.addEventListener('click',e=>{
   if(dc && !dc.disabled){ const id=dc.dataset.dd, st=dc.dataset.ds;
     const ok = st ? (id ? selectClass('dir', id, dc.dataset.dl, {a:'st', v:st.split(',')}) : selectClass('st', st.split(','), dc.dataset.dl))
                   : selectClass('dir', id, dc.dataset.dl);
-    if(ok){ TAB='map'; SEL_JOB=null; track('dash_grid',{ stage:st||'' }); render(); }
+    if(ok){ TAB='unapplied'; MAPON=true; SEL_JOB=null; track('dash_grid',{ stage:st||'' }); render(); window.scrollTo(0,0); }
     return; }
   const d=e.target.closest && e.target.closest('[data-dashdir]'); if(!d) return;
-  TAB='map'; SEL_JOB=null; selectClass('dir', d.dataset.dashdir, dirLabel(d.dataset.dashdir)); track('dash_direction'); render();
+  TAB='unapplied'; MAPON=true; SEL_JOB=null; selectClass('dir', d.dataset.dashdir, dirLabel(d.dataset.dashdir)); track('dash_direction'); render(); window.scrollTo(0,0);
 });
 document.addEventListener('keydown',e=>{
   if(VIEW!=='app') return;
