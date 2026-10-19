@@ -164,11 +164,12 @@ blush → dark`. `auto` follows the device: salmon by day, night by night.
   the one light set in `design/jobtriage.tokens.json`, so the kit and
   `legal.css` carry it too.
 - **Blush** is app-only: `:root[data-theme="light"][data-paper="blush"]` in
-  `index.html`, a pinker ground a shade darker than salmon. It rides on the
+  `index.html`, a mid-tone dusty rose about halfway between salmon and night
+  (page luminance 0.42 against salmon's 0.78; cards stay light at 0.68). It rides on the
   light theme, so every rule written for light still applies; it only re-points
   values. It is not in the tokens file and `selfcheck-tokens.js` does not see
-  it — its contrast was checked when it was set (floor: `--due` on its tint,
-  4.76). If you change it, check the same pairs by hand.
+  it — its contrast was checked when it was set, including each accent as
+  text directly on the darker page (floor: `--closing` on the page, 4.59). If you change it, check the same pairs by hand.
 - **Night** is the dark theme, neutral charcoal.
 
 On paper `--line` is a warm near-black (`#2B211C`), close to `--text`, which
