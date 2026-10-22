@@ -1970,7 +1970,7 @@ function jobRow(j){
   JOB_JSON.forEach(c => { r[c] = jsonOut(j[c], extras, c); });
   // A company's website and what was last read about it (Companies tab):
   // no column of their own, so they ride in extras, which the read side restores.
-  ['site','pulse','dir','cvt'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
+  ['site','pulse','dir','cvt','hrfound','drafts'].forEach(k => { if(j[k]) extras[k] = String(j[k]); });
   r.extras = extras;
   return r;
 }
@@ -4101,7 +4101,7 @@ function undoToast(j,undo,label,extra){
             status:[j.title,j.company].filter(Boolean).join(' · ')||'this role', undo };
   if(extra) Object.assign(t, extra);
   TASKS.push(t); renderTasks();
-  setTimeout(()=>dropTask(t.id), 9000);
+  setTimeout(()=>dropTask(t.id), 6000);   // long enough to reach Undo, short enough not to need dismissing
 }
 
 /* ═══ CSV ═══ */
@@ -8882,8 +8882,11 @@ function renderTasks(){
 }
 /* A toast that stays until it is answered: news, or a question. */
 function askToast(label, status, acts, dropLabel){
-  TASKS.push({ id:'t'+(++TASKSEQ), state:'done', label, status, acts, dropLabel });
-  renderTasks();
+  const t={ id:'t'+(++TASKSEQ), state:'done', label, status, acts, dropLabel };
+  TASKS.push(t); renderTasks();
+  // Only news (no buttons to answer): it goes by itself after 5s (feedback #28).
+  // A notice that asks something waits for the answer.
+  if(!(acts||[]).length) setTimeout(()=>dropTask(t.id), 5000);
 }
 function dropTask(id){ TASKS=TASKS.filter(t=>t.id!==id); renderTasks(); }
 
@@ -9115,13 +9118,18 @@ function hrDialog(i){
   const p=P(), j=p.jobs[i];
   const trk=(p.profile.tracks||[]).find(t=>t.id===p.track)||{};
   const ctx={ title:j.title, titles:trk.titles||[], description:j.description };
+  let saved=null; try{ saved=j.hrfound ? JSON.parse(j.hrfound) : null; }catch(e){ saved=null; }
   const d=modal(`<div class="eyebrow">Find a contact</div>
     <h2 style="margin:6px 0 6px">${esc(j.company)}</h2>
+    ${saved&&(saved.list||[]).length?`<div class="cvgap" style="display:flex;align-items:center;gap:10px;justify-content:space-between;flex-wrap:wrap">
+      <span><b>${saved.list.length} found ${esc(saved.on)}</b> — pick from them again, at no cost.</span>
+      <button class="btn-go btn-sm" id="hrSaved">Pick from these</button></div>`:''}
     <p style="color:var(--muted);font-size:12.5px;margin:0 0 12px">Searches LinkedIn for two kinds of person at ${esc(j.company)}: anyone in recruiting or HR, and whoever looks like they run the team this role sits in. LinkedIn doesn't publish emails, so any shown here is a guessed firstname.lastname pattern from the company's domain — not confirmed.</p>
     <p class="hint" style="margin-bottom:12px">About a cent of Apify credit, and free for the rest of the week once a company has been looked up. If search finds nobody public at this company, it says so rather than spending more to keep looking — add a name by hand instead. It runs in the background — carry on working and you'll get a note in the corner when it's done.</p>
-    <div class="btn-row"><button class="btn-go btn-sm" id="hrGo">Search</button>
+    <div class="btn-row"><button class="${saved&&(saved.list||[]).length?'':'btn-go '}btn-sm" id="hrGo">${saved&&(saved.list||[]).length?'Search again':'Search'}</button>
       <button class="btn-sm" onclick="this.closest('.modal').remove()">Cancel</button></div>`);
   d.querySelector('#hrGo').onclick=()=>{ d.remove(); startHrSearch(i, ctx); };
+  const hs=d.querySelector('#hrSaved'); if(hs) hs.onclick=()=>{ d.remove(); hrPick({ profileId:DB.current, key:keyOf(j), result:saved.list }); };
 }
 
 /* Detached on purpose. An Apify run takes minutes, and a modal held open over
@@ -9138,6 +9146,11 @@ function startHrSearch(i, ctx){
   findHrContacts(j.company, ctx, s=>{ t.status=s; renderTasks(); })
     .then(res=>{ t.state='done'; t.result=res.list;
       t.status=res.list.length+' worth looking at';
+      /* Kept on the job the moment they arrive (feedback #25): the picker can
+         be closed by accident, and a second search costs a second run. Opening
+         "Find contacts" again offers these first. */
+      if(DB.current===t.profileId){ const jj=P().jobs.find(x=>keyOf(x)===t.key);
+        if(jj && res.list.length){ jj.hrfound=JSON.stringify({ on:today(), list:res.list }); save(); } }
       renderTasks(); fbMoment('contacts'); })
     .catch(e=>{
       if(e.message==='NEEDAPIFY'){ dropTask(t.id); keyDialog(()=>startHrSearch(i,ctx)); return; }
@@ -9209,27 +9222,47 @@ ${String(raw||'').slice(0,9000)}`;
 /* Draft a message, show it, let them copy it. The two drafters below differ
    only in the prompt they build and the buttons they want beside Copy. */
 async function draftMessage(o){
+  /* A notepad first, AI on request (feedback #23). It opens on whatever was
+     last written for this job (o.job, kept in j.dm as you type, so closing it
+     by mistake loses nothing), or empty; "Draft it with AI" fills it, and if
+     there was already text, "Put back mine" undoes the AI. */
   const head=`<div class="eyebrow">${o.eyebrow}</div>
     <h2 style="margin:6px 0 14px">${o.head}</h2>`;
-  const d=modal(head+`<p style="color:var(--muted)"><span class="spin"></span> Writing…</p>`);
-  try{
-    const txt=await claude(o.prompt, o.maxTok);
-    d.querySelector('.box').innerHTML=head+`
-      <textarea id="msgTxt" rows="${o.rows}">${esc(txt)}</textarea>
+  // Every draft for a job in one field (j.drafts, carried in extras): the DM,
+  // the chase, and one per contact for InMail.
+  const drafts=()=>{ try{ return o.job && o.job.drafts ? JSON.parse(o.job.drafts) : {}; }catch(e){ return {}; } };
+  const draftOf=()=>o.job ? String(drafts()[o.field||'dm']||'') : '';
+  const init=draftOf();
+  const d=modal(head+`
+      <textarea id="msgTxt" rows="${o.rows}" placeholder="Write it here, or let AI draft it from your profile and this ${o.cold?'company':'job'}.">${esc(init)}</textarea>
       <div class="btn-row" style="margin-top:12px">
-        <button class="btn-go btn-sm" id="msgCopy">Copy</button>
+        <button class="btn-sm ${init?'':'btn-go'}" id="msgAI">${init?'Redraft with AI':'Draft it with AI'}</button>
+        <button class="btn-sm ${init?'btn-go':''}" id="msgCopy">Copy</button>
         ${(o.extras||[]).map(x=>`<button class="btn-sm" id="${x.id}">${x.label}</button>`).join('')}
-        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
-    const box=()=>d.querySelector('#msgTxt');
-    d.querySelector('#msgCopy').onclick=()=>{ box().select();
-      navigator.clipboard.writeText(box().value).then(()=>{ d.querySelector('#msgCopy').textContent='Copied'; },()=>{}); };
-    (o.extras||[]).forEach(x=>{ const b=d.querySelector('#'+x.id); if(b) b.onclick=()=>x.run(box().value, d); });
-  }catch(e){
-    d.remove();
-    if(e.message==='NEEDKEY'){ keyDialog(o.retry); return; }
-    modal(`<div class="eyebrow">${o.eyebrow}</div><p class="err">Couldn't write it. ${esc(e.message)}</p>
-      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button>`);
-  }
+        <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>
+      <div class="hint" id="msgNote" style="margin-top:8px"></div>`);
+  const box=()=>d.querySelector('#msgTxt'), note=d.querySelector('#msgNote'), ai=d.querySelector('#msgAI');
+  let keepT=null;
+  const keep=()=>{ if(!o.job) return; clearTimeout(keepT); keepT=setTimeout(()=>{ const m=drafts(); m[o.field||'dm']=box().value; o.job.drafts=JSON.stringify(m); save(); },600); };
+  box().addEventListener('input',keep);
+  box().focus();
+  d.querySelector('#msgCopy').onclick=()=>{ box().select();
+    navigator.clipboard.writeText(box().value).then(()=>{ d.querySelector('#msgCopy').textContent='Copied'; },()=>{}); };
+  (o.extras||[]).forEach(x=>{ const b=d.querySelector('#'+x.id); if(b) b.onclick=()=>x.run(box().value, d); });
+  ai.onclick=async()=>{
+    const mine=box().value;
+    ai.disabled=true; note.innerHTML='<span class="spin"></span> Writing…';
+    try{
+      const txt=await claude(o.prompt, o.maxTok);
+      box().value=String(txt||'').trim(); keep();
+      ai.textContent='Redraft with AI'; ai.classList.remove('btn-go'); d.querySelector('#msgCopy').classList.add('btn-go');
+      note.innerHTML = mine.trim() ? `Your text was replaced. <a href="#" class="lnk" id="msgBack">Put back mine</a>` : 'Edit it however you like; it is kept on this job.';
+      const back=d.querySelector('#msgBack'); if(back) back.onclick=e=>{ e.preventDefault(); box().value=mine; keep(); note.textContent='Put back.'; };
+    }catch(e){
+      if(e.message==='NEEDKEY'){ note.textContent=''; keyDialog(()=>ai.click()); }
+      else note.innerHTML=`<span class="err">Couldn't write it. ${esc(e.message)}</span>`;
+    }finally{ ai.disabled=false; }
+  };
 }
 
 /* ═══ the CV, tailored to one job ═══
@@ -9350,6 +9383,7 @@ async function draftPitch(i,isChase){
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   return draftMessage({
     eyebrow:'Outreach', head:`${esc(j.title)} · ${esc(j.company)}`, rows:10, maxTok:TOK_CAP,
+    job:j, field:isChase?'dmchase':'dm', cold:chOf(j)==='cold',
     retry:()=>draftPitch(i,isChase),
     extras:[{id:'msgSave', label:'Save to notes', run:async(text)=>{
       j.notes=(j.notes?j.notes+' | ':'')+text;
@@ -9397,6 +9431,7 @@ async function draftInmail(i,ci){
   const prof=p.profile;
   return draftMessage({
     eyebrow:'InMail draft', head:`${esc(c.name||'them')} · ${esc(j.company)}`, rows:8, maxTok:TOK_CAP,
+    job:j, field:'inmail:'+(c.name||ci),
     retry:()=>draftInmail(i,ci),
     extras: c.linkedin ? [{id:'msgOpen', label:'Open their profile',
       run:()=>{ if(httpUrl(c.linkedin)) window.open(c.linkedin,'_blank','noopener'); }}] : [],
@@ -9462,7 +9497,10 @@ document.addEventListener('click',async e=>{
   if(a==='unpass'){ const ps=passedSet(); ps.keys.delete(keyOf(j)); ps.last.pop(); keepPassed(); return render(); }
   if(a==='save'){
     const undo=snapRow(j); toggleSaved(j);
-    undoToast(j, undo, isSaved(j)?'Saved for later':'Taken off saved');
+    // From the swipe deck the card flying off IS the confirmation (feedback #27);
+    // a notice on every swipe was noise. Saved jobs are in Saved, and the row
+    // menu's "Take off saved" undoes it.
+    if(!b.closest('.deck-btns')) undoToast(j, undo, isSaved(j)?'Saved for later':'Taken off saved');
   }
   if(a==='pitch')  return draftPitch(i,false);
   if(a==='cv')     return tailorCv(i);
