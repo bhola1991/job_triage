@@ -7,6 +7,8 @@ const src=[
   grab(/const ATS = \{[\s\S]*?\n\};\n/), grab(/const stripTags[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
   grab(/function keyOf[\s\S]*?\n}\n/), grab(/function grabJSON[\s\S]*?\n}\n/),
+  // liveBoard puts each scored batch straight into the list (2026-10-23).
+  grab(/function addJobs[\s\S]*?\n}\n/),
   // What leaves for a model, and what is stripped before it does.
   grab(/const YEAR_RANGE = [\s\S]*?\n  }\);\n/),
   // candidateOf arrives inside the FLAG_CODES..addSpans slice above; grabbing
@@ -49,6 +51,8 @@ const src=[
 const TOK_CAP = 4000;
 let DBJOBS=[{url:'https://x/old'}], AGE={}, CLAUDE=null, FEEDS={};
 const P=()=>({jobs:DBJOBS}), ageOf=j=>AGE[j.url]??null, setPosted=(j,d)=>{j.posted=d;};
+// renderSoon/saveSoon (in the slice) call these on a timer after a batch lands.
+const render=()=>{}, save=async()=>{};
 const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Error('network'); return f||null; };
 const claude=async(t)=>CLAUDE(t);
 let SCORES=null;
@@ -169,6 +173,9 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  DBJOBS=[]; AGE={}; FEEDS={};
  const lb=liveBoard({titles:['Data Engineer']},{},'t');
  await lb.add([J('https://a/10','Data Engineer I','Acme','LinkedIn'),J('https://a/11','Data Engineer II','Beta','Indeed'),J('https://a/12','Data Engineer III','Gamma','Naukri')]);
+ // In the list the moment the batch is scored, not when the search ends: the
+ // kept two are there, the one below the bar is not, and st.added counts them.
+ ok(DBJOBS.map(j=>j.url).sort().join()==='https://a/10,https://a/12' && lb.st.added===2,'progressive add '+JSON.stringify({db:DBJOBS.map(j=>j.url),added:lb.st.added}));
  await lb.add([J('https://a/10','Data Engineer I','Acme','Indeed')]);   // same link from another source
  ok(lb.st.kept.map(j=>j.url).join()==='https://a/10,https://a/12' && lb.st.below===1 && lb.st.dropped.dupe===1 && lb.st.found===4,'liveBoard '+JSON.stringify({kept:lb.st.kept.map(j=>j.url),below:lb.st.below,d:lb.st.dropped}));
  SCORES=j=>({'https://y/1':80,'https://y/2':70,'https://y/3':20})[j.url];

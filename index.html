@@ -4940,7 +4940,7 @@ async function scoreAndCut(jobs, prof, track){
 function liveBoard(trk, prof, track){
   const p=P(), seen=seenKeys(p);
   let rk=''; try{ rk=rejKey(p); }catch(e){}   // fixed now: the track can change mid-search
-  const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, dropped:{listing:0, old:0, dupe:0}};
+  const st={found:0, checking:0, kept:[], unscored:[], below:0, closed:0, added:0, dropped:{listing:0, old:0, dupe:0}};
   /* Yield per origin (the source that delivered a job), for the usage ledger.
      seenIn records every origin that returned each job, before any filtering,
      so "exclusive" means no other source in this search had it at all. A job
@@ -4976,6 +4976,12 @@ function liveBoard(trk, prof, track){
       r.kept.forEach(j=>O(j.origin||'google').kept_50++);
       st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
       st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
+      /* Into the list now, not at the end (2026-10-23): a first search runs
+         for minutes, and people left before anything appeared. Each batch is
+         in To decide the moment it is scored, so the first jobs can be opened,
+         saved and applied to while the rest arrive. */
+      const n=addJobs(r.kept.concat(r.unscored));
+      if(n){ st.added+=n; saveSoon(); renderSoon(); }
       draw();
     },
     // Call once, after every source has landed.
@@ -5035,6 +5041,34 @@ async function fromAts(jobs, onStatus){
   return {jobs:out, closed};
 }
 
+/* A search adds jobs batch by batch; these keep that from re-drawing the page
+   or writing to the account on every batch. */
+let RENDER_T=null, SAVE_T=null;
+const renderSoon=()=>{ if(RENDER_T) return; RENDER_T=setTimeout(()=>{ RENDER_T=null; render(); },1200); };
+const saveSoon=()=>{ clearTimeout(SAVE_T); SAVE_T=setTimeout(()=>save(),2500); };
+
+/* Scrapes still running when the app closed. They are remembered on the
+   profile (synced), and the next open collects them instead of losing them --
+   a first search runs for minutes and people leave (shrabana, 2026-10-22). */
+function clearPending(trk){ const p=P(); if(p && p.profile.pending && (!trk || p.profile.pending.track===trk.id)){ delete p.profile.pending; saveSoon(); } }
+function resumePending(){
+  const p=P(), pd=p && p.profile.pending;
+  if(!pd || !(pd.runs||[]).length || busy || !cloudNow() || !USER) return false;
+  if(Date.now()-pd.at > 3*864e5){ delete p.profile.pending; save(); return false; }   // Apify keeps results about a week; three days is plenty
+  const trk=(p.profile.tracks||[]).find(t=>t.id===pd.track); if(!trk){ delete p.profile.pending; save(); return false; }
+  busy=true; STOP=false; render();
+  const live=liveBoard(trk, p.profile, trk.id), failed=[];
+  setSearchInfo('Collecting what your last search found while you were away…');
+  track('search_resume',{ runs:pd.runs.length });
+  const work=pd.runs.map(run=>(run.google
+      ? apifyBoardSearch(run.queries||[], pd.cc||'', null, run.id)
+      : apifyRun('', {}, {every:8000, cap:120, runId:run.id, source:run.source, label:run.label}).then(items=>(items||[]).map(jsearchRow)))
+    .then(jobs=>live.add(jobs||[]))
+    .catch(e=>{ failed.push(`${run.label||'search'}: ${e.message}`); }));
+  Promise.all(work).then(()=>finishSearch(trk, live, failed, false)).catch(e=>{ busy=false; render(); setSearchInfo(e.message); });
+  return true;
+}
+
 /* What the corpus search left on the table, so the paid search can be a second
    click rather than the same click. Holds the track it belongs to: switching
    track must not leave an offer behind that would spend credits on the titles
@@ -5058,7 +5092,8 @@ let BOARD_COST = 25;
 async function finishSearch(trk, live, failed, paid){
   const p=P(); const st=live.st, d=st.dropped;
   const wasStopped=stopped(); STOP=null;
-  const n=addJobs(st.kept.concat(st.unscored));
+  const n=st.added+addJobs(st.kept.concat(st.unscored));   // most already went in as they arrived
+  clearPending(trk);
   track('search_done',{ paid:!!paid, found:st.found, kept:st.kept.length, below:st.below, added:n, failed:failed.length, stopped:wasStopped });
   if(SEARCH_ID){
     hosted('search_report',{search_id:SEARCH_ID, sources:live.report()}).catch(e=>console.warn('usage report:', e.message));
@@ -5162,11 +5197,44 @@ async function fillDirection(){
   const trk=(p.profile.tracks||[]).find(t=>t.id===p.track);
   if(!trk || !(trk.titles||[]).length) return;
   const k='triage:filled:'+DB.current+':'+trk.id;
-  try{ if(localStorage.getItem(k)) return; localStorage.setItem(k, today()); }catch(e){ return; }
+  let filled=false; try{ filled=!!localStorage.getItem(k); }catch(e){ return; }
+  const waiting=p.jobs.some(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p));
+  if(filled && waiting) return;
+  /* Before anyone presses anything (2026-10-23): the free index first, which
+     answers in seconds, so the first screen has jobs on it; then, once per
+     direction, the free fill in the background. Both stream into To decide
+     batch by batch (liveBoard.add). */
+  busy=true; STOP=false; render();
+  const live=liveBoard(trk, p.profile, p.track), failed=[];
+  setSearchInfo('Reading what we already have for this direction…');
+  try{
+    const ix=await hosted('index_search',{ titles:(trk.titles||[]).slice(0,4), since_days:30, limit:60 });
+    if(ix && (ix.jobs||[]).length) await live.add(ix.jobs.map(jsearchRow));
+  }catch(e){ console.warn('first index read skipped:', e.message); }
+  if(filled || stopped()){ await finishSearch(trk, live, failed, false); thinCheck(trk); return; }
+  try{ localStorage.setItem(k, today()); }catch(e){}
   track('direction_fill',{ mode:trk.mode||'' });
-  setSearchInfo('Finding jobs for this direction — free, and only this once…');
+  setSearchInfo('Finding more jobs for this direction — free, and only this once. The first ones are already below.');
   const where = WHERE!==null ? WHERE : String(p.profile.location||'').split(',')[0].trim();
-  await runPaidBoards(trk, where, 30, null, 'direction_fill');
+  await runPaidBoards(trk, where, 30, {live, failed}, 'direction_fill');
+  thinCheck(trk);
+}
+
+/* A direction with almost nothing in it says so, and points at the best
+   stocked of the person's other directions (shrabana, 2026-10-22: 3 reporter
+   roles in India, 119 content ones). Free: it only reads the index. */
+let THIN = null;
+async function thinCheck(trk){
+  const p=P(); if(!p || !cloudNow()) return;
+  const n=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p)).length;
+  const others=(p.profile.tracks||[]).filter(t=>t.id!==trk.id && (t.titles||[]).length);
+  if(n>=5 || !others.length) return;
+  let best=null;
+  for(const t of others.slice(0,3)){
+    try{ const ix=await hosted('index_search',{ titles:t.titles.slice(0,4), since_days:30, limit:60 });
+      const m=((ix&&ix.jobs)||[]).length; if(!best || m>best.m) best={ t, m }; }catch(e){}
+  }
+  if(best && best.m>=10 && best.m>n*2){ THIN={ from:trk.id, n, to:best.t.id, label:best.t.label, m:best.m }; track('thin_direction',{ n, m:best.m }); render(); }
 }
 
 /* Phase two, and the one that costs credits: the live boards. Only ever reached
@@ -5198,8 +5266,9 @@ async function runPaidBoards(trk, where, since_days, pre, action){
         fallback:buildBoardQueries(titles,portalsFor(trk.mode),where).join('\n')};
       // Two literal calls rather than hosted(action), so each action has a call site of its own.
       r = action==='direction_fill' ? await hosted('direction_fill', body) : await hosted('board_search', body);
-      // A fill the server declined (done before, or today's limit): nothing to show.
-      if(r && r.skipped){ busy=false; STOP=null; render(); return; }
+      // A fill the server declined (done before, or today's limit): nothing more
+      // to fetch -- but what the index already gave is finished and reported.
+      if(r && r.skipped){ if(pre){ await finishSearch(trk, live, failed, false); return; } busy=false; STOP=null; render(); return; }
     }catch(e){
       if(!pre||e.message==='NEEDAPIFY') throw e;
       PAID_OFFER={trackId:trk.id, where, since_days};
@@ -5210,6 +5279,10 @@ async function runPaidBoards(trk, where, since_days, pre, action){
     PAID_OFFER=null;
     SEARCH_ID=r.searchId||null;
     failed.push(...(r.sourceErrors||[]));
+    { const runs=[...(r.scrapers||[]).map(sc=>({ id:sc.id, source:sc.source, label:sc.label })),
+                  ...(r.runId ? [{ id:r.runId, google:true, label:'Google', queries:r.queries||rq }] : [])];
+      if(runs.length){ p.profile.pending={ at:Date.now(), track:trk.id, cc, runs }; save(); } }
+    const landed=id=>{ const pd=p.profile.pending; if(pd){ pd.runs=(pd.runs||[]).filter(x=>x.id!==id); if(!pd.runs.length) delete p.profile.pending; saveSoon(); } };
     let left=(r.scrapers||[]).length+(r.runId?1:0);
     const note=()=>left?`waiting on ${left} more source${left===1?'':'s'}`:'';
     const land=(label, promise)=>promise
@@ -5219,8 +5292,8 @@ async function runPaidBoards(trk, where, since_days, pre, action){
     const work=[live.add((r.jobs||[]).map(jsearchRow))];
     (r.scrapers||[]).forEach(s=>work.push(land(s.label,
       apifyRun('', {}, {every:8000, cap:300, runId:s.id, source:s.source, label:s.label})
-        .then(items=>(items||[]).map(jsearchRow)))));
-    if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId)));
+        .then(items=>{ landed(s.id); return (items||[]).map(jsearchRow); }))));
+    if(r.runId) work.push(land('Google', apifyBoardSearch(r.queries||rq,cc,null,r.runId).then(js=>{ landed(r.runId); return js; })));
     live.draw(note());
     await Promise.all(work);
     await finishSearch(trk, live, failed, true);
@@ -6906,8 +6979,10 @@ function renderUnapplied(){
   const worth  =sortList(scored.filter(x=>!isClosing(x.j)&&!isStrong(x.j,p.profile)&&overBar(x.j,p.profile)));
   const below  =sortList(scored.filter(x=>!overBar(x.j,p.profile)));
 
+  const thin = THIN && THIN.from===p.track ? `<div class="mapnote thin"><span>Only <b>${THIN.n}</b> ${THIN.n===1?'role':'roles'} for this direction right now. <b>${esc(THIN.label)}</b> has ${THIN.m}${THIN.m>=60?'+':''} in the index.</span>
+      <span class="btn-row" style="margin:0"><button class="btn-go btn-sm" data-thinswitch="${esc(THIN.to)}">Look at ${esc(THIN.label)}</button><button class="btn-sm" data-thinx>Not now</button></span></div>` : '';
   const mapNote = narrow ? `<div class="mapnote"><span>Showing the <b>${all.length}</b> in the map's view${MAPSEL?` · ${esc(MAPSEL.l)}`:''}</span><button class="btn-sm" data-mapclear>Show all</button></div>` : '';
-  return `${mapNote}<div class="listhead">
+  return `${thin}${mapNote}<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
       <button class="btn-sm" data-findmore style="margin-left:10px" title="Search the boards for more">Find more work</button>
       ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
@@ -7472,7 +7547,7 @@ function renderApp(){
     if(a.startsWith('job:')) return showJob(parseInt(a.slice(4),10));
   };
   hookDrop($('#dropCsv'),$('#fileCsv'),onCsv);
-  $('#trackSel').onchange=async e=>{ P().track=e.target.value; await save(); render(); fillDirection(); };
+  $('#trackSel').onchange=async e=>{ P().track=e.target.value; THIN=null; await save(); render(); fillDirection(); };
   $('#btnProfile').onclick=showProfile;
   $('#btnAddTrack').onclick=addTrackDialog;
   if($('#btnBeFound')) $('#btnBeFound').onclick=beFoundDialog;
@@ -9022,6 +9097,9 @@ document.addEventListener('click',e=>{
       <div class="btn-row" style="margin-top:12px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`); }
   if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
   if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
+  const ts=e.target.closest && e.target.closest('[data-thinswitch]');
+  if(ts){ const p=P(); p.track=ts.dataset.thinswitch; THIN=null; track('thin_switch'); save(); render(); fillDirection(); return; }
+  if(e.target.closest && e.target.closest('[data-thinx]')){ THIN=null; return render(); }
   if(e.target.closest && e.target.closest('[data-mapclear]')){ MAPSEL=null; ZOOM=[]; return render(); }
   if(e.target.closest && e.target.closest('#mapToggle')){ if(SHUT_DRAGGED){ SHUT_DRAGGED=false; return; } MAPON=!MAPON; track('map_toggle',{ on:MAPON, by:'tap' }); render(); if(MAPON) window.scrollTo(0,0); return; }
   const wm=e.target.closest && e.target.closest('[data-workmodel]');
@@ -9904,7 +9982,7 @@ async function afterAuth(){
     { const pr=Object.values(DB.profiles||{}).filter(usable);
       track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
     // Directions in use before fills existed get theirs on the next visit.
-    if(VIEW==='app') fillDirection();
+    if(VIEW==='app' && !resumePending()) fillDirection();
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.
