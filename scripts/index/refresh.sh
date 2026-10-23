@@ -84,8 +84,12 @@ say "6/7  Harvest ATS slugs out of what the corpus just took in"
 # Skipped entirely on --no-push: that flag means "change nothing on the server",
 # and sources.json is the crawl's own state, not a scratch file.
 if [ -z "$DRY" ]; then
+  # Not allowed to stop the night either: finding new boards is a bonus, and on
+  # 2026-10-20 a timeout here (corpus-urls, row 16,000) cancelled the verify
+  # below it. pipefail makes either side's failure this pipeline's failure.
   node scripts/index/corpus-urls.js \
-    | node scripts/index/harvest-slugs.js - --verify --write
+    | node scripts/index/harvest-slugs.js - --verify --write \
+    || echo "  harvest failed ($?); the night goes on without new boards"
 else
   echo "  skipped: --no-push"
 fi

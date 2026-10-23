@@ -48,25 +48,28 @@ if (!SB || !KEY) {
   const since = new Date(Date.now() - SINCE * 864e5).toISOString().slice(0, 10);
   const where = [
     'job_key=like.u:*',                       // keyed by url; 't:' rows have none
-    // A stable order across pages: Range without one can skip or repeat rows
-    // while push-index.js is upserting, and a skipped row loses its slug silently.
-    'order=job_key.asc',
+    // (Not a range like 'u:' < key < 'u;': the column's collation ignores
+    // punctuation at first level, so that range is empty. Tried 2026-10-23.)
     ALL ? null : `first_indexed=gte.${since}`,
     SOURCE ? `source=eq.${encodeURIComponent(SOURCE)}` : null,
+    'order=job_key.asc',
+    `limit=${CHUNK}`,
   ].filter(Boolean).join('&');
 
-  let from = 0, seen = 0;
+  /* Keyset pages, not Range offsets (2026-10-23). An offset page makes the
+     database walk past every earlier row again, so the deeper pages got slower
+     until one hit the statement timeout at row 16,000 on 2026-10-20 and the
+     night's crawl stopped. "Keys after the last one seen" is an index seek at
+     any depth, and a row upserted mid-read can no longer shift the pages. */
+  let last = 'u:', seen = 0, from = 0;
   for (;;) {
-    const r = await fetch(`${SB}/rest/v1/job_index?select=job_key&${where}`, {
+    const r = await fetch(`${SB}/rest/v1/job_index?select=job_key&job_key=gt.${encodeURIComponent(last)}&${where}`, {
       // No default timeout on fetch, and this runs unattended: a request that
       // never answers hangs refresh.sh, which keeps the systemd service
       // `activating`, which stops the timer scheduling any further night.
       // That cost a day of the corpus on 2026-10-07; see push-index.js.
       signal: AbortSignal.timeout(60000),
-      headers: {
-        apikey: KEY, Authorization: `Bearer ${KEY}`,
-        Range: `${from}-${from + CHUNK - 1}`, 'Range-Unit': 'items',
-      },
+      headers: { apikey: KEY, Authorization: `Bearer ${KEY}` },
     }).catch((e) => ({ ok: false, status: 0, text: async () => e.message }));
 
     if (!r.ok) {
@@ -79,9 +82,9 @@ if (!SB || !KEY) {
     // Lowercasing only ever touched the hostname (99 rows differ in case, all
     // inside the host), and DNS does not care.
     for (const row of rows) process.stdout.write(String(row.job_key).slice(2) + '\n');
-    seen += rows.length;
+    seen += rows.length; from += rows.length;
+    last = String(rows[rows.length - 1].job_key);
     if (rows.length < CHUNK) break;
-    from += CHUNK;
   }
   console.error(`corpus-urls: ${seen} url(s)${ALL ? '' : ` first indexed since ${since}`}${SOURCE ? ` from ${SOURCE}` : ''}`);
 })();
