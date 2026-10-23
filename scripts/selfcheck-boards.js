@@ -53,6 +53,8 @@ let DBJOBS=[{url:'https://x/old'}], AGE={}, CLAUDE=null, FEEDS={};
 const P=()=>({jobs:DBJOBS}), ageOf=j=>AGE[j.url]??null, setPosted=(j,d)=>{j.posted=d;};
 // renderSoon/saveSoon (in the slice) call these on a timer after a batch lands.
 const render=()=>{}, save=async()=>{};
+// A job someone has acted on is never taken back out when its score lands.
+const isTouched=j=>!!j.touched, isSaved=()=>false;
 const atsPull=async(p,s)=>{ const f=FEEDS[p+':'+s]; if(f==='fail') throw new Error('network'); return f||null; };
 const claude=async(t)=>CLAUDE(t);
 let SCORES=null;
@@ -169,13 +171,23 @@ const ok=(c,m)=>{ if(!c){console.error('FAIL',m); process.exitCode=1;} };
  SCORES='fail';
  const sf=await scoreAndCut(many.slice(0,3),{},'t');
  ok(sf.kept.length===0 && sf.unscored.length===3,'scoring failure keeps batch unscored');
- SCORES=j=>({'https://a/10':90,'https://a/11':30,'https://a/12':60})[j.url];
+ let during='';
+ SCORES=j=>{ during=DBJOBS.map(x=>x.url).sort().join(); return ({'https://a/10':90,'https://a/11':30,'https://a/12':60})[j.url]; };
  DBJOBS=[]; AGE={}; FEEDS={};
  const lb=liveBoard({titles:['Data Engineer']},{},'t');
  await lb.add([J('https://a/10','Data Engineer I','Acme','LinkedIn'),J('https://a/11','Data Engineer II','Beta','Indeed'),J('https://a/12','Data Engineer III','Gamma','Naukri')]);
  // In the list the moment the batch is scored, not when the search ends: the
  // kept two are there, the one below the bar is not, and st.added counts them.
+ // And before that: all three are listed while their batch is being scored.
+ ok(during==='https://a/10,https://a/11,https://a/12','listed before scoring '+during);
  ok(DBJOBS.map(j=>j.url).sort().join()==='https://a/10,https://a/12' && lb.st.added===2,'progressive add '+JSON.stringify({db:DBJOBS.map(j=>j.url),added:lb.st.added}));
+ { // Touched while it was being scored (saved, applied): kept even under the bar.
+   const keep=SCORES; SCORES=j=>{ DBJOBS.forEach(x=>{ if(x.url==='https://t/1') x.touched=1; }); return 20; };
+   const save0=DBJOBS; DBJOBS=[];
+   await liveBoard({titles:['Data Engineer']},{},'t').add([J('https://t/1','Data Engineer','Tee','LinkedIn'),J('https://t/2','Data Engineer','Tau','LinkedIn')]);
+   ok(DBJOBS.map(j=>j.url).join()==='https://t/1','a touched job survives its low score '+DBJOBS.map(j=>j.url));
+   DBJOBS=save0; SCORES=keep;
+ }
  await lb.add([J('https://a/10','Data Engineer I','Acme','Indeed')]);   // same link from another source
  ok(lb.st.kept.map(j=>j.url).join()==='https://a/10,https://a/12' && lb.st.below===1 && lb.st.dropped.dupe===1 && lb.st.found===4,'liveBoard '+JSON.stringify({kept:lb.st.kept.map(j=>j.url),below:lb.st.below,d:lb.st.dropped}));
  SCORES=j=>({'https://y/1':80,'https://y/2':70,'https://y/3':20})[j.url];

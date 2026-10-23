@@ -4972,10 +4972,16 @@ function liveBoard(trk, prof, track){
          batch is in To decide the moment it is scored, so the first jobs can
          be opened, saved and applied to while the rest arrive. Per batch, not
          per add(): the index answers 60 jobs at once, and scoring all of them
-         before showing any kept the first screen empty for four minutes. */
+         before showing any kept the first screen empty for four minutes.
+         And before scoring, too: every job found is in the list at once, under
+         "Scoring now", and the same objects are scored in place -- a job under
+         the bar or closed at its source is taken back out when its batch lands. */
+      const p=P(), mine=new Set();
+      const shown=addJobs(f.jobs); if(shown){ f.jobs.forEach(j=>{ if(p.jobs.includes(j)) mine.add(j); }); renderSoon(); }
       for(let i=0;i<f.jobs.length && !stopped();i+=SCORE_BATCH){
         st.checking++; draw();
-        const ats=await fromAts(f.jobs.slice(i,i+SCORE_BATCH));
+        const part=f.jobs.slice(i,i+SCORE_BATCH);
+        const ats=await fromAts(part);
         st.closed+=ats.closed;
         const r=await scoreAndCut(ats.jobs, prof, track);
         st.checking--;
@@ -4983,9 +4989,11 @@ function liveBoard(trk, prof, track){
         r.kept.forEach(j=>O(j.origin||'google').kept_50++);
         st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
         st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
-        const n=addJobs(r.kept.concat(r.unscored));
-        if(n){ st.added+=n; saveSoon(); renderSoon(); }
-        draw();
+        const out=new Set(r.rejected.concat(part.filter(j=>!ats.jobs.includes(j))).filter(j=>mine.has(j) && !isTouched(j) && !isSaved(j)));
+        if(out.size){ const q=P(); if(q) for(let k=q.jobs.length-1;k>=0;k--) if(out.has(q.jobs[k])) q.jobs.splice(k,1); }
+        const n=addJobs(r.kept.concat(r.unscored))+r.kept.concat(r.unscored).filter(j=>mine.has(j)).length;
+        if(n){ st.added+=n; saveSoon(); }
+        renderSoon(); draw();
       }
     },
     // Call once, after every source has landed.
@@ -6973,6 +6981,8 @@ function renderUnapplied(){
   const saved=sortList(mine.filter(x=>isSaved(x.j)));
   const scored=mine.filter(x=>isScored(x.j)&&!isSaved(x.j));
   const unscored=mine.filter(x=>!isScored(x.j)&&!isSaved(x.j));
+  // While a search runs, what it just found is open, not folded: it is what there is to look at.
+  const scoringNow=searching() && unscored.length>0;
   // Closing wins over strong: the nearer deadline beats the better opportunity.
   /* The bands the person asked for. `strict` shifts these and nothing else:
      every row above is still in the list, so turning the dial down brings them
@@ -6998,17 +7008,19 @@ function renderUnapplied(){
           .map(([v,l])=>`<option value="${v}" ${SORT===v?'selected':''}>${l}</option>`).join('')}</select></label>
     </div>
     ${deckHTML([...strong.map(x=>({...x,band:'Do these first'})), ...closing.map(x=>({...x,band:'Closing soon'})),
-                ...worth.map(x=>({...x,band:'Worth a shot'})), ...below.map(x=>({...x,band:'Below the bar'}))])}
+                ...worth.map(x=>({...x,band:'Worth a shot'})), ...below.map(x=>({...x,band:'Below the bar'})),
+                ...(scoringNow?unscored.map(x=>({...x,band:'Scoring now'})):[])])}
     ${saved.length?`<div class="saved">${sect('','Saved for later','Swiped right, or saved from a row\u2019s menu. Still to do; just kept at the front.',saved)}</div>`:''}
     <div class="bands">
     ${sect('go','Do these first',`Fit ${bars.strongFit}+ and reachability ${bars.strongReach}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
     ${sect('closing','Closing soon',`Worth doing, but posted ${CLOSING_DAYS}+ days ago. Old postings get filled, not withdrawn \u2014 apply today or let it go.`,closing)}
     ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
-    ${(!strong.length&&!worth.length&&!closing.length)?`<div class="empty"><b>Nothing clears the bar</b>
+    ${scoringNow?sect('','Scoring now','Just found. Open, save or apply to any of them now; each takes its place above once it is scored.',unscored):''}
+    ${(!strong.length&&!worth.length&&!closing.length&&!scoringNow)?`<div class="empty"><b>Nothing clears the bar</b>
       ${scored.length?`${scored.length} scored here, none at fit ${bars.workFit}+ and reachability ${bars.workReach}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
     </div>
     ${foldSect('below','Below the bar',`Scored under fit ${bars.workFit} or reachability ${bars.workReach}. Kept, because a score is a judgement rather than a fact.`,below)}
-    ${foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}
+    ${scoringNow?'':foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}
     ${elseFold}`;
 }
 
