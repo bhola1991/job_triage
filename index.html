@@ -4967,22 +4967,26 @@ function liveBoard(trk, prof, track){
       for(const k in f.dropped) st.dropped[k]+=f.dropped[k];
       f.jobs.forEach(j=>O(j.origin||'google').unique_new++);
       if(!f.jobs.length){ draw(); return; }
-      st.checking++; draw();
-      const ats=await fromAts(f.jobs);
-      st.closed+=ats.closed;
-      const r=await scoreAndCut(ats.jobs, prof, track);
-      st.checking--;
-      if(rk) rememberRejected(rk, r.rejected);
-      r.kept.forEach(j=>O(j.origin||'google').kept_50++);
-      st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
-      st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
       /* Into the list now, not at the end (2026-10-23): a first search runs
-         for minutes, and people left before anything appeared. Each batch is
-         in To decide the moment it is scored, so the first jobs can be opened,
-         saved and applied to while the rest arrive. */
-      const n=addJobs(r.kept.concat(r.unscored));
-      if(n){ st.added+=n; saveSoon(); renderSoon(); }
-      draw();
+         for minutes, and people left before anything appeared. Each scoring
+         batch is in To decide the moment it is scored, so the first jobs can
+         be opened, saved and applied to while the rest arrive. Per batch, not
+         per add(): the index answers 60 jobs at once, and scoring all of them
+         before showing any kept the first screen empty for four minutes. */
+      for(let i=0;i<f.jobs.length && !stopped();i+=SCORE_BATCH){
+        st.checking++; draw();
+        const ats=await fromAts(f.jobs.slice(i,i+SCORE_BATCH));
+        st.closed+=ats.closed;
+        const r=await scoreAndCut(ats.jobs, prof, track);
+        st.checking--;
+        if(rk) rememberRejected(rk, r.rejected);
+        r.kept.forEach(j=>O(j.origin||'google').kept_50++);
+        st.kept.push(...r.kept); st.unscored.push(...r.unscored); st.below+=r.below;
+        st.kept.sort((a,b)=>rankOf(b)-rankOf(a));
+        const n=addJobs(r.kept.concat(r.unscored));
+        if(n){ st.added+=n; saveSoon(); renderSoon(); }
+        draw();
+      }
     },
     // Call once, after every source has landed.
     report(){
