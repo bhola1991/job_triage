@@ -2927,9 +2927,9 @@ function fixRoutes(t){ const r=normRoutes(t.routes); if(r) t.routes=r; else dele
 let ROUTES_ASKED=false;
 async function backfillRoutes(){
   const p=P(); if(!p || ROUTES_ASKED || !cloudNow()) return;
+  ROUTES_ASKED=true;                  // once a session, answered or not
   const need=(p.profile.tracks||[]).filter(t=>!t.routes);
   if(!need.length) return;
-  ROUTES_ASKED=true;
   try{
     const txt=await claude(`A person based in ${p.profile.location||'an unstated place'}${p.profile.country?', '+p.profile.country:''} is pursuing these kinds of work:
 ${need.map(t=>`- id "${t.id}": ${t.label||''}${(t.titles||[]).length?` (titles: ${t.titles.slice(0,5).join(', ')})`:''}`).join('\n')}
@@ -2937,7 +2937,7 @@ ${need.map(t=>`- id "${t.id}": ${t.label||''}${(t.titles||[]).length?` (titles: 
 Return ONLY a JSON object, no preamble, no markdown fences, keyed by id:
 {"<id>":{"routes":${ROUTES_JSON},"how_hired":""}}
 
-${ROUTES_RULES}`, 2000, 'flash');
+${ROUTES_RULES}`, TOK_CAP, 'flash');
     const d=grabJSON(txt)||{};
     let n=0;
     need.forEach(t=>{ const r=d[t.id]; if(!r) return; t.routes=r.routes; t.how_hired=r.how_hired; fixRoutes(t); if(t.routes) n++; });
@@ -10079,6 +10079,10 @@ function renderRecover(){
 function render(){
   fbGate();
   if(VIEW==='app' && !ONB.editing && wantsDue()) return askWants();
+  /* From here, not from afterAuth: the screen above can take the first open,
+     and every way into the app passes through render. Not awaited; until it
+     answers, a direction counts as all advertised. */
+  if(VIEW==='app' && !ROUTES_ASKED) backfillRoutes();
   if(CLOUD && RECOVER && USER) return renderRecover();
   if(CLOUD && !USER) return renderAuth();
   if(CLOUD && USER && !myUsername()) return renderClaim();
@@ -10126,7 +10130,6 @@ async function afterAuth(){
     { const pr=Object.values(DB.profiles||{}).filter(usable);
       track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
     if(VIEW==='app' && P() && decideReady(P())<READY_MIN) TAB='you';
-    if(VIEW==='app') backfillRoutes();  // not awaited: until it answers, a direction counts as all advertised
     // Directions in use before fills existed get theirs on the next visit.
     if(VIEW==='app' && !resumePending()) fillDirection();
   }catch(e){
