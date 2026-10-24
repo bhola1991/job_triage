@@ -3588,7 +3588,11 @@ function addCatalogueBoards(t, prof){
 async function extractProfile(raw){
   // Redacted, not raw: see redactCV. The CV is still stored unredacted in
   // the person's own account -- this is about what leaves for a vendor.
-  const txt = await claude(EXTRACT_PROMPT(redactCV(raw)), TOK_CAP);
+  /* flash, not pro (2026-10-24): pro's hidden reasoning took 95-110s here and,
+     on one CV, ran past the edge function's 150s wall clock -- a 503, and a
+     newcomer stuck on step one. flash writes the company and route rows well
+     in under a minute. */
+  const txt = await claude(EXTRACT_PROMPT(redactCV(raw)), TOK_CAP, 'flash');
   const p = grabJSON(txt);
   p.name = p.name || 'Unnamed';
   // Google's countryCode wants "in" -- not "India", and not "IN".
