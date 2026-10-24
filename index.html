@@ -3696,8 +3696,8 @@ Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a lo
 const EXAM_SITES = [
   // The page that carries dates, not the home page (found 2026-10-24). IBPS before RRB: "CRP RRB" is IBPS's.
   [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/api/general-website/portal/ssc-calendar?page=1&limit=40&contentType=ssc-calendar&key=startDate&order=ASC&isAttachment=true&isPaginationRequired=false&language=english&attributes=id,headline,examYear,content,startDate,endDate', 'https://ssc.gov.in/'],
-  // ponytail: this file name changes every year; the stable /examinations/exam-calendar page needs "calendar" in the server's notice-link words.
-  [/\bUPSC\b|Union Public Service/i, 'https://www.upsc.gov.in/sites/default/files/Calendar-Year-2027-Engl-200526.pdf'],
+  // The stable calendar page; the server follows it to each year's calendar PDF. www: the bare domain redirects home.
+  [/\bUPSC\b|Union Public Service/i, 'https://www.upsc.gov.in/examinations/exam-calendar'],
   [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/index.php/recruitment/'],
   [/\bWBPSC\b|West Bengal Public Service/i, 'https://psc.wb.gov.in/'],
   [/\bWBPRB\b|West Bengal Police Recruitment|Kolkata Police|West Bengal Police/i, 'https://prb.wb.gov.in/recruitments'],

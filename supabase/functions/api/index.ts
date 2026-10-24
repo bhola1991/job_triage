@@ -334,14 +334,15 @@ async function pageText(url: string): Promise<{ url: string; text: string; links
    notification / advertisement / how to apply / last date, this year or next
    scoring higher. The best two, so a page and its notice cost three fetches. */
 function noticeLinks(page: { url: string; links: { href: string; text: string; pdf: boolean }[] }) {
-  const y = new Date().getFullYear(), KEY = /notif|notice|advertis|recruit|how[ -_]?to[ -_]?apply|apply|deadline|last[ -_]?date|eligib|brochure|guideline|call[ -_]?for|prospectus|bulletin/i;
+  const y = new Date().getFullYear(), KEY = /notif|notice|advertis|recruit|how[ -_]?to[ -_]?apply|apply|deadline|last[ -_]?date|eligib|brochure|guideline|call[ -_]?for|prospectus|bulletin|calendar|tentative|schedule/i;
   const seen = new Set([page.url]);
   // The words are required; a PDF is only a bonus (an annual report is a PDF too).
   // The words that name the notice itself outrank the ones around it (SBI's
   // "Scribe guidelines" PDF once beat its own advertisement).
-  const STRONG = /notif|advertis|recruit|detailed|last[ -_]?date|deadline/i;
+  const STRONG = /notif|advertis|recruit|detailed|last[ -_]?date|deadline|calendar/i;
   return page.links.filter((l) => KEY.test(l.text + " " + l.href))
-    .map((l) => ({ ...l, score: (STRONG.test(l.text + " " + l.href) ? 3 : 0) + (l.pdf ? 2 : 0) + (new RegExp(`${y}|${y + 1}`).test(l.text + l.href) ? 1 : 0) }))
+    // Next year's calendar or notice outranks this year's (UPSC lists both).
+    .map((l) => ({ ...l, score: (STRONG.test(l.text + " " + l.href) ? 3 : 0) + (l.pdf ? 2 : 0) + (String(l.text + l.href).includes(String(y + 1)) ? 2 : String(l.text + l.href).includes(String(y)) ? 1 : 0) }))
     .filter((l) => !seen.has(l.href) && seen.add(l.href)).sort((a, b) => b.score - a.score).slice(0, 2);
 }
 /* Google Maps places near the person, for the local route (2026-10-24).
@@ -1652,7 +1653,13 @@ async function handle(req: Request): Promise<Response> {
         let text = page.text.slice(0, 40_000); const followed: string[] = [];
         if (b.follow) for (const l of noticeLinks(page)) {
           const sub = await pageText(l.href);
-          if (sub && sub.text.length > 100) { followed.push(sub.url); text += `\n--- from ${sub.url} ---\n` + sub.text.slice(0, 40_000); }
+          if (!sub || followed.includes(sub.url)) continue;
+          if (sub.text.length > 100) { followed.push(sub.url); text += `\n--- from ${sub.url} ---\n` + sub.text.slice(0, 40_000); }
+          /* One level deeper for a PDF: UPSC's calendar page links "Annual
+             Calendar 2027", a page that only links the calendar PDF. */
+          const pdf = noticeLinks(sub).find((x) => x.pdf && !followed.includes(x.href));
+          const doc = pdf ? await pageText(pdf.href) : null;
+          if (doc && doc.text.length > 100 && !followed.includes(doc.url)) { followed.push(doc.url); text += `\n--- from ${doc.url} ---\n` + doc.text.slice(0, 40_000); }
         }
         return json({ url: page.url, text, followed });
       }
