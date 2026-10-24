@@ -80,6 +80,9 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   const dl = await T.routeOpps(trk, 'deadline', []);
   ok(dl.length === 3 && dl[0].url !== dl[1].url && dl[0].url.startsWith('https://www.ibps.in/#ibps-po'), 'deadlines: two cycles on one site are two rows');
   ok(dl[2].url === '' && dl.every(j => j.channel === 'deadline' && !j.deadline), 'deadlines: a non-web url is dropped, and no row carries a date from the model');
+  REPLY = JSON.stringify({ items: [{ title: 'Clerkship Examination', org: 'WBPSC', url: '', website: 'wbpsc.gov.in', fit: 80, reach: 45 }] });
+  const fb = await T.routeOpps(trk, 'deadline', []);
+  ok(fb[0].url === 'https://wbpsc.gov.in/#clerkship-examination', 'deadlines: no page the model is sure of falls back to the body\'s own site');
   ok(/^Usually: usually August$/m.test(dl[0].description) && /^Eligibility: graduate, 20-30$/m.test(dl[0].description), 'deadlines: the usual window and eligibility are kept');
 
   // deadlineOk: the quote must be on the page AND name the date.

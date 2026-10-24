@@ -3730,7 +3730,9 @@ Return ONLY a JSON object, no preamble, no markdown fences:
     if(globalThis.LAST_MODEL) j.ai_model=globalThis.LAST_MODEL;
     if(x.website) j.site=String(x.website).replace(/^https?:\/\//,'').replace(/\/.*$/,'');
     // The official page, with the name after # so two cycles on one site stay two rows.
-    if(route==='deadline' && httpUrl(String(x.url||''))) j.url=String(x.url).replace(/#.*$/,'')+'#'+String(x.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40);
+    // No page the model is sure of: the body's own site, whose notice links the server follows.
+    const official = httpUrl(String(x.url||'')) ? String(x.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
+    if(route==='deadline' && official) j.url=official+'#'+String(x.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40);
     // A name they know becomes the row's contact, so "Draft a note" is addressed to them.
     if(route==='people' && who && net.some(n=>n.startsWith(who))) j.contacts=JSON.stringify([{name:who, role:String(x.title).slice(0,80)}]);
     return j;
@@ -3779,9 +3781,11 @@ function closedOk(text, quote, words){
 /* Read each deadline's official page and keep a closing date only where the
    page states it. One flash call for all of them. */
 async function verifyDeadlines(rows){
-  const withUrl=rows.filter(j=>httpUrl(String(j.url||''))).slice(0,10);
+  // A row saved before the site fallback has only its body's site: read that.
+  const pageOf=j=>httpUrl(String(j.url||'')) ? String(j.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
+  const withUrl=rows.filter(j=>pageOf(j)).slice(0,10);
   // follow: the server also reads the page's likeliest notice (a PDF, a "how to apply" page).
-  const pages=await Promise.all(withUrl.map(j=>hosted('page_text',{url:String(j.url).replace(/#.*$/,''), follow:true}).then(r=>String(r.text||'')).catch(()=>'')));
+  const pages=await Promise.all(withUrl.map(j=>hosted('page_text',{url:pageOf(j), follow:true}).then(r=>String(r.text||'')).catch(()=>'')));
   const have=withUrl.map((j,k)=>({j, text:pages[k]})).filter(x=>x.text.length>200);
   if(!have.length) return 0;
   const txt=await claude(`For each item, read ONLY its own page text and find the LAST DATE to apply or register for the current or next cycle of that item. Today is ${today()}.
@@ -3850,7 +3854,9 @@ async function routeFill(trk, route, more){
   try{
     const have=p.jobs.filter(j=>chOf(j)===ROUTE_CH[route] && inDir(j,p)).map(j=>`${j.title} (${j.company})`);
     const rows = route==='local' ? await localOpps(trk) : await routeOpps(trk, route, have);
-    if(route==='deadline') await verifyDeadlines(rows).catch(e=>console.warn('deadline pages not read:', e.message));
+    // New rows, and any earlier one still without a date or a closed cycle: each look is another read.
+    if(route==='deadline') await verifyDeadlines(rows.concat(p.jobs.filter(j=>chOf(j)==='deadline' && inDir(j,p) && stOf(j)==='new' && !j.deadline)))
+      .catch(e=>console.warn('deadline pages not read:', e.message));
     const n=addJobs(rows);
     try{ localStorage.setItem(k, today()); }catch(e){}
     track('route_fill',{ route, n, more:!!more });
