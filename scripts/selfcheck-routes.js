@@ -113,6 +113,11 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
     + ' JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026.';
   ok(T.dateWindows(listing, 1500, ['Junior', 'Associates']).includes('JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026')
     && !T.dateWindows(listing, 1500).includes('30-11-2026'), 'dateWindows: on a long listing, the item named comes first');
+  const table = 'Name of Examination | Date of Notification | Last Date for receipt of Applications | Date of commencement ' + 'q'.repeat(3000)
+    + ' 9. Civil Services (Preliminary) Examination, 2027 13.01.2027 02.02.2027 23.05.2027 (Sunday) ' + 'r'.repeat(3000);
+  const tw = T.dateWindows(table, 1500, ['Civil', 'Services', 'Preliminary', '2027']);
+  ok(tw.includes('Last Date for receipt') && tw.includes('Civil Services (Preliminary) Examination, 2027 13.01.2027 02.02.2027'),
+    'dateWindows: on a table, the header and the item\'s own row both reach the model');
 
   // closedOk: "registration is over" needs words from the page that name the item.
   const sbi = 'RECRUITMENT OF JUNIOR ASSOCIATES (CUSTOMER SUPPORT & SALES) (PRELIMINARY EXAMINATION CALL LETTER IS AVAILABLE FOR DOWNLOAD) ENGAGEMENT OF SPECIALIST CADRE OFFICERS (RESULT DECLARED)';

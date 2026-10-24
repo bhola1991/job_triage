@@ -3783,16 +3783,27 @@ function deadlineOk(text, closes, quote){
    its dates anywhere but the top. The quote is still checked against all of it. */
 function dateWindows(text, cap=5000, words=[]){
   const t=String(text||''), re=/last date|closing date|deadline|apply (?:by|before|till|until|on or before)|closes? on|applications? (?:open|close)|online (?:registration|application)|important dates|schedule of/gi;
-  const spans=[]; let m;
-  while((m=re.exec(t)) && spans.length<40){ const a=Math.max(0,m.index-250), b=Math.min(t.length,m.index+350);
+  const W=words.map(w=>String(w).toLowerCase()).filter(w=>w.length>3);
+  /* Anchors: every date phrase, and -- for a table such as UPSC's calendar,
+     where "last date" is only a column header and the item's row is far below
+     it -- every place the item is named (its first two words in a row). */
+  const at=[], dateAt=[]; let m;
+  while((m=re.exec(t)) && dateAt.length<40) dateAt.push(m.index);
+  at.push(...dateAt);
+  if(W.length>1){ const name=new RegExp(W.slice(0,2).map(w=>w.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('\\W+'),'gi');
+    let k=0; while((m=name.exec(t)) && k++<10) at.push(m.index); }
+  if(!at.length) return t.slice(0, Math.min(cap, 2500));
+  const spans=[];
+  for(const x of [...new Set(at)].sort((a,b)=>a-b)){ const a=Math.max(0,x-250), b=Math.min(t.length,x+350);
     // Overlaps are trimmed, not merged: on a dense listing merging made one span of the whole page.
     const a2=spans.length ? Math.max(a, spans[spans.length-1][1]) : a; if(b>a2) spans.push([a2,b]); }
-  if(!spans.length) return t.slice(0, Math.min(cap, 2500));
   /* A listing page (SBI's names 40-odd posts) is read item by item: windows
-     whose surroundings name this item come first. */
-  const W=words.map(w=>String(w).toLowerCase()).filter(w=>w.length>3), near=([a,b])=>{ const z=t.slice(Math.max(0,a-400),b).toLowerCase(); return W.filter(w=>z.includes(w)).length; };
-  if(W.length) spans.sort((x,y)=>near(y)-near(x));
-  let out=''; for(const [a,b] of spans){ if(out.length>=cap) break; out+=(out?' \u2026 ':'')+t.slice(a,b); }
+     whose surroundings name this item come first -- after the first date
+     phrase, which on a table is the header that says what each column is. */
+  const near=([a,b])=>{ const z=t.slice(Math.max(0,a-400),b).toLowerCase(); return W.filter(w=>z.includes(w)).length; };
+  const head=dateAt.length ? spans.find(([a,b])=>dateAt[0]>=a-250 && dateAt[0]<b) : null;
+  const rest=spans.filter(x=>x!==head); if(W.length) rest.sort((x,y)=>near(y)-near(x));
+  let out=''; for(const [a,b] of (head?[head]:[]).concat(rest)){ if(out.length>=cap) break; out+=(out?' … ':'')+t.slice(a,b); }
   return out.slice(0,cap);
 }
 /* "This cycle's registration is over" needs evidence too: words from the page
