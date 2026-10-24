@@ -20,6 +20,12 @@ const src = [
   grab(/const EXAM_SITES = \[[\s\S]*?\n\];\n/),
   grab(/const examSite = [^\n]*\n/),
   grab(/const examOpen = [^\n]*\n/),
+  grab(/const examId = [^\n]*\n/),
+  grab(/const EXAM_CACHE = [^\n]*\n/),
+  grab(/async function examCorpus[\s\S]*?\n}\n/),
+  grab(/const EXAM_STOP=[^\n]*\n/),
+  grab(/function matchExam[\s\S]*?\n}\n/),
+  grab(/async function applyExamCorpus[\s\S]*?\n}\n/),
   grab(/async function routeOpps[\s\S]*?\n}\n/),
   grab(/const MONTHS=\{[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
@@ -33,7 +39,7 @@ const src = [
   grab(/const plainQuote = [^\n]*\n/),
 ].join('\n');
 
-let REPLY = '', ASKED = '', PAGES = {};
+let REPLY = '', ASKED = '', PAGES = {}, CORPUS = {};
 const CONNS = [{ n: 'Ravi Das', p: 'Political editor', c: 'Ei Samay' }];
 const ctx = {
   P: () => ({ profile: { location: 'Kolkata', country: 'India' }, raw: 'cv', jobs: [] }),
@@ -45,8 +51,10 @@ const ctx = {
   fitOf: (j) => Number(j.ai_score) || 0,
   TOK_CAP: 16000, globalThis: {}, today: () => '2026-10-24',
   hosted: async (action, b) => ({ text: PAGES[String(b.url)] || '' }),
+  // The shared exam table, as supabase-js would answer it.
+  SB: { from: () => ({ select: () => ({ eq: async (c, id) => ({ data: CORPUS[id] || [], error: null }) }) }) },
 };
-const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk, verifyDeadlines };')(...Object.values(ctx));
+const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk, verifyDeadlines, EXAM_SITES, matchExam, applyExamCorpus };')(...Object.values(ctx));
 
 let bad = 0;
 const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) bad++; };
@@ -150,6 +158,36 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   ok(steno.deadline === 'closed' && steno.description.startsWith('Registration closed for this cycle, from the official page: \u201cStenographer Examination \u00b7 2026\u201d'),
     'verifyDeadlines: JSON evidence is shown as words ' + JSON.stringify(steno.description.split('\n')[0]));
   ok(unread.deadline === 'closed' && unread.description.endsWith('Kept.'), 'verifyDeadlines: a row whose page could not be read keeps what it had');
+
+  // The shared exam table: the app and the edge function name the same pages for the same bodies.
+  const srv = require('fs').readFileSync(require('path').join(__dirname, '..', 'supabase', 'functions', 'api', 'index.ts'), 'utf8');
+  const BODIES = Object.fromEntries([...srv.match(/const EXAM_BODIES[\s\S]*?\n};/)[0].matchAll(/^\s+(\w+): "([^"]+)",$/gm)].map(m => [m[1], m[2]]));
+  const appSites = Object.fromEntries(T.EXAM_SITES.map(e => [e[3], e[1]]));
+  const drift = [...new Set(Object.keys(BODIES).concat(Object.keys(appSites)))].filter(k => BODIES[k] !== appSites[k]);
+  ok(Object.keys(BODIES).length >= 10 && !drift.length, 'EXAM_SITES (app) and EXAM_BODIES (edge function) read the same page per body' + (drift.length ? ' -- differ: ' + drift.join(', ') : ''));
+
+  // matchExam: a row names an exam loosely, the page exactly.
+  const ups = [{ title: 'Civil Services (Preliminary) Examination, 2027', state: 'open', closes: '2027-02-02', quote: 'q', checked_on: '2026-10-24' },
+    { title: 'Civil Services (Preliminary) Examination, 2026', state: 'closed', closes: null, quote: 'q', checked_on: '2026-10-24' },
+    { title: 'Indian Forest Service Examination, 2027', state: 'open', closes: '2027-02-02', quote: 'q', checked_on: '2026-10-24' }];
+  ok(T.matchExam('Civil Services Examination', ups).closes === '2027-02-02', 'matchExam: loose name finds the exact one, the open cycle first');
+  ok(T.matchExam('Combined Defence Services Examination', ups) === null, 'matchExam: a different exam on the same page is not matched');
+
+  // applyExamCorpus: known bodies take the shared verdict; a body never refreshed is left alone.
+  CORPUS = { upsc: ups };
+  const cse = { title: 'Civil Services Examination', company: 'Union Public Service Commission (UPSC)', description: 'Why.' };
+  const wb = { title: 'Clerkship', company: 'West Bengal Public Service Commission', deadline: 'closed', description: 'Registration closed for this cycle, from the official page: \u201cx\u201d\nKept.' };
+  await T.applyExamCorpus([cse, wb]);
+  ok(cse.deadline === '2027-02-02' && cse.description.startsWith('Closes 2027-02-02, from the official page (checked 2026-10-24):'), 'applyExamCorpus: a known body\'s row takes the shared date');
+  ok(wb.deadline === 'closed' && wb.description.endsWith('Kept.'), 'applyExamCorpus: a body the table has nothing for keeps what it had');
+
+  // _shared/deadline.js (the edge function's copy) answers as index.html's does.
+  const D = await import(require('url').pathToFileURL(require('path').join(__dirname, '..', 'supabase', 'functions', '_shared', 'deadline.js')).href);
+  const cases = [[page, '2026-08-21', 'Last date for fee payment 21 August 2026'], [page, '2026-08-25', 'Last date for fee payment 21 August 2026'],
+    [page, '2026-09-21', 'Last date for fee payment 21 September 2026'], ['x "endDate":"2026-04-30" y', '2026-04-30', '"endDate":"2026-04-30"']];
+  ok(cases.every(([t, c, q]) => D.dateOk(t, c, q) === T.deadlineOk(t, c, q)), 'dateOk (server) and deadlineOk (app) agree');
+  ok(D.closedOk(kp, kp, ['Constable'], '2026-10-24') === T.closedOk(kp, kp, ['Constable']) && D.closedOk(sbi, 'JUNIOR ASSOCIATES (CUSTOMER SUPPORT & SALES) (PRELIMINARY EXAMINATION CALL LETTER IS AVAILABLE', ja, '2026-10-24') === true,
+    'closedOk (server) and closedOk (app) agree');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

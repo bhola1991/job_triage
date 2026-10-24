@@ -542,6 +542,32 @@ create policy "shared: select" on public.job_checks
   for select to authenticated using (true);
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- exam_deadlines — exam closing dates, read once for everyone
+--
+-- Shared like job_checks: an exam's last date is a fact about the exam, not
+-- about anyone applying. Written every 4 days by exam_refresh in the edge
+-- function (service role), one row per exam a body's official page names, and
+-- only when its date or its "registration is over" passed the same quote rules
+-- as the app's own check (supabase/functions/_shared/deadline.js). The app
+-- reads it for the bodies it knows (EXAM_SITES) instead of reading their pages
+-- per person. Same migration: supabase/migrations/20261024_01_exam_deadlines.sql.
+create table if not exists public.exam_deadlines (
+  key         text        primary key,           -- body|normalised title
+  body        text        not null,              -- EXAM_SITES / EXAM_BODIES id: ssc, upsc, ibps...
+  title       text        not null,
+  state       text        not null check (state in ('open', 'closed')),
+  closes      date,                              -- the last date to apply, when open
+  quote       text        not null,              -- the words on the page it was read from
+  source_url  text        not null,
+  checked_on  date        not null default current_date
+);
+create index if not exists exam_deadlines_body on public.exam_deadlines (body, checked_on desc);
+alter table public.exam_deadlines enable row level security;
+drop policy if exists "shared: select" on public.exam_deadlines;
+create policy "shared: select" on public.exam_deadlines
+  for select to authenticated using (true);
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- job_index — the shared corpus
 --
 -- Shared, like job_checks and for the same reason: acquiring a posting costs

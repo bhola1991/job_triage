@@ -3695,20 +3695,22 @@ Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a lo
    other bodies -- the model's own site is used for everything not on it. */
 const EXAM_SITES = [
   // The page that carries dates, not the home page (found 2026-10-24). IBPS before RRB: "CRP RRB" is IBPS's.
-  [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/api/general-website/portal/ssc-calendar?page=1&limit=40&contentType=ssc-calendar&key=startDate&order=ASC&isAttachment=true&isPaginationRequired=false&language=english&attributes=id,headline,examYear,content,startDate,endDate', 'https://ssc.gov.in/'],
+  [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/api/general-website/portal/ssc-calendar?page=1&limit=40&contentType=ssc-calendar&key=startDate&order=ASC&isAttachment=true&isPaginationRequired=false&language=english&attributes=id,headline,examYear,content,startDate,endDate', 'https://ssc.gov.in/', 'ssc'],
   // The stable calendar page; the server follows it to each year's calendar PDF. www: the bare domain redirects home.
-  [/\bUPSC\b|Union Public Service/i, 'https://www.upsc.gov.in/examinations/exam-calendar'],
-  [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/index.php/recruitment/'],
-  [/\bWBPSC\b|West Bengal Public Service/i, 'https://psc.wb.gov.in/'],
-  [/\bWBPRB\b|West Bengal Police Recruitment|Kolkata Police|West Bengal Police/i, 'https://prb.wb.gov.in/recruitments'],
-  [/\bRRBs?\b|Railway Recruitment/i, 'https://www.rrbapply.gov.in/'],
-  [/\bSBI\b|State Bank of India/i, 'https://sbi.co.in/web/careers/current-openings'],
-  [/\bNABARD\b/i, 'https://www.nabard.org/careers-notices1.aspx?cid=693&id=26'],
-  [/\bRBI\b|Reserve Bank of India/i, 'https://opportunities.rbi.org.in/'],
-  [/\bWBSSC\b|West Bengal School Service/i, 'https://www.westbengalssc.com/'],
+  [/\bUPSC\b|Union Public Service/i, 'https://www.upsc.gov.in/examinations/exam-calendar', '', 'upsc'],
+  [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/index.php/recruitment/', '', 'ibps'],
+  [/\bWBPSC\b|West Bengal Public Service/i, 'https://psc.wb.gov.in/', '', 'wbpsc'],
+  [/\bWBPRB\b|West Bengal Police Recruitment|Kolkata Police|West Bengal Police/i, 'https://prb.wb.gov.in/recruitments', '', 'wbprb'],
+  [/\bRRBs?\b|Railway Recruitment/i, 'https://www.rrbapply.gov.in/', '', 'rrb'],
+  [/\bSBI\b|State Bank of India/i, 'https://sbi.co.in/web/careers/current-openings', '', 'sbi'],
+  [/\bNABARD\b/i, 'https://www.nabard.org/careers-notices1.aspx?cid=693&id=26', '', 'nabard'],
+  [/\bRBI\b|Reserve Bank of India/i, 'https://opportunities.rbi.org.in/', '', 'rbi'],
+  [/\bWBSSC\b|West Bengal School Service/i, 'https://www.westbengalssc.com/', '', 'wbssc'],
 ];
-/* [pattern, the page the dates are read from, the page a person is sent to if that one is not for people (SSC's is an API)] */
+/* [pattern, the page the dates are read from, the page a person is sent to if that one is not for people
+   (SSC's is an API), the id the shared exam table and the edge function's EXAM_BODIES know it by] */
 const examSite = org => (EXAM_SITES.find(([re])=>re.test(String(org||'')))||[])[1] || '';
+const examId = org => (EXAM_SITES.find(([re])=>re.test(String(org||'')))||[])[3] || '';
 const examOpen = org => { const e=EXAM_SITES.find(([re])=>re.test(String(org||''))); return e ? (e[2]||e[1]) : ''; };
 async function routeOpps(trk, route, avoid){
   const p=P(), prof=p.profile;
@@ -3862,8 +3864,55 @@ ${have.map((x,i)=>`ITEM ${i}: ${x.j.title} (${x.j.company})\nPAGE TEXT (the part
   });
   return n;
 }
-/* The verdict line verifyDeadlines puts first in a description, taken off before a new one goes on. */
-const stripVerdict = d => String(d||'').replace(/^(?:Closes \d{4}-\d{2}-\d{2}|Registration closed for this cycle), from the official page: \u201c[^\n]*\u201d\n/, '');
+/* The verdict line put first in a description, taken off before a new one goes on. */
+const stripVerdict = d => String(d||'').replace(/^(?:Closes \d{4}-\d{2}-\d{2}|Registration closed for this cycle), from the official page[^:\n]*: \u201c[^\n]*\u201d\n/, '');
+
+/* Exam deadlines, shared. For the bodies in EXAM_SITES the dates are read once for everyone, every 4
+   days, into public.exam_deadlines (exam_refresh in the edge function), so a
+   deadline row of a known body takes its date from there and spends none of
+   the person's page reads. Fellowships and every other body keep the
+   per-person read (verifyDeadlines). */
+const EXAM_CACHE = new Map();
+async function examCorpus(id){
+  if(!EXAM_CACHE.has(id)) EXAM_CACHE.set(id, (async()=>{
+    const {data,error}=await SB.from('exam_deadlines').select('title,state,closes,quote,checked_on').eq('body',id);
+    return error ? null : (data||[]); })());
+  return EXAM_CACHE.get(id);
+}
+/* Which of a body's exams a row is: most of the row's words found in the exam's
+   title. A row names it loosely ("Civil Services Examination"), the page
+   exactly ("Civil Services (Preliminary) Examination, 2027"). An open cycle
+   beats a closed one, then the later date. */
+const EXAM_STOP=/^(the|and|for|of|with|in|exam|examination|examinations|recruitment|common|process|posts?|cadre|\d{4})$/i;
+function matchExam(title, rows){
+  const ws=t=>String(t||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>1 && !EXAM_STOP.test(w));
+  const A=ws(title); if(!A.length) return null;
+  const scored=(rows||[]).map(r=>{ const B=new Set(ws(r.title)); return {r, s:A.filter(w=>B.has(w)).length/A.length}; }).filter(x=>x.s>=0.6);
+  scored.sort((x,y)=>y.s-x.s || (y.r.state==='open')-(x.r.state==='open') || String(y.r.closes||'').localeCompare(String(x.r.closes||'')));
+  return scored.length ? scored[0].r : null;
+}
+/* Lay the shared verdict on known bodies' rows; true if any changed. A body
+   the table has nothing for yet (never refreshed) leaves its rows alone. */
+async function applyExamCorpus(rows){
+  let changed=false;
+  for(const j of rows){
+    const id=examId(j.company); if(!id) continue;
+    const corp=await examCorpus(id).catch(()=>null); if(!corp || !corp.length) continue;
+    const m=matchExam(j.title, corp), before=(j.deadline||'')+'|'+j.description;
+    j.description=stripVerdict(j.description); delete j.deadline;
+    if(m && m.state==='open' && daysTo(m.closes)>=0){ j.deadline=m.closes; j.description=`Closes ${m.closes}, from the official page (checked ${m.checked_on}): \u201c${plainQuote(m.quote)}\u201d\n`+j.description; }
+    else if(m && m.state==='closed'){ j.deadline='closed'; j.description=`Registration closed for this cycle, from the official page (checked ${m.checked_on}): \u201c${plainQuote(m.quote)}\u201d\n`+j.description; }
+    if(before!==(j.deadline||'')+'|'+j.description) changed=true;
+  }
+  return changed;
+}
+/* Once a session: the profile's deadline rows of known bodies take the latest shared dates. */
+let EXAMS_APPLIED=false;
+async function refreshExamRows(){
+  const p=P(); if(EXAMS_APPLIED || !p || !cloudNow()) return; EXAMS_APPLIED=true;
+  const rows=p.jobs.filter(j=>chOf(j)==='deadline' && stOf(j)==='new' && examId(j.company));
+  if(rows.length && await applyExamCorpus(rows).catch(()=>false)){ saveSoon(); renderSoon(); }
+}
 /* Evidence as a person reads it: SSC's comes from its calendar API as raw JSON
    ("headline":"...","startDate":"..."), checked as it is but shown as words. */
 const plainQuote = q => String(q||'').replace(/"[A-Za-z_]+"\s*:/g,' ').replace(/[{}\[\]"]/g,' ').replace(/\s*,\s*/g,' \u00b7 ').replace(/\s+/g,' ').trim().slice(0,200);
@@ -3913,8 +3962,12 @@ async function routeFill(trk, route, more){
     const have=p.jobs.filter(j=>chOf(j)===ROUTE_CH[route] && inDir(j,p)).map(j=>`${j.title} (${j.company})`);
     const rows = route==='local' ? await localOpps(trk) : await routeOpps(trk, route, have);
     // New rows, then earlier ones with no date, a closed cycle or a date now past: each look is another read.
-    if(route==='deadline') await verifyDeadlines(rows.concat(p.jobs.filter(j=>chOf(j)==='deadline' && inDir(j,p) && stOf(j)==='new' && (!j.deadline || j.deadline==='closed' || daysTo(j.deadline)<0))))
-      .catch(e=>console.warn('deadline pages not read:', e.message));
+    if(route==='deadline'){
+      const again=rows.concat(p.jobs.filter(j=>chOf(j)==='deadline' && inDir(j,p) && stOf(j)==='new' && (!j.deadline || j.deadline==='closed' || daysTo(j.deadline)<0)));
+      await applyExamCorpus(again.filter(j=>examId(j.company))).catch(()=>{});      // known bodies: the shared table
+      await verifyDeadlines(again.filter(j=>!examId(j.company)))                       // everyone else: their own read
+        .catch(e=>console.warn('deadline pages not read:', e.message));
+    }
     const n=addJobs(rows);
     try{ localStorage.setItem(k, today()); }catch(e){}
     track('route_fill',{ route, n, more:!!more });
@@ -6664,6 +6717,7 @@ function openSteps(){
   // Then whatever an earlier visit left unscored (a search cut off when the
   // page closed): autoScore stands aside while a search is busy, and keeps its cap.
   if(!resumePending()) fillDirection().then(()=>autoScore()).catch(e=>console.warn('open fill:', e && e.message));
+  refreshExamRows();                  // not awaited: the shared exam dates, laid on known bodies' rows
 }
 async function finishOnb(){
   if(ONB.editing){

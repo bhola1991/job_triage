@@ -1,0 +1,39 @@
+# Exam closing dates for everyone, every 4 days (2026-10-24). Each body's
+# official page is read once by the edge function's exam_refresh into
+# public.exam_deadlines, instead of every person's app reading the same pages.
+# One call per body: each must finish inside the function's 150s wall clock.
+#
+# Secrets: the crawl's own SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY. The
+# service key may run exam_refresh and nothing else on the function.
+name: Exam deadlines
+
+on:
+  schedule:
+    - cron: '0 2 */4 * *'        # 07:30 IST on days 1, 5, 9 ... of each month
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Read every exam body's official page
+        run: |
+          call() { curl -s -m 170 -X POST "$SUPABASE_URL/functions/v1/api" -H "Authorization: Bearer $KEY" -H "apikey: $KEY" \
+                     -H "Content-Type: application/json" -d "$1"; }
+          bodies=$(call '{"action":"exam_refresh"}' | jq -r '.bodies[]')
+          [ -n "$bodies" ] || { echo "no bodies: the function did not answer"; exit 1; }
+          fail=0
+          for b in $bodies; do
+            out=$(call "{\"action\":\"exam_refresh\",\"body\":\"$b\"}")
+            echo "$b: $out"
+            echo "$out" | jq -e '.kept != null' > /dev/null || fail=$((fail+1))
+          done
+          # One body failing (a site down that day) is normal; all of them is not.
+          [ "$fail" -lt "$(echo $bodies | wc -w)" ] || { echo "every body failed"; exit 1; }

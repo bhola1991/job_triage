@@ -16,6 +16,8 @@ import { JUDGE_EXEMPLAR_CAP, judge } from "../_shared/judge.ts";
 // Reads the text out of an exam or fellowship's PDF notice (page_text). Pinned:
 // unpdf wraps pdf.js for serverless runtimes and has no dependencies of its own.
 import { extractText, getDocumentProxy } from "npm:unpdf@1.8.1";
+// The rules a closing date must pass; the same rules as index.html's, tested side by side.
+import { closedOk as examClosedOk, dateOk as examDateOk, dateWindows as examWindows, daysTo as examDaysTo } from "../_shared/deadline.js";
 
 // Prices are server-side only; the browser sends just the pack id. paise: ₹1 = 100.
 // A credit sells for ₹0.80 (Pro) to ₹0.99 (Starter).
@@ -1053,10 +1055,92 @@ async function mantiksFindJob(company: string, website: string, title: string): 
   return jobId ? { jobId: String(jobId), domain: bareDomain(hit?.company?.website || website) } : null;
 }
 
+/* ── exam_refresh: exam closing dates, read once for everyone ──────────────
+   An exam's dates are a fact about the exam, not about anybody applying, so
+   they are read here every few days (.github/workflows/exams.yml) into
+   public.exam_deadlines, and the app reads the table instead of spending each
+   person's page reads on the same pages (2026-10-24). One body per call, to
+   stay inside the 150s wall clock. The read pages are index.html's EXAM_SITES;
+   scripts/selfcheck-routes.js asserts the two lists agree. */
+const EXAM_BODIES: Record<string, string> = {
+  ssc: "https://ssc.gov.in/api/general-website/portal/ssc-calendar?page=1&limit=40&contentType=ssc-calendar&key=startDate&order=ASC&isAttachment=true&isPaginationRequired=false&language=english&attributes=id,headline,examYear,content,startDate,endDate",
+  upsc: "https://www.upsc.gov.in/examinations/exam-calendar",
+  ibps: "https://www.ibps.in/index.php/recruitment/",
+  wbpsc: "https://psc.wb.gov.in/",
+  wbprb: "https://prb.wb.gov.in/recruitments",
+  rrb: "https://www.rrbapply.gov.in/",
+  sbi: "https://sbi.co.in/web/careers/current-openings",
+  nabard: "https://www.nabard.org/careers-notices1.aspx?cid=693&id=26",
+  rbi: "https://opportunities.rbi.org.in/",
+  wbssc: "https://www.westbengalssc.com/",
+};
+async function readFollowing(url: string, render: boolean) {
+  // Inside the 150s wall clock even through the browser: the page (<=50s), its two notice links in
+  // parallel (<=35s each, plus one PDF), then the model (<=50s).
+  const page = render ? await renderPage(url, 50) : await pageText(url);
+  if (!page) return { text: "", followed: [] as string[] };
+  const subs = await Promise.all(noticeLinks(page).map(async (l) => {
+    const sub = (await pageText(l.href)) || (render && !l.pdf ? await renderPage(l.href, 35) : null);
+    const pdf = sub ? noticeLinks(sub).find((x) => x.pdf) : null;
+    return [sub, pdf ? await pageText(pdf.href) : null];
+  }));
+  let text = page.text.slice(0, 40_000); const followed: string[] = [];
+  for (const doc of subs.flat()) if (doc && doc.text.length > 100 && !followed.includes(doc.url) && doc.url !== page.url) {
+    followed.push(doc.url); text += `\n--- from ${doc.url} ---\n` + doc.text.slice(0, 40_000); }
+  return { text, followed };
+}
+async function examRefresh(id: string) {
+  if (!id) return { bodies: Object.keys(EXAM_BODIES) };
+  const url = EXAM_BODIES[id]; if (!url) throw new Http(400, "unknown body");
+  const today = new Date().toISOString().slice(0, 10);
+  let read = await readFollowing(url, false), rendered = false;
+  if (read.text.length < 300) { read = await readFollowing(url, true); rendered = true; }
+  if (read.text.length < 300) return { body: id, read: read.text.length, rendered, kept: 0, note: "page not readable" };
+  const shown = read.text.length <= 30_000 ? read.text : examWindows(read.text, 30_000);
+  const r = await fetch("https://api.deepseek.com/chat/completions", {
+    method: "POST", signal: AbortSignal.timeout(50_000),
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + secret("DEEPSEEK_API_KEY") },
+    body: JSON.stringify({ model: LLM_MODELS.flash, max_tokens: LLM_TOK_CAP, messages: [{ role: "user", content:
+`This is the official text of an exam or recruitment body. Today is ${today}.
+List every examination, recruitment or intake it names whose application window is open now, opens later, or closed in the last 120 days.
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"r":[{"title":"its name as the text gives it, with the year","closes":"YYYY-MM-DD, the LAST DATE to apply, or empty","quote":"the exact words stating that date, copied character for character","closed":false,"closed_quote":""}]}
+"closes" is the last date to APPLY or REGISTER -- never a notification date or an exam date. If the text does not state it, leave it empty. Never work a date out from a pattern or from memory.
+"closed": true only if the text shows applying for it is over (registration closed, admit cards or call letters out, results declared); then "closed_quote" is the exact words that show it, and they must name it.
+
+TEXT:
+${shown}` }] }),
+  }).catch(() => null);
+  const d = r && r.ok ? await r.json().catch(() => null) : null;
+  const out = String(d?.choices?.[0]?.message?.content || "");
+  let list: Any[] = [];
+  try { const j = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)); list = Array.isArray(j?.r) ? j.r : []; } catch { /* no list */ }
+  const u = d?.usage || {};
+  await logUsage([{ user_id: null, kind: "llm", source: "deepseek", units: 1, tokens_in: u.prompt_tokens || 0, tokens_out: u.completion_tokens || 0,
+    cost_inr: inr(((u.prompt_tokens || 0) * (DEEPSEEK_USD_PER_M[LLM_MODELS.flash]?.in || 0) + (u.completion_tokens || 0) * (DEEPSEEK_USD_PER_M[LLM_MODELS.flash]?.out || 0)) / 1e6),
+    note: `exam_refresh ${id}` }]);
+  const rows: Any[] = [];
+  for (const x of list) {
+    const title = String(x?.title || "").trim().slice(0, 200); if (!title) continue;
+    const words = title.split(/[^A-Za-z0-9]+/);
+    const base = { key: `${id}|${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`, body: id, title, source_url: url, checked_on: today };
+    if (examDateOk(read.text, x.closes, x.quote) && (examDaysTo(x.closes, today) ?? -1) >= 0) rows.push({ ...base, state: "open", closes: x.closes, quote: String(x.quote).slice(0, 300) });
+    else if (x.closed && examClosedOk(read.text, x.closed_quote, words, today)) rows.push({ ...base, state: "closed", closes: null, quote: String(x.closed_quote).slice(0, 300) });
+  }
+  if (rows.length) { const { error } = await admin.from("exam_deadlines").upsert(rows, { onConflict: "key" }); if (error) throw new Error("exam_deadlines: " + error.message); }
+  return { body: id, read: read.text.length, rendered, followed: read.followed.length, named: list.length, kept: rows.length };
+}
+
 async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
+    // The service key is not a person: it may run the shared exam refresh and nothing else.
+    if (token && token === secret("SUPABASE_SERVICE_ROLE_KEY")) {
+      const sb = await req.json().catch(() => ({}));
+      if (sb.action === "exam_refresh") return json(await examRefresh(String(sb.body || "")));
+      throw new Http(403, "the service key runs exam_refresh only");
+    }
     const { data: auth } = await admin.auth.getUser(token);
     const user = auth?.user?.id;
     if (!user) throw new Http(401, "sign in first");
