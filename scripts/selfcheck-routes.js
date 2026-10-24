@@ -15,6 +15,7 @@ const src = [
   grab(/const chOf {3}= [^\n]*\n/),
   grab(/const OPP = \{[\s\S]*?\n\};\n/),
   grab(/const ROUTE_CH = [^\n]*\n/),
+  grab(/const YOU_RULE = [^\n]*\n/),
   grab(/function grabJSON[\s\S]*?\n}\n/),
   grab(/async function routeOpps[\s\S]*?\n}\n/),
 ].join('\n');
@@ -56,6 +57,7 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   const known = people.find(j => j.company === 'Ei Samay'), guessed = people.find(j => j.company === 'The Telegraph');
   ok(known && JSON.parse(known.contacts)[0].name === 'Ravi Das', 'a name from their own network becomes the contact');
   ok(guessed && guessed.contacts === '[]' && !JSON.stringify(guessed).includes('Somebody Guessed'), 'a name the model guessed is written nowhere');
+  ok(/Never "he", "she"/.test(ASKED), 'the prompt says to write to the person, never guessing a pronoun');
   ok(ASKED.includes('Ravi Das (Political editor) at Ei Samay') && ASKED.includes('Old one (X)'), 'the prompt carries their network and what they already have');
 
   REPLY = '```json\n' + JSON.stringify({ items: [{ title: 'Drainage contracts', org: 'Scroll', who: 'metro editor', why: 'w', fit: 85, reach: 40, website: 'https://scroll.in/about' }] }) + '\n```';

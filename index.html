@@ -2898,6 +2898,11 @@ const ROUTES = [
   ['deadline','Deadlines and exams','a yearly cycle with a closing date'],
   ['platform','Platforms','the work comes to your profile'],
 ];
+/* Every sentence the person reads about themselves is written TO them. The
+   CV read once called a reporter "He" -- a guess from a name, which misgenders
+   whoever it gets wrong, so the rule goes into every prompt that writes about
+   the person (2026-10-24). */
+const YOU_RULE = 'Write every sentence about the person TO them, as "you" ("you have five years on this beat"). Never "he", "she", "they" or their name: their gender is not in the profile and must not be guessed.';
 const ROUTE_LABEL = Object.fromEntries(ROUTES.map(([k,l])=>[k,l]));
 const ROUTES_JSON = '{'+ROUTES.map(([k])=>`"${k}":0.0`).join(',')+'}';
 const ROUTES_RULES = `Rules for routes: how people ACTUALLY get this kind of work, as weights that add up to 1.
@@ -3481,6 +3486,8 @@ const redactCV = (text) => String(text || '')
 
 const EXTRACT_PROMPT = raw => `Read this person's career profile and extract a structured summary.
 
+${YOU_RULE}
+
 Return ONLY a JSON object, no preamble, no markdown fences:
 {
  "name":"",
@@ -3637,6 +3644,8 @@ ${(()=>{ const net=networkCompanies(loadConns(), trk, new Set()).slice(0,30); re
   ? `COMPANIES WHERE THEY ALREADY KNOW SOMEONE: ${net.map(g=>g.name).join('; ')}\nInclude any of these that genuinely fit -- a warm introduction beats any cold approach -- but never one that does not fit.` : ''; })()}
 ${extra?`ADDITIONAL STEER FROM THEM: ${String(extra).slice(0,300)}`:''}
 
+${YOU_RULE}
+
 Return ONLY a JSON object, no preamble, no markdown fences:
 {"companies":[{
   "name":"exact company name",
@@ -3693,6 +3702,8 @@ THE DIRECTION: ${trk.label||''}${trk.how_hired?` -- ${trk.how_hired}`:''}
 BASED IN: ${prof.location||'unstated'}${prof.country?', '+prof.country:''}. LOCAL FIRST: at least half must be in or covering that city or region.
 ${net.length?`THE PEOPLE THEY ALREADY KNOW (from their own network): ${net.join('; ')}`:'They have not imported their network, so "who" stays empty.'}
 ${(avoid||[]).length?`THEY ALREADY HAVE THESE, DO NOT REPEAT THEM: ${avoid.slice(0,40).join('; ')}`:''}
+
+${YOU_RULE}
 
 Return ONLY a JSON object, no preamble, no markdown fences:
 {"items":[{"title":"","org":"","location":"city, country","who":"","why":"","ask":"","fit":0,"reach":0,"website":"the organisation's domain, or empty if unsure"}]}
@@ -3860,6 +3871,8 @@ ${prof.unusual_combination?`What is rare about them: ${prof.unusual_combination}
 Honest gaps: ${(prof.gaps||[]).join('; ')||'none stated'}
 
 THE KIND OF JOB THEY ARE ASKING ABOUT: "${String(want).slice(0,200)}"
+
+${YOU_RULE}
 
 Return ONLY a JSON object, no preamble, no markdown fences:
 {
@@ -6999,7 +7012,7 @@ function jobCard(j,i){
                  : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='pitch'||ch==='person'
-                      ? fact(ch==='pitch'?'pitch to':'ask for', esc(((String(j.description||'').match(ch==='pitch'?/^Commissioned by: (.+)$/m:/^Ask: (.+)$/m)||[])[1]||(ch==='pitch'?'the commissioning editor':'advice')).slice(0,60)), 'quiet')
+                      ? fact(ch==='pitch'?'pitch to':'ask for', esc(((String(j.description||'').match(ch==='pitch'?/^Commissioned by: (.+)$/m:/^Ask: (.+)$/m)||[])[1]||(ch==='pitch'?'the commissioning editor':'advice')).replace(/^(.{34}).+$/,'$1\u2026')), 'quiet')
                     : ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
                       : fact('posted', age===null?'unknown':esc(ageLabel(j)),
@@ -7180,14 +7193,15 @@ function renderUnapplied(){
     ${gated.length} role${gated.length===1?'':'s'} matched your directions but ${gated.length===1?'was':'were'} removed by the limits you set.
     <div class="btn-row" style="margin-top:12px;justify-content:center">
       <button class="btn-sm" id="showGated">Show them anyway</button></div></div>`;
-  if(!mine.length) return searching() ? '' : `<div class="empty">${artSvg('woman','empty-art')}<b>Nothing waiting</b>
-    Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>${elseFold}`;
+  if(!mine.length) return (searching() ? '' : `<div class="empty">${artSvg('woman','empty-art')}<b>Nothing waiting</b>
+    Everything here has been actioned or closed. Pull in more roles when you want the next batch.</div>${elseFold}`)
+    + (narrow ? '' : `<div id="approach">${renderCompanies()}</div>`);
 
   // Saved jobs move to the front, in their own section, and out of the bands.
   const saved=sortList(mine.filter(x=>isSaved(x.j)));
   /* Stories to pitch and people to ask have sections of their own, ahead of
      the postings when the direction leans on them more than on postings. */
-  const routedCh=x=>chOf(x.j)==='pitch'||chOf(x.j)==='person';
+  const routedCh=x=>chOf(x.j)!=='posted';
   const scored=mine.filter(x=>isScored(x.j)&&!isSaved(x.j)&&!routedCh(x));
   const unscored=mine.filter(x=>!isScored(x.j)&&!isSaved(x.j)&&!routedCh(x));
   const W=routesOf((p.profile.tracks||[]).find(t=>t.id===p.track));
@@ -7195,9 +7209,12 @@ function renderUnapplied(){
     if(!rows.length) return busyR ? `<div class="mapnote"><span>Working out ${r==='pitch'?'outlets to pitch and what to pitch them':'who to ask'} for this direction\u2026</span></div>` : '';
     return sect('',OPP[ch].sect,OPP[ch].sub,rows)+`<div class="btn-row" style="margin:-4px 0 18px"><button class="btn-sm" data-moreroute="${r}" ${busyR?'disabled':''}>${
       busyR?'Finding more\u2026':r==='pitch'?'More stories to pitch':'More people to ask'}</button></div>`; };
+  /* People to ask and companies to approach are one route, "through people":
+     what the Companies view held is drawn here, with them (2026-10-24). */
+  const approach=r=>r==='people' ? `<div id="approach">${routeSect(r)}${renderCompanies()}</div>` : routeSect(r);
   const RT=['pitch','people'].sort((a,b)=>(W[b]||0)-(W[a]||0));
-  const routesFirst=RT.filter(r=>(W[r]||0)>=(W.advertised||0)).map(routeSect).join('');
-  const routesLast=RT.filter(r=>(W[r]||0)<(W.advertised||0)).map(routeSect).join('');
+  const routesFirst=RT.filter(r=>(W[r]||0)>=(W.advertised||0)).map(approach).join('');
+  const routesLast=RT.filter(r=>(W[r]||0)<(W.advertised||0)).map(approach).join('');
   const anyRouted=mine.some(routedCh);
   // While a search runs, what it just found is open, not folded: it is what there is to look at.
   const scoringNow=searching() && unscored.length>0;
@@ -7565,7 +7582,6 @@ function renderApp(){
   const unappliedCount=p.jobs.filter(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p)).length;
   const appliedCount=p.jobs.filter(j=>stOf(j)==='sent'||stOf(j)==='live').length;
   const appliedDue=p.jobs.some(isDue);
-  const coldCount=p.jobs.filter(j=>isOpen(j)&&chOf(j)==='cold'&&stOf(j)==='new').length;
   // One pass through the law for the header pills and the sidebar key.
   const law={go:0,due:0,closing:0,awaiting:0,closed:0};
   p.jobs.forEach(j=>{ const a=accentOf(j); if(a in law) law[a]++; });
@@ -7597,11 +7613,14 @@ function renderApp(){
     <!-- The Dashboard is You's analytics now (feedback, 2026-10-19); #viewDash
          stays, hidden, for the command list and anything that clicks it. -->
     <button id="viewDash" hidden></button>
+    <!-- Companies is part of To decide now (2026-10-24): companies to approach
+         and people to ask are one route. #viewCompanies stays, hidden, and
+         opens To decide at that block. -->
+    <button id="viewCompanies" hidden></button>
     ${[['unapplied','viewDecide','list','To decide',`${unappliedCount} waiting · ${doneToday} of ${DAY_FLOOR} sent today`],
-       ['companies','viewCompanies','building','Companies',`${coldCount} to approach`],
        ['applied','viewApplied','send','Applied',`${appliedCount} in play`],
        ['you','viewYou','user','You','profile, CVs, analytics']].map(([t,id,icn,lab,sub])=>{
-      const n = t==='companies'?coldCount : t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
+      const n = t==='unapplied'?unappliedCount : t==='applied'?appliedCount : 0;
       return `<button class="r-it r-view${TAB===t?' on':''}" id="${id}" data-tab="${t}" title="${lab}">
         <span class="r-ic">${ic(icn)}${n?`<b class="r-bd${t==='applied'&&appliedDue?' due':''}">${n}</b>`:''}</span>
         <span class="r-lb">${lab}<small>${esc(sub)}</small></span></button>`; }).join('')}
@@ -7762,7 +7781,6 @@ function renderApp(){
         const fig = n.art && NEXT_ART[n.art] ? NEXT_ART[n.art]() : '';
         return fig ? `<div class="nextrow">${banner}<div class="next-art${n.art==='clear'?' wide':''}" aria-hidden="true">${fig}</div></div>` : banner; })()}
       <h2 class="viewh">${TAB==='you'?(YOUSUB==='stats'?'Analytics':'You'):({companies:'Companies',unapplied:'To decide',applied:'Applied',dash:'Dashboard'})[TAB]||''}</h2>
-      ${TAB!=='companies' ? '' : `<div>${renderCompanies()}</div>`}
       ${TAB!=='unapplied' ? '' : `<div class="decide${MAPON?' mapon':''}">
         <div class="dlist"><button class="shutter" id="mapToggle" aria-expanded="${MAPON}" aria-label="${MAPON?'Push the list up to close the map':'Pull the list down to see the map'}">
           <i></i><span>${ic('map')}${MAPON?'Push up to close the map':'Pull down for the map'}</span><small>${MAPON?'or tap here':'or tap here · zoom it to narrow this list'}</small></button>${searching()?waitScene(STOP?'Stopping \u2014 keeping what\u2019s found':'Searching the boards\u2026',SEARCH_TXT,'waitInfo'):''}${renderUnapplied()}</div>
@@ -7789,7 +7807,8 @@ function renderApp(){
   if(SOFT) softNote(SOFT);
   document.querySelectorAll('.tab[data-tab], .r-view[data-tab]').forEach(t=>t.onclick=()=>{ if(t.dataset.tab==='you' && TAB!=='you') YOUSUB='me'; TAB=t.dataset.tab; SEL_JOB=null; render(); });
   if($('#viewMap')) $('#viewMap').onclick=()=>{ TAB='unapplied'; SEL_JOB=null; MAPON=true; render(); window.scrollTo(0,0); };
-  if(TAB==='companies') bindCompanies();
+  if(TAB==='unapplied') bindCompanies();
+  if($('#viewCompanies')) $('#viewCompanies').onclick=goApproach;
   document.querySelectorAll('[data-ch]').forEach(t=>t.onclick=()=>{ CHFILT=t.dataset.ch; render(); });
   document.querySelectorAll('[data-sort]').forEach(t=>t.onclick=()=>{ SORT=t.dataset.sort; render(); });
   if($('#sortSel')) $('#sortSel').onchange=e=>{ SORT=e.target.value; render(); };
@@ -8281,6 +8300,11 @@ function workStrip(prof){
     <button class="btn-sm${set?'':' btn-go'}" data-workmodel>${set?'Change':'Build it'}</button></div>`;
 }
 
+/* To decide, at the people and companies to approach. */
+function goApproach(){
+  TAB='unapplied'; SEL_JOB=null; MAPON=false; MAPSEL=null; ZOOM=[]; render();
+  const a=document.getElementById('approach'); if(a) a.scrollIntoView({block:'start'}); else window.scrollTo(0,0);
+}
 function renderCompanies(){
   const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===p.track)||{};
   const conns=loadConns();
@@ -8311,7 +8335,7 @@ function renderCompanies(){
         + (why?`<div style="margin-top:3px">${esc(why.slice(0,240))}</div>`:'') + pulseHtml(j, prof) });
   };
   const setupDone = conns.length && workSet(prof);
-  return `${workStrip(prof)}<div class="costrip">
+  return `<div class="costrip">
       <span class="co-lead">Most work is reached through a company — best of all through someone who works there.</span>
       <button class="btn-sm ${targets.length?'':'btn-go'}" id="coSuggest" ${busy?'disabled':''}>Suggest for ${esc(trk.label||'me')}</button>
       <button class="btn-sm" id="coConns" title="LinkedIn → Settings → Data privacy → Get a copy of your data → Connections">${conns.length?`Network · ${conns.length}`:'Add LinkedIn connections'}</button>
@@ -8320,7 +8344,7 @@ function renderCompanies(){
     ${targets.length?`${targets.some(t=>pulseStale(t.j))?`<div class="listhead"><span style="color:var(--muted);font-size:12px">${targets.length} to approach</span><div class="spacer"></div><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} — about 2 AI credits each</button></div>`:''}
       ${sectOf('go','Ask someone you know','You know someone there. A short note asking for fifteen minutes beats any application.',targets.filter(t=>t.warm.length).length,targets.filter(t=>t.warm.length).map(coRow).join(''))}
       ${sectOf('','Approach cold','No one you know yet. One specific, short message to the right person.',targets.filter(t=>!t.warm.length).length,targets.filter(t=>!t.warm.length).map(coRow).join(''))}`
-      :`<div class="empty"><b>No companies yet</b>Suggest some for this direction${conns.length?', or add one from your network below':', and add your LinkedIn connections to see where you already know someone'}.</div>`}
+      :''}
     ${sectOf('','From your network','Companies where you already know people, not yet on your list.',net.length,net.map((g,k)=>rowCard({
         rank:g.people.length, quiet:true, title:esc(g.name), sub:g.people.slice(0,3).map(x=>esc(x.n)+(x.p?` (${esc(x.p)})`:'')).join(', '),
         facts:[['you know',`${g.people.length} ${g.people.length===1?'person':'people'}`,'']],
@@ -9262,8 +9286,9 @@ function commands(){
     ['View','Send feedback','#fbFab']
   ].map(x=>({ g:x[0], label:x[1], el:x[2] }));
   // The four views are state rather than controls, so these set it directly.
-  [['To decide','unapplied'],['Companies','companies'],['Applied','applied']]
+  [['To decide','unapplied'],['Applied','applied']]
     .forEach(v=>list.push({ g:'Go to', label:v[0], run:()=>{ TAB=v[1]; render(); } }));
+  list.push({ g:'Go to', label:'Companies and people to approach', run:goApproach });
   list.push({ g:'Go to', label:'You', run:()=>{ TAB='you'; YOUSUB='me'; render(); } });
   list.push({ g:'Go to', label:'Analytics (dashboard)', run:()=>{ TAB='you'; YOUSUB='stats'; render(); } });
   // The map is To decide's layer now; "Map" opens it there.
@@ -9361,7 +9386,7 @@ document.addEventListener('click',e=>{
   if(mr){ const p=P(), t=p&&(p.profile.tracks||[]).find(x=>x.id===p.track); if(t) routeFill(t, mr.dataset.moreroute, true); return; }
   const rt=e.target.closest && e.target.closest('[data-routes]');
   if(rt){ const tr=(VIEW==='app'&&P() ? P().profile.tracks : (ONB.parsed||{}).tracks)||[]; return routesDialog(tr.find(x=>x.id===rt.dataset.routes)); }
-  if(e.target.closest && e.target.closest('[data-gocompanies]')){ TAB='companies'; SEL_JOB=null; render(); window.scrollTo(0,0); return; }
+  if(e.target.closest && e.target.closest('[data-gocompanies]')) return goApproach();
   const ts=e.target.closest && e.target.closest('[data-thinswitch]');
   if(ts){ const p=P(); p.track=ts.dataset.thinswitch; THIN=null; track('thin_switch'); save(); render(); fillDirection(); return; }
   if(e.target.closest && e.target.closest('[data-thinx]')){ THIN=null; return render(); }
