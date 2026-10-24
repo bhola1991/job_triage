@@ -6467,7 +6467,9 @@ function askWants(){
 function openSteps(){
   const p=P(); if(VIEW!=='app' || !p) return;
   if(decideReady(p)<READY_MIN) TAB='you';
-  if(!resumePending()) fillDirection();
+  // Then whatever an earlier visit left unscored (a search cut off when the
+  // page closed): autoScore stands aside while a search is busy, and keeps its cap.
+  if(!resumePending()) fillDirection().then(()=>autoScore()).catch(e=>console.warn('open fill:', e && e.message));
 }
 async function finishOnb(){
   if(ONB.editing){
@@ -10250,7 +10252,6 @@ async function afterAuth(){
     checkMail(true);                    // not awaited: news must not hold up the app
     { const pr=Object.values(DB.profiles||{}).filter(usable);
       track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
-    openSteps();
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.
@@ -10276,6 +10277,10 @@ async function afterAuth(){
     PURGED = purgeUntouched();
     if(PURGED) await save();
   }catch(e){ console.warn('retention pass failed:', e && e.message); }
+  /* Here and not inside the try above: VIEW only becomes 'app' a few lines up,
+     so called there it returned on every returning visit and the open-time
+     fill never ran (found 2026-10-24). */
+  openSteps();
   render();
   // After the render, not before: render() rebuilds #root and would wipe it.
   if(CLOUD_DOWN) syncNote('Could not reach your account just now — working from this device. Anything you change is saved here and will sync when you reload with a connection.');
