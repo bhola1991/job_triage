@@ -1,6 +1,13 @@
 // Board search pipeline self-check: node scripts/selfcheck-boards.js
 const h=require('fs').readFileSync(require('path').join(__dirname,'..','index.html'),'utf8').replace(/\r\n/g,'\n');
 const grab=(re)=>{const m=h.match(re); if(!m) throw new Error('missing '+re); return m[0];};
+/* The whole app script must PARSE. Everything below slices pieces out of it,
+   so a syntax error anywhere else passed every check and shipped a page that
+   never loaded (2026-10-24: a literal newline inside a string, from an edit
+   made through a script). new Function compiles without running anything. */
+for(const m of h.matchAll(/<script>([\s\S]*?)<\/script>/g)){
+  try{ new Function(m[1]); }catch(e){ console.log('FAIL index.html script does not parse: '+e.message); console.log('SOME FAILED'); process.exit(1); }
+}
 const src=[
   grab(/const MAX_AGE_DAYS[\s\S]*?\nasync function runBoards/).replace(/async function runBoards$/,''),
   grab(/const TITLE_NOISE[^\n]*\n/), grab(/function roleWords[\s\S]*?\n}\n/),
