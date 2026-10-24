@@ -3887,7 +3887,9 @@ const EXAM_STOP=/^(the|and|for|of|with|in|exam|examination|examinations|recruitm
 function matchExam(title, rows){
   const ws=t=>String(t||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w.length>1 && !EXAM_STOP.test(w));
   const A=ws(title); if(!A.length) return null;
-  const scored=(rows||[]).map(r=>{ const B=new Set(ws(r.title)); return {r, s:A.filter(w=>B.has(w)).length/A.length}; }).filter(x=>x.s>=0.6);
+  // A closed cycle of an earlier year says nothing about this year's (WBPRB's "Constables ... - 2024").
+  const yr=Number(today().slice(0,4)), stale=r=>{ const ys=(String(r.title).match(/\b20\d\d\b/g)||[]).map(Number); return r.state==='closed' && ys.length && Math.max(...ys)<yr; };
+  const scored=(rows||[]).filter(r=>!stale(r)).map(r=>{ const B=new Set(ws(r.title)); return {r, s:A.filter(w=>B.has(w)).length/A.length}; }).filter(x=>x.s>=0.6);
   scored.sort((x,y)=>y.s-x.s || (y.r.state==='open')-(x.r.state==='open') || String(y.r.closes||'').localeCompare(String(x.r.closes||'')));
   return scored.length ? scored[0].r : null;
 }

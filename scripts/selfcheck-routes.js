@@ -172,6 +172,8 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
     { title: 'Indian Forest Service Examination, 2027', state: 'open', closes: '2027-02-02', quote: 'q', checked_on: '2026-10-24' }];
   ok(T.matchExam('Civil Services Examination', ups).closes === '2027-02-02', 'matchExam: loose name finds the exact one, the open cycle first');
   ok(T.matchExam('Combined Defence Services Examination', ups) === null, 'matchExam: a different exam on the same page is not matched');
+  ok(T.matchExam('Constable Recruitment', [{ title: 'Recruitment to the posts of Constables in West Bengal Police - 2024', state: 'closed', quote: 'q' }]) === null,
+    'matchExam: an earlier year\'s closed cycle is not this year\'s verdict');
 
   // applyExamCorpus: known bodies take the shared verdict; a body never refreshed is left alone.
   CORPUS = { upsc: ups };

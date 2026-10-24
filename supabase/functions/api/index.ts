@@ -1125,7 +1125,8 @@ ${shown}` }] }),
     const words = title.split(/[^A-Za-z0-9]+/);
     const base = { key: `${id}|${title.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim()}`, body: id, title, source_url: url, checked_on: today };
     if (examDateOk(read.text, x.closes, x.quote) && (examDaysTo(x.closes, today) ?? -1) >= 0) rows.push({ ...base, state: "open", closes: x.closes, quote: String(x.quote).slice(0, 300) });
-    else if (x.closed && examClosedOk(read.text, x.closed_quote, words, today)) rows.push({ ...base, state: "closed", closes: null, quote: String(x.closed_quote).slice(0, 300) });
+    // A closed cycle named for an earlier year is history, not a verdict on this one.
+    else if (x.closed && examClosedOk(read.text, x.closed_quote, words, today) && !((title.match(/\b20\d\d\b/g) || []).map(Number).every((y) => y < Number(today.slice(0, 4))) && /\b20\d\d\b/.test(title))) rows.push({ ...base, state: "closed", closes: null, quote: String(x.closed_quote).slice(0, 300) });
   }
   if (rows.length) { const { error } = await admin.from("exam_deadlines").upsert(rows, { onConflict: "key" }); if (error) throw new Error("exam_deadlines: " + error.message); }
   return { body: id, read: read.text.length, rendered, followed: read.followed.length, named: list.length, kept: rows.length };
