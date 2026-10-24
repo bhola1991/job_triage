@@ -1,0 +1,344 @@
+{
+ "_note": "How a kind of work is got, per direction. expect.top = the routes its largest weight may be; adv_max = a ceiling on advertised. recorded = the model's answer, refreshed only by --record.",
+ "model": "deepseek-flash",
+ "cases": [
+  {
+   "id": "swe",
+   "location": "Bengaluru, India",
+   "label": "Backend Software Engineer",
+   "titles": [
+    "Backend Engineer",
+    "Software Engineer",
+    "Java Developer"
+   ],
+   "expect": {
+    "top": [
+     "advertised"
+    ]
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.55,
+     "people": 0.25,
+     "pitch": 0.03,
+     "local": 0.02,
+     "deadline": 0.07,
+     "platform": 0.08
+    },
+    "how_hired": "Mostly via job portals and employee referrals, with campus placements for freshers and recruiters for experienced hires.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "chef",
+   "location": "Kolkata, India",
+   "label": "Restaurant Chef",
+   "titles": [
+    "Sous Chef",
+    "Chef de Partie",
+    "Head Chef"
+   ],
+   "expect": {
+    "top": [
+     "local",
+     "people"
+    ],
+    "adv_max": 0.3
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.1,
+     "people": 0.3,
+     "pitch": 0.05,
+     "local": 0.55,
+     "deadline": 0,
+     "platform": 0
+    },
+    "how_hired": "Chefs get hired through word of mouth, referrals, and trial shifts in Kolkata’s hotel and restaurant kitchens.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "reporter",
+   "location": "Kolkata, India",
+   "label": "Political & Civic Field Reporter",
+   "titles": [
+    "Political Reporter",
+    "Correspondent",
+    "Field Reporter"
+   ],
+   "expect": {
+    "top": [
+     "people",
+     "pitch"
+    ],
+    "adv_max": 0.25
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.15,
+     "people": 0.45,
+     "pitch": 0.3,
+     "local": 0.07,
+     "deadline": 0.02,
+     "platform": 0.01
+    },
+    "how_hired": "Mostly through editors, senior reporters and alumni referrals, plus freelance pitches to news outlets.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "features",
+   "location": "New Delhi, India",
+   "label": "Freelance Features Writer",
+   "titles": [
+    "Freelance Journalist",
+    "Features Writer",
+    "Contributing Writer"
+   ],
+   "expect": {
+    "top": [
+     "pitch"
+    ],
+    "adv_max": 0.2
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.1,
+     "people": 0.3,
+     "pitch": 0.45,
+     "local": 0.03,
+     "deadline": 0.02,
+     "platform": 0.1
+    },
+    "how_hired": "Editors assign freelance features mostly after pitches and referrals; job boards and platforms supplement.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "creator",
+   "location": "Mumbai, India",
+   "label": "Content Creator and Brand Partnerships",
+   "titles": [
+    "Content Creator",
+    "Influencer",
+    "YouTube Creator"
+   ],
+   "expect": {
+    "top": [
+     "platform",
+     "pitch"
+    ],
+    "adv_max": 0.3
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.05,
+     "people": 0.25,
+     "pitch": 0.2,
+     "local": 0.03,
+     "deadline": 0,
+     "platform": 0.47
+    },
+    "how_hired": "Brands and agencies find creators through social profiles, managers, referrals, and direct outreach; job boards rarely matter.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "sdr",
+   "location": "Bengaluru, India",
+   "label": "Sales Development",
+   "titles": [
+    "Sales Development Representative",
+    "Business Development Executive",
+    "Inside Sales"
+   ],
+   "expect": {
+    "top": [
+     "advertised",
+     "people"
+    ]
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.46,
+     "people": 0.36,
+     "pitch": 0.08,
+     "local": 0.06,
+     "deadline": 0.03,
+     "platform": 0.01
+    },
+    "how_hired": "Hired mainly through job portals and recruiters; referrals and direct LinkedIn outreach also matter.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "ibanking",
+   "location": "Mumbai, India",
+   "label": "Investment Banking",
+   "titles": [
+    "Investment Banking Analyst",
+    "M&A Associate"
+   ],
+   "expect": {
+    "top": [
+     "people",
+     "advertised",
+     "deadline"
+    ]
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.15,
+     "people": 0.4,
+     "pitch": 0,
+     "local": 0,
+     "deadline": 0.45,
+     "platform": 0
+    },
+    "how_hired": "Campus placements and MBA intakes dominate; laterals come through headhunters, alumni referrals, and targeted postings.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "bankpo",
+   "location": "Patna, India",
+   "label": "Bank Probationary Officer",
+   "titles": [
+    "Probationary Officer",
+    "Bank PO",
+    "Clerk (IBPS)"
+   ],
+   "expect": {
+    "top": [
+     "deadline"
+    ],
+    "adv_max": 0.3
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.15,
+     "people": 0,
+     "pitch": 0,
+     "local": 0,
+     "deadline": 0.85,
+     "platform": 0
+    },
+    "how_hired": "Candidates apply online to IBPS or bank notifications and are hired through competitive written exams and interviews.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "phd",
+   "location": "Kolkata, India",
+   "label": "PhD and Research Fellowships in Linguistics",
+   "titles": [
+    "Junior Research Fellow",
+    "PhD Fellow",
+    "Research Assistant"
+   ],
+   "expect": {
+    "top": [
+     "deadline"
+    ]
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.25,
+     "people": 0.3,
+     "pitch": 0.05,
+     "local": 0,
+     "deadline": 0.4,
+     "platform": 0
+    },
+    "how_hired": "Through supervisor networks and advertised project posts, with JRF and PhD admissions tied to yearly exams and deadlines.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "electrician",
+   "location": "Kolkata, India",
+   "label": "Electrician",
+   "titles": [
+    "Electrician",
+    "Wireman",
+    "Maintenance Electrician"
+   ],
+   "expect": {
+    "top": [
+     "local",
+     "people"
+    ],
+    "adv_max": 0.4
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.08,
+     "people": 0.3,
+     "pitch": 0.07,
+     "local": 0.45,
+     "deadline": 0.03,
+     "platform": 0.07
+    },
+    "how_hired": "Mostly via contractors, local word of mouth and referrals, with some app platforms and job ads.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "analyst",
+   "location": "Pune, India",
+   "label": "Data Analyst",
+   "titles": [
+    "Data Analyst",
+    "Business Analyst",
+    "MIS Analyst"
+   ],
+   "expect": {
+    "top": [
+     "advertised"
+    ]
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.5,
+     "people": 0.35,
+     "pitch": 0.05,
+     "local": 0.02,
+     "deadline": 0.01,
+     "platform": 0.07
+    },
+    "how_hired": "Mostly via Naukri and LinkedIn applications, referrals, and recruiters, with campus placements filling some entry-level roles.",
+    "at": "2026-10-24"
+   }
+  },
+  {
+   "id": "docfilm",
+   "location": "Mumbai, India",
+   "label": "Documentary Filmmaker",
+   "titles": [
+    "Documentary Director",
+    "Producer",
+    "Editor"
+   ],
+   "expect": {
+    "top": [
+     "people",
+     "pitch"
+    ],
+    "adv_max": 0.25
+   },
+   "recorded": {
+    "routes": {
+     "advertised": 0.12,
+     "people": 0.36,
+     "pitch": 0.3,
+     "local": 0.12,
+     "deadline": 0.1,
+     "platform": 0
+    },
+    "how_hired": "Mostly through industry referrals and proven credits, plus pitching projects to broadcasters, studios, NGOs and grant panels.",
+    "at": "2026-10-24"
+   }
+  }
+ ]
+}

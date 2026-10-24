@@ -103,7 +103,7 @@ const prof = {
     headline: 'backend engineer', years_experience: 9, seniority: 'senior',
     domains: ['fintech'], strengths: ['Go', 'Postgres'], hard_skills: ['go', 'aws'],
     unusual_combination: 'payments plus infra', gaps: ['no k8s'], wrong_shapes: ['management'],
-    tracks: [{ id: 'be', label: 'Backend', difficulty: 'easy', why: 'w', mode: 'permanent', titles: ['SRE'], boards: ['x.com'] }],
+    tracks: [{ id: 'be', label: 'Backend', difficulty: 'easy', why: 'w', mode: 'permanent', routes: { advertised: 0.2, people: 0.5, pitch: 0.3 }, how_hired: 'Through editors.', titles: ['SRE'], boards: ['x.com'] }],
   },
   raw: 'the whole CV text', track: 'be', jobs: [], created: '2026-08-01',
 };
