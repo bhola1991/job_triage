@@ -17,6 +17,8 @@ const src = [
   grab(/const ROUTE_CH = [^\n]*\n/),
   grab(/const YOU_RULE = [^\n]*\n/),
   grab(/function grabJSON[\s\S]*?\n}\n/),
+  grab(/const EXAM_SITES = \[[\s\S]*?\n\];\n/),
+  grab(/const examSite = [^\n]*\n/),
   grab(/async function routeOpps[\s\S]*?\n}\n/),
   grab(/const MONTHS=\{[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
@@ -82,7 +84,12 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   ok(dl[2].url === '' && dl.every(j => j.channel === 'deadline' && !j.deadline), 'deadlines: a non-web url is dropped, and no row carries a date from the model');
   REPLY = JSON.stringify({ items: [{ title: 'Clerkship Examination', org: 'WBPSC', url: '', website: 'wbpsc.gov.in', fit: 80, reach: 45 }] });
   const fb = await T.routeOpps(trk, 'deadline', []);
-  ok(fb[0].url === 'https://wbpsc.gov.in/#clerkship-examination', 'deadlines: no page the model is sure of falls back to the body\'s own site');
+  ok(fb[0].url === 'https://psc.wb.gov.in/#clerkship-examination', 'deadlines: a known body\'s real site replaces the one the model got wrong');
+  REPLY = JSON.stringify({ items: [{ title: 'NABARD Grade A', org: 'NABARD', url: '', website: 'nabard.org', fit: 80, reach: 45 },
+    { title: 'IBPS RRB', org: 'Institute of Banking Personnel Selection (IBPS)', url: 'https://www.ibps.in/index.php/crp-rrb/', fit: 80, reach: 45 }] });
+  const fb2 = await T.routeOpps(trk, 'deadline', []);
+  ok(fb2[0].url === 'https://nabard.org/#nabard-grade-a' && fb2[1].url.startsWith('https://www.ibps.in/index.php/crp-rrb/#'),
+    'deadlines: an unknown body falls back to its own site; a page on the known body\'s own site is kept');
   ok(/^Usually: usually August$/m.test(dl[0].description) && /^Eligibility: graduate, 20-30$/m.test(dl[0].description), 'deadlines: the usual window and eligibility are kept');
 
   // deadlineOk: the quote must be on the page AND name the date.

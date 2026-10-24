@@ -3688,6 +3688,20 @@ Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a lo
    and real organisations only. Fit and reachability come back with each row,
    judged on the same scale as a posting's, so they rank on the same map.
    `avoid` names what the person already has, so "more" brings new ones. */
+/* The official sites of the exam bodies the beta's testers sit, because the
+   model gets them wrong (it gave wbpsc.gov.in and wbprb.org; the real ones are
+   psc.wb.gov.in and prb.wb.gov.in). Each one was checked to answer on
+   2026-10-24. ponytail: a hand list, India-first; extend it as testers name
+   other bodies -- the model's own site is used for everything not on it. */
+const EXAM_SITES = [
+  [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/'],
+  [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/'],
+  [/\bUPSC\b|Union Public Service/i, 'https://upsc.gov.in/'],
+  [/\bWBPSC\b|West Bengal Public Service/i, 'https://psc.wb.gov.in/'],
+  [/\bWBPRB\b|West Bengal Police Recruitment/i, 'https://prb.wb.gov.in/'],
+  [/\bSBI\b|State Bank of India/i, 'https://sbi.co.in/web/careers/current-openings'],
+];
+const examSite = org => (EXAM_SITES.find(([re])=>re.test(String(org||'')))||[])[1] || '';
 async function routeOpps(trk, route, avoid){
   const p=P(), prof=p.profile;
   const net=networkCompanies(loadConns(), trk, new Set()).slice(0,15)
@@ -3731,7 +3745,10 @@ Return ONLY a JSON object, no preamble, no markdown fences:
     if(x.website) j.site=String(x.website).replace(/^https?:\/\//,'').replace(/\/.*$/,'');
     // The official page, with the name after # so two cycles on one site stay two rows.
     // No page the model is sure of: the body's own site, whose notice links the server follows.
-    const official = httpUrl(String(x.url||'')) ? String(x.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
+    // A known body's page beats the model's; then the model's page; then the body's site it named.
+    const known = route==='deadline' ? examSite(x.org) : '';
+    const official = known && !String(x.url||'').includes(new URL(known).hostname.replace(/^www\./,'')) ? known
+      : httpUrl(String(x.url||'')) ? String(x.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
     if(route==='deadline' && official) j.url=official+'#'+String(x.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40);
     // A name they know becomes the row's contact, so "Draft a note" is addressed to them.
     if(route==='people' && who && net.some(n=>n.startsWith(who))) j.contacts=JSON.stringify([{name:who, role:String(x.title).slice(0,80)}]);
@@ -3782,7 +3799,8 @@ function closedOk(text, quote, words){
    page states it. One flash call for all of them. */
 async function verifyDeadlines(rows){
   // A row saved before the site fallback has only its body's site: read that.
-  const pageOf=j=>httpUrl(String(j.url||'')) ? String(j.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
+  const pageOf=j=>{ const k=examSite(j.company), u=String(j.url||'').replace(/#.*$/,'');
+    return k && !u.includes(new URL(k).hostname.replace(/^www\./,'')) ? k : httpUrl(u) ? u : j.site ? `https://${j.site}/` : ''; };
   const withUrl=rows.filter(j=>pageOf(j)).slice(0,10);
   // follow: the server also reads the page's likeliest notice (a PDF, a "how to apply" page).
   /* A page that comes back (nearly) empty -- refused, or built by script -- is
