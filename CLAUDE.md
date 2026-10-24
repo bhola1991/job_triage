@@ -659,6 +659,7 @@ scripts/heartbeat.js                Is the LIVE system working? Corpus freshness
                                     refresh unit is stuck. NOT part of §8: it needs the network and real keys. refresh.sh runs it last.
 scripts/morning.sh                  heartbeat + read-feedback + insights, summarised as a desktop notification. Run at 09:00 by jobtriage-morning.timer.
 scripts/insights.js                 What each beta tester did and where they stopped, from the tables plus public.activity. Rules and counts, no model. Reads only.
+scripts/selfcheck-routes.js         Stories to pitch / people to ask, from a stubbed model: a person's name is written only when it is in their own network. Mutation-tested.
 scripts/selfcheck-worker.js         The Worker's two public write routes, and pricing.html's prices against the code. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
 scripts/eval-routes.js              Route mix per field against scripts/eval/routes.json (12 labelled directions). Offline; --record re-asks.
@@ -738,6 +739,7 @@ that skill with it rather than every machine being set up by hand.
    node scripts/selfcheck-reply.js      # inbound-mail decisions; offline, no model
    node scripts/selfcheck-feedback.js   # when the app asks for feedback
    node scripts/selfcheck-worker.js     # the Worker's public write routes
+   node scripts/selfcheck-routes.js     # pitch/people rows; a name only from their own network
    node scripts/selfcheck-tokens.js     # token drift across the four consumers
    node scripts/eval-matcher.js         # matcher metrics vs the committed baseline
    node scripts/eval-routes.js          # how each field's work is got, 12 recorded cases

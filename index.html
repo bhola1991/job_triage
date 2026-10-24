@@ -6760,7 +6760,7 @@ function jobDetail(j,i,acc){
         : `<a class="lnk" href="https://www.google.com/search?q=${encodeURIComponent([j.title,j.company,j.location,'job'].filter(Boolean).join(' '))}" target="_blank" rel="noopener">no link saved — search Google for it ↗</a>`}
 
       <div><div class="qd-h">The record</div>
-        ${rec('channel', ch==='cold'?'cold approach':'posted role')}
+        ${rec('channel', ch==='cold'?'cold approach':ch==='posted'?'posted role':OPP[ch].one)}
         ${j.source?rec('source', esc(j.source)):''}
         ${rec('confidence', esc(j.ai_confidence||'unknown'))}
         ${rec('posted', age===null?'unknown':esc(ageLabel(j))+(src?` · ${src}`:''), acc==='closing'?'closing':'')}
@@ -6998,7 +6998,9 @@ function jobCard(j,i){
   const fitReach = gone ? fact('listing', 'gone from the board', 'quiet')
                  : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
-      st==='new'  ? fitReach + (ch==='cold'
+      st==='new'  ? fitReach + (ch==='pitch'||ch==='person'
+                      ? fact(ch==='pitch'?'pitch to':'kind', esc(ch==='pitch' ? ((String(j.description||'').match(/^Commissioned by: (.+)$/m)||[])[1]||'the commissioning editor') : OPP[ch].one), 'quiet')
+                    : ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
                       : fact('posted', age===null?'unknown':esc(ageLabel(j)),
                           [acc==='closing'?'closing':'', age===null||age>STALE_DAYS?'quiet':'', String(j.posted_src)==='est'?'est':''].join(' ')))
@@ -7007,7 +7009,7 @@ function jobCard(j,i){
     : st==='live' ? fact('state', 'in conversation', 'go') + fact('last', ev[0]?esc(mmdd(ev[0].on)):'—', 'quiet')
     : fact('state', 'closed', 'quiet') + (scored ? fact('fit / reach', `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
 
-  const sub=dirMark(dirKey(j),dirLabel(dirKey(j)))+[j.company||'—', j.location, ch==='cold'?'cold approach':'posted role'].filter(Boolean).map(esc).join(' · ');
+  const sub=dirMark(dirKey(j),dirLabel(dirKey(j)))+[j.company||'—', j.location, ch==='cold'?'cold approach':ch==='posted'?'posted role':OPP[ch].one].filter(Boolean).map(esc).join(' · ');
   /* Where it sits, without leaving the list: a thumbnail of the map with this
      one dot on it. Shown on hover only, so a row at rest stays a row. */
   const mini = scored && !gone ? `<svg class="qmini" width="38" height="38" viewBox="0 0 38 38" aria-hidden="true"><path d="M3 3V35H35" fill="none" stroke="var(--line)" stroke-width="1"/><path d="M19 3V35M3 19H35" stroke="var(--hair)" stroke-width="1"/><circle cx="${(3+r/100*32).toFixed(1)}" cy="${(35-f/100*32).toFixed(1)}" r="3.2" fill="${st==='new'&&ch!=='cold'?`var(--dir-${dirIdx(dirKey(j))})`:'var(--text)'}"/></svg>` : '';
