@@ -3670,6 +3670,75 @@ Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a lo
   return list.filter(c=>c&&c.name).slice(0,24);
 }
 
+/* The routes that are not postings (phase 2): stories to pitch and people to
+   ask, as rows. One flash call per route, like suggestCompanies, local first
+   and real organisations only. Fit and reachability come back with each row,
+   judged on the same scale as a posting's, so they rank on the same map.
+   `avoid` names what the person already has, so "more" brings new ones. */
+async function routeOpps(trk, route, avoid){
+  const p=P(), prof=p.profile;
+  const net=networkCompanies(loadConns(), trk, new Set()).slice(0,15)
+    .flatMap(g=>g.people.slice(0,3).map(x=>`${x.n}${x.p?' ('+x.p+')':''} at ${g.name}`));
+  const ask = route==='pitch' ? `Name outlets this person could PITCH stories to, each with one story they could pitch there.
+For every item: "title" is the story, as a working headline of at most 14 words, drawn from their own beat, places and sources -- something they can actually report, never a generic topic; "org" is the outlet, named exactly; "who" is the role that commissions this kind of piece there (for example "metro editor", "features desk", "opinion editor"); "why" is one sentence on why this outlet would take this story from them; "ask" is empty.
+Give 8 to 12. Mix the big outlets with smaller, specialist and digital ones that genuinely commission freelancers and are more likely to read a pitch.`
+  : `Name the PEOPLE who hire for, or vouch for, this kind of work, and what to ask each.
+For every item: "title" is who they are, as a role at a place (for example "Kolkata bureau chief", "editor of the city supplement", "partner at a recruiting firm for this field"); "org" is the organisation; "who" is a person's name ONLY if it is someone in THE PEOPLE THEY ALREADY KNOW below, written exactly as there, otherwise empty -- never invent or guess a name; "why" is one sentence on why this person matters for them; "ask" is the one small thing to ask (advice, an introduction, to be kept in mind for contributor or stringer work).
+Give 8 to 12. Put people they already know first, where they genuinely fit.`;
+  const txt=await claude(`${ask}
+
+${senderBlock(prof,p.raw,'WHO THEY ARE',true)}
+
+THE DIRECTION: ${trk.label||''}${trk.how_hired?` -- ${trk.how_hired}`:''}
+BASED IN: ${prof.location||'unstated'}${prof.country?', '+prof.country:''}. LOCAL FIRST: at least half must be in or covering that city or region.
+${net.length?`THE PEOPLE THEY ALREADY KNOW (from their own network): ${net.join('; ')}`:'They have not imported their network, so "who" stays empty.'}
+${(avoid||[]).length?`THEY ALREADY HAVE THESE, DO NOT REPEAT THEM: ${avoid.slice(0,40).join('; ')}`:''}
+
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"items":[{"title":"","org":"","location":"city, country","who":"","why":"","ask":"","fit":0,"reach":0,"website":"the organisation's domain, or empty if unsure"}]}
+
+"fit" 0-100: how well this matches what they have actually done. "reach" 0-100: the honest odds that this approach from them gets a reply. Real organisations only, named exactly; if unsure one exists, leave it out. Invent nothing about the person.`, TOK_CAP, 'flash');
+  const d=grabJSON(txt), list=Array.isArray(d)?d:(d.items||[]);
+  const num=v=>Math.max(0,Math.min(100,parseInt(v,10)||0));
+  return list.filter(x=>x&&x.title&&x.org).slice(0,14).map(x=>{
+    const who=String(x.who||'').trim();
+    const j=Object.assign(blank(), {
+      title:String(x.title).slice(0,160), company:String(x.org).slice(0,120), location:String(x.location||'').slice(0,80),
+      channel:ROUTE_CH[route], source:'Suggested', dir:trk.id,
+      description:[route==='pitch'&&who?`Commissioned by: ${who}`:'', x.why, x.ask?`Ask: ${x.ask}`:''].filter(Boolean).join('\n'),
+      ai_score:String(num(x.fit)), ai_reachability:String(num(x.reach)), ai_confidence:'medium',
+    });
+    if(globalThis.LAST_MODEL) j.ai_model=globalThis.LAST_MODEL;
+    if(x.website) j.site=String(x.website).replace(/^https?:\/\//,'').replace(/\/.*$/,'');
+    // A name they know becomes the row's contact, so "Draft a note" is addressed to them.
+    if(route==='people' && who && net.some(n=>n.startsWith(who))) j.contacts=JSON.stringify([{name:who, role:String(x.title).slice(0,80)}]);
+    return j;
+  }).filter(j=>fitOf(j)>=40);
+}
+/* Once per direction and route, on its own and in the background, alongside
+   the board fill: the routes a direction leans on fill themselves too. More
+   come from the section's own button. */
+const ROUTE_WORK = new Set();
+async function routeFill(trk, route, more){
+  const p=P(); if(!p || !cloudNow() || ROUTE_WORK.has(route)) return;
+  const k='triage:route:'+DB.current+':'+trk.id+':'+route;
+  if(!more){ try{ if(localStorage.getItem(k)) return; }catch(e){ return; } }
+  ROUTE_WORK.add(route); render();
+  try{
+    const have=p.jobs.filter(j=>chOf(j)===ROUTE_CH[route] && inDir(j,p)).map(j=>`${j.title} (${j.company})`);
+    const rows=await routeOpps(trk, route, have);
+    const n=addJobs(rows);
+    try{ localStorage.setItem(k, today()); }catch(e){}
+    track('route_fill',{ route, n, more:!!more });
+    if(n) await save();
+  }catch(e){
+    console.warn('route fill failed:', route, e.message);
+    if(e.message==='NEEDKEY') keyDialog(()=>routeFill(trk, route, more));
+  }
+  ROUTE_WORK.delete(route); render();
+}
+const routeFills = trk => ['pitch','people'].filter(r=>(routesOf(trk)[r]||0)>=0.2).forEach(r=>routeFill(trk, r));
+
 function companyRow(c,i){
   const tag = c.odds==='strong'?'easy':c.odds==='longshot'?'hard':'mid';
   return `<label class="ct-row" style="cursor:pointer;align-items:flex-start">
@@ -4099,7 +4168,21 @@ function trimPlan(jobs){
   });
   return { safe, best:pool.slice(0,KEEP_TOP), drop:pool.slice(KEEP_TOP) };
 }
-const chOf   = j => String(j.channel||'posted').trim().toLowerCase()==='cold' ? 'cold' : 'posted';
+const chOf   = j => { const c=String(j.channel||'posted').trim().toLowerCase(); return OPP[c] ? c : 'posted'; };
+/* The kinds of opportunity a row can be (routes, phase 2, 2026-10-24). A
+   posting is the default; a company to approach is 'cold'; a story to pitch
+   and a person to ask are rows like any other, with fit, reachability and one
+   next step, so the stages, the map, undo and sync all carry them unchanged.
+   Only the words differ: what "sent" is called, and what the button does. */
+const OPP = {
+  posted: { sent:'applied',    status:'Applied',   toast:'Marked applied',   key:'Postings' },
+  cold:   { sent:'reached out', status:'Contacted', toast:'Marked contacted', key:'Companies to approach', one:'company to approach' },
+  pitch:  { sent:'pitched',    status:'Pitched',   toast:'Marked pitched',   key:'Stories to pitch', one:'a story to pitch',
+            btn:'Draft the pitch', sect:'Pitch these', sub:'Outlets that take this kind of story, and an angle from your own beat. Each pitch goes to the person who commissions it.' },
+  person: { sent:'asked',      status:'Asked',     toast:'Marked asked',     key:'People to ask', one:'someone to ask',
+            btn:'Draft a note',    sect:'People to ask', sub:'Who hires or vouches for this work, and what to ask them. Someone you already know comes first.' },
+};
+const ROUTE_CH = { pitch:'pitch', people:'person' };   // route -> the channel its rows carry
 const stOf   = j => { const v=String(j.stage||'').trim().toLowerCase();
   if(STAGES.includes(v)) return v;
   // Rows imported before stages existed, or from the Python tracker.
@@ -4126,11 +4209,11 @@ function logEvent(j,kind,text){
 }
 /* What a stage change says in the log. Shared, because the card and the detail
    panel both make them, and 'moved to sent' is a worse record than 'applied'. */
-const stageNote = (j,st) => st==='sent' ? (chOf(j)==='cold'?'reached out':'applied')
+const stageNote = (j,st) => st==='sent' ? OPP[chOf(j)].sent
   : st==='live' ? 'they replied' : st==='closed' ? 'closed out' : 'reopened';
 function setStage(j,st){
   j.stage=st;
-  j.status = st==='sent' ? (chOf(j)==='cold'?'Contacted':'Applied')
+  j.status = st==='sent' ? OPP[chOf(j)].status
            : st==='live' ? 'In conversation'
            : st==='closed' ? 'Closed' : 'New';
   // A stale follow-up on a reopened row would fall due against a clock that
@@ -4170,7 +4253,7 @@ function snapRow(j){
 /* What the toast says a stage change did. stageNote is the log's voice
    ("applied"); this is the confirmation's ("Marked applied"), and they are not
    the same sentence -- a log is a record and a toast is an answer. */
-const stageToast = (j,st) => st==='sent' ? (chOf(j)==='cold'?'Marked contacted':'Marked applied')
+const stageToast = (j,st) => st==='sent' ? OPP[chOf(j)].toast
   : st==='live' ? 'Marked as replied' : st==='closed' ? 'Closed' : 'Reopened';
 
 /* "Sent." with the man standing on tile: a beat for a first or a milestone, not
@@ -5303,7 +5386,9 @@ async function runBoards(trk, where){
 async function fillDirection(){
   const p=P(); if(!p || busy || !cloudNow() || !USER || ownApify()) return;
   const trk=(p.profile.tracks||[]).find(t=>t.id===p.track);
-  if(!trk || !(trk.titles||[]).length) return;
+  if(!trk) return;
+  routeFills(trk);                    // not awaited, once per route: its own work, beside the boards
+  if(!(trk.titles||[]).length) return;
   const k='triage:filled:'+DB.current+':'+trk.id;
   let filled=false; try{ filled=!!localStorage.getItem(k); }catch(e){ return; }
   const waiting=p.jobs.some(j=>isOpen(j)&&stOf(j)==='new'&&inDir(j,p));
@@ -6849,6 +6934,7 @@ function deckHTML(order){
 function primaryAct(j,i){
   const st=stOf(j);
   const b=(act,label,cls)=>`<button class="btn-sm act-primary ${cls}" data-act="${act}" data-i="${i}">${label}</button>`;
+  if(st==='new' && OPP[chOf(j)].btn) return b('pitch',OPP[chOf(j)].btn,'btn-go');
   if(st==='new') return chOf(j)==='cold' ? b('pitch','Write the DM','btn-go')
     : httpUrl(String(j.url||'').trim()) ? b('apply','Apply \u2197','btn-go') : b('sent','Mark applied','btn-go');
   if(st==='sent'){
@@ -7095,8 +7181,20 @@ function renderUnapplied(){
 
   // Saved jobs move to the front, in their own section, and out of the bands.
   const saved=sortList(mine.filter(x=>isSaved(x.j)));
-  const scored=mine.filter(x=>isScored(x.j)&&!isSaved(x.j));
-  const unscored=mine.filter(x=>!isScored(x.j)&&!isSaved(x.j));
+  /* Stories to pitch and people to ask have sections of their own, ahead of
+     the postings when the direction leans on them more than on postings. */
+  const routedCh=x=>chOf(x.j)==='pitch'||chOf(x.j)==='person';
+  const scored=mine.filter(x=>isScored(x.j)&&!isSaved(x.j)&&!routedCh(x));
+  const unscored=mine.filter(x=>!isScored(x.j)&&!isSaved(x.j)&&!routedCh(x));
+  const W=routesOf((p.profile.tracks||[]).find(t=>t.id===p.track));
+  const routeSect=r=>{ const ch=ROUTE_CH[r], rows=sortList(mine.filter(x=>chOf(x.j)===ch&&!isSaved(x.j))), busyR=ROUTE_WORK.has(r);
+    if(!rows.length) return busyR ? `<div class="mapnote"><span>Working out ${r==='pitch'?'outlets to pitch and what to pitch them':'who to ask'} for this direction\u2026</span></div>` : '';
+    return sect('',OPP[ch].sect,OPP[ch].sub,rows)+`<div class="btn-row" style="margin:-4px 0 18px"><button class="btn-sm" data-moreroute="${r}" ${busyR?'disabled':''}>${
+      busyR?'Finding more\u2026':r==='pitch'?'More stories to pitch':'More people to ask'}</button></div>`; };
+  const RT=['pitch','people'].sort((a,b)=>(W[b]||0)-(W[a]||0));
+  const routesFirst=RT.filter(r=>(W[r]||0)>=(W.advertised||0)).map(routeSect).join('');
+  const routesLast=RT.filter(r=>(W[r]||0)<(W.advertised||0)).map(routeSect).join('');
+  const anyRouted=mine.some(routedCh);
   // While a search runs, what it just found is open, not folded: it is what there is to look at.
   const scoringNow=searching() && unscored.length>0;
   // Closing wins over strong: the nearer deadline beats the better opportunity.
@@ -7129,14 +7227,16 @@ function renderUnapplied(){
                 ...worth.map(x=>({...x,band:'Worth a shot'})), ...below.map(x=>({...x,band:'Below the bar'})),
                 ...(scoringNow?unscored.map(x=>({...x,band:'Scoring now'})):[])])}
     ${saved.length?`<div class="saved">${sect('','Saved for later','Swiped right, or saved from a row\u2019s menu. Still to do; just kept at the front.',saved)}</div>`:''}
+    ${routesFirst}
     <div class="bands">
     ${sect('go','Do these first',`Fit ${bars.strongFit}+ and reachability ${bars.strongReach}+. Good work you have a real chance at \u2014 start at the top and go down.`,strong)}
     ${sect('closing','Closing soon',`Worth doing, but posted ${CLOSING_DAYS}+ days ago. Old postings get filled, not withdrawn \u2014 apply today or let it go.`,closing)}
     ${sect('','Worth a shot','Over the bar but not by much. Worth an application, not a whole morning each.',worth)}
     ${scoringNow?sect('','Scoring now','Just found. Open, save or apply to any of them now; each takes its place above once it is scored.',unscored):''}
-    ${(!strong.length&&!worth.length&&!closing.length&&!scoringNow)?`<div class="empty"><b>Nothing clears the bar</b>
+    ${(!strong.length&&!worth.length&&!closing.length&&!scoringNow&&!anyRouted)?`<div class="empty"><b>Nothing clears the bar</b>
       ${scored.length?`${scored.length} scored here, none at fit ${bars.workFit}+ and reachability ${bars.workReach}+. Either this batch was weak or you have worked through it \u2014 pull in more roles.`:'None of these have been scored yet.'}</div>`:''}
     </div>
+    ${routesLast}
     ${foldSect('below','Below the bar',`Scored under fit ${bars.workFit} or reachability ${bars.workReach}. Kept, because a score is a judgement rather than a fact.`,below)}
     ${scoringNow?'':foldSect('unscored','Not scored yet','Invisible to ranking until something reads them. Scoring runs on its own as they arrive.',unscored)}
     ${elseFold}`;
@@ -8529,7 +8629,7 @@ const FAMILIES = [
   ['legal','Legal and compliance',/\b(legal|lawyer|counsel|compliance|company secretary|paralegal)/],
 ];
 function familyOf(j){
-  const t=String((j.title||'')+' '+(chOf(j)==='cold'?(j.description||''):'')).toLowerCase();
+  const t=String((j.title||'')+' '+(chOf(j)!=='posted'?(j.description||''):'')).toLowerCase();
   for(const [k,,re] of FAMILIES) if(re.test(t)) return k;
   return 'other';
 }
@@ -8547,10 +8647,10 @@ function mapItems(all){
 /* The classes the key picks out, per dot. Every one of them is also a data-
    attribute on the dot, so a hover in the key is one attribute comparison. */
 function dotKeys(j){
-  const st=stOf(j), cold=chOf(j)==='cold', fb=freshBand(j);
+  const st=stOf(j), ch=chOf(j), cold=ch==='cold', fb=freshBand(j);
   return { st: st==='new' ? (cold?'cold':'decide') : isDue(j) ? 'due' : st,
-    fresh: st!=='new'||cold ? '' : fb<0 ? 'unknown' : String(fb),
-    dir: dirKey(j), fam: familyOf(j) };
+    fresh: st!=='new'||ch!=='posted' ? '' : fb<0 ? 'unknown' : String(fb),
+    dir: dirKey(j), fam: familyOf(j), ch };
 }
 /* Which direction a dot is, by shape, since colour already says freshness.
    Shape AND colour, both by the direction's place in the profile, so a
@@ -8623,9 +8723,9 @@ function plotSVG(){
     g+=`<rect x="${a.x}" y="${a.y}" width="${b.x-a.x}" height="${b.y-a.y}" fill="${cText}" fill-opacity=".06" stroke="${cText}" stroke-width="1" stroke-dasharray="4 3"/>`; }
   {
     items.filter(x=>inDomain(x.j,D)).forEach(({j,i})=>{
-      const fb=stOf(j)==='new'&&chOf(j)!=='cold' ? freshBand(j) : 0, hollow=fb<0, fop=FRESH_FILL[Math.max(0,fb)];
+      const fb=stOf(j)==='new'&&chOf(j)==='posted' ? freshBand(j) : 0, hollow=fb<0, fop=FRESH_FILL[Math.max(0,fb)];
       const pt=plotXY(fitOf(j),reachOf(j)), col=dotColour(j), sel=SEL_JOB===keyOf(j), rad=(sel?7.5:5.5)*(PHONE()?1.3:1);
-      const K=dotKeys(j), sh=dirShape(K.dir), attrs=`class="dot" data-idx="${i}" data-st="${K.st}" data-fresh="${K.fresh}" data-dir="${esc(K.dir)}" data-fam="${K.fam}" aria-label="${esc(j.title)} at ${esc(j.company)}"`;
+      const K=dotKeys(j), sh=dirShape(K.dir), attrs=`class="dot" data-idx="${i}" data-st="${K.st}" data-fresh="${K.fresh}" data-dir="${esc(K.dir)}" data-fam="${K.fam}" data-ch="${K.ch}" aria-label="${esc(j.title)} at ${esc(j.company)}"`;
       g += chOf(j)==='cold'
         ? `<rect ${attrs} x="${(pt.x-rad).toFixed(1)}" y="${(pt.y-rad).toFixed(1)}" width="${rad*2}" height="${rad*2}" fill="${col}" fill-opacity=".15" stroke="${col}" stroke-width="${sel?2.6:1.6}"/>`
         : sh==='circle'
@@ -8654,6 +8754,7 @@ function mapKey(inView){
       dirMark(id),
       dirLabel(id)+(id===p.track?' (picked)':'')])] : null,
     ['Kind of work', fams.map(f=>['fam',f,'',familyLabel(f)])],
+    ['Kind of opportunity', Object.keys(OPP).map(c=>['ch',c,'',OPP[c].key])],
   ].filter(Boolean).map(([g,L])=>[g,L.map(([a,v,sw,l])=>({a,v,sw,l,n:n(a,v)})).filter(x=>x.n)]).filter(([,L])=>L.length);
 }
 
@@ -8712,7 +8813,7 @@ function bindPlot(){
     const age=ageOf(j);
     tip.innerHTML=`<b>${esc(j.title)}</b><span>${esc(j.company)}${j.location?' · '+esc(j.location):''}</span>
       <span class="num">fit ${fitOf(j)} · reach ${reachOf(j)}</span>
-      <span>${chOf(j)==='cold'?'company to approach':age===null?'posting date unknown':age<1?'posted today':`posted ${age} day${age===1?'':'s'} ago`}${(P().profile.tracks||[]).length>1?' · '+esc(dirLabel(dirKey(j))):''}</span>`;
+      <span>${OPP[chOf(j)].one||(age===null?'posting date unknown':age<1?'posted today':`posted ${age} day${age===1?'':'s'} ago`)}${(P().profile.tracks||[]).length>1?' · '+esc(dirLabel(dirKey(j))):''}</span>`;
     tip.hidden=false;
     const a=d.getBoundingClientRect(), w=wrap.getBoundingClientRect();
     const left=Math.min(a.left-w.left+a.width/2+12, w.width-tip.offsetWidth-8);
@@ -9252,6 +9353,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
   if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
   if(e.target.closest && e.target.closest('[data-opendecide]')){ TAB='unapplied'; SEL_JOB=null; render(); window.scrollTo(0,0); return; }
+  const mr=e.target.closest && e.target.closest('[data-moreroute]');
+  if(mr){ const p=P(), t=p&&(p.profile.tracks||[]).find(x=>x.id===p.track); if(t) routeFill(t, mr.dataset.moreroute, true); return; }
   const rt=e.target.closest && e.target.closest('[data-routes]');
   if(rt){ const tr=(VIEW==='app'&&P() ? P().profile.tracks : (ONB.parsed||{}).tracks)||[]; return routesDialog(tr.find(x=>x.id===rt.dataset.routes)); }
   if(e.target.closest && e.target.closest('[data-gocompanies]')){ TAB='companies'; SEL_JOB=null; render(); window.scrollTo(0,0); return; }
@@ -9619,7 +9722,7 @@ async function draftPitch(i,isChase){
   const cts=listOf(j,'contacts'), ev=listOf(j,'events');
   return draftMessage({
     eyebrow:'Outreach', head:`${esc(j.title)} · ${esc(j.company)}`, rows:10, maxTok:TOK_CAP,
-    job:j, field:isChase?'dmchase':'dm', cold:chOf(j)==='cold',
+    job:j, field:isChase?'dmchase':'dm', cold:chOf(j)!=='posted',
     retry:()=>draftPitch(i,isChase),
     extras:[{id:'msgSave', label:'Save to notes', run:async(text)=>{
       j.notes=(j.notes?j.notes+' | ':'')+text;
@@ -9640,7 +9743,11 @@ Previous activity, most recent first:
 ${ev.slice(0,4).map(x=>`- ${x.on} ${x.kind}: ${x.text||''}`).join('\n')||'- no detail logged'}
 Write a SHORT nudge: three sentences at most. Do not re-pitch from scratch and do not repeat the original message. Add one new thing \u2014 a relevant piece of work, a recent development at their company, or a sharper version of the offer. Be graceful, never wounded, and make it easy to ignore without awkwardness.` : ''}
 
-CHANNEL: ${chOf(j)==='cold'
+CHANNEL: ${chOf(j)==='pitch'
+ ? 'PITCH \u2014 a story pitch to the editor who commissions at this outlet. TARGET ROLE above is the story, not a job. Open with the story itself: what happened or is happening, why now, and what access or evidence they have that others do not. Then one sentence on who they are, with the most relevant piece they have published. The ask: whether the outlet would take it, at what length. Never ask for a job.'
+ : chOf(j)==='person'
+ ? 'ASK \u2014 a short note to someone who hires or vouches for this kind of work. TARGET ROLE above is who the person is, not a job. Ask for one small thing: fifteen minutes of advice, or to be kept in mind for contributor or stringer work. Never ask for a job outright.'
+ : chOf(j)==='cold'
  ? 'COLD \u2014 there is NO job posting. This is an unsolicited approach to someone at the company. Do not refer to "the role", "this position", "the opening" or "your posting", because none exists. Open by making them want to reply, and make the ask a conversation, not an application.'
  : 'POSTED \u2014 there is a live job posting, so referring to the role directly is correct.'}
 
