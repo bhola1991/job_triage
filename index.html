@@ -3785,7 +3785,13 @@ async function verifyDeadlines(rows){
   const pageOf=j=>httpUrl(String(j.url||'')) ? String(j.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
   const withUrl=rows.filter(j=>pageOf(j)).slice(0,10);
   // follow: the server also reads the page's likeliest notice (a PDF, a "how to apply" page).
-  const pages=await Promise.all(withUrl.map(j=>hosted('page_text',{url:pageOf(j), follow:true}).then(r=>String(r.text||'')).catch(()=>'')));
+  /* A page that comes back (nearly) empty -- refused, or built by script -- is
+     read again in a real browser (page_render, ~\u20b90.20 a page). */
+  const read=async j=>{
+    const t=await hosted('page_text',{url:pageOf(j), follow:true}).then(r=>String(r.text||'')).catch(()=>'');
+    return t.length>=300 ? t : await hosted('page_render',{url:pageOf(j), follow:true}).then(r=>String(r.text||'')).catch(()=>t);
+  };
+  const pages=await Promise.all(withUrl.map(read));
   const have=withUrl.map((j,k)=>({j, text:pages[k]})).filter(x=>x.text.length>200);
   if(!have.length) return 0;
   const txt=await claude(`For each item, read ONLY its own page text and find the LAST DATE to apply or register for the current or next cycle of that item. Today is ${today()}.

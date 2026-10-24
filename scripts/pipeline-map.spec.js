@@ -104,7 +104,7 @@ module.exports = {
       intro: 'From the click to the first saved row: query building, the free triage, and what gets thrown away before anything is paid for.',
       neighbours: ['JT Edge Function', 'JT Scoring', 'JT Storage'] },
     { id: 'server', file: 'JT Edge Function', title: 'The edge function',
-    intro: 'One POST, eighteen actions, a service-role key. The server is a credential broker and a meter for seventeen of them \u2014 it holds no per-user job table, and the one action that does read jobs, index_search, reads the SHARED corpus that belongs to nobody.',
+    intro: 'One POST, nineteen actions, a service-role key. The server is a credential broker and a meter for eighteen of them \u2014 it holds no per-user job table, and the one action that does read jobs, index_search, reads the SHARED corpus that belongs to nobody.',
       neighbours: ['JT Credits', 'JT Scoring'] },
     { id: 'scoring', file: 'JT Scoring', title: 'Scoring',
       intro: 'The only step that costs money per job, and the only one whose output is a judgement rather than a fact.',
@@ -223,6 +223,9 @@ module.exports = {
     'sv.page':    { diagram: 'server', group: 'actions', kind: 'sync', label: 'page_text — one official page, free',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'page_text' },
       note: 'For the deadlines route: the text of an exam or fellowship\'s own page, so the app can read the closing date off it. With follow, also the page\'s two likeliest notice links (noticeLinks: the link must say notification, apply, last date...; a PDF scores higher), PDFs read with unpdf. Open web only (safeUrl), PAGES_PER_DAY per person. Calls no model; the app\'s AI call reads it, and a date is kept only if its quote is really on the page (deadlineOk).' },
+    'sv.render':  { diagram: 'server', group: 'actions', kind: 'net', label: 'page_render — the same, in a real browser',
+      anchor: { file: 'supabase/functions/api/index.ts', case: 'page_render' },
+      note: 'For official pages a plain fetch cannot read (IBPS, WBPSC and WBPRB refuse the connection; SSC is built by script): apify~rag-web-browser with Playwright, run synchronously inside the 150s wall clock, ~$0.00228 a page. Follows notice links like page_text, a plain fetch first. Shares PAGES_PER_DAY; logged at cost, not charged.' },
     'sv.places':  { diagram: 'server', group: 'actions', kind: 'credit', label: 'places_start — one board search',
       anchor: { file: 'supabase/functions/api/index.ts', case: 'places_start' },
       note: 'For the local route: one Google Maps run (compass~crawler-google-places, ~$0.004 a place, 30 places) over a few kinds of place near the person. Charged as a board search so the free searches cover it; refunded if it does not start. Polled and collected by apify_status / apify_items (source places), which never deposit it into the corpus.' },
@@ -490,7 +493,7 @@ module.exports = {
     // here too.
     // It went stale a second time: direction_fill and company_pulse (2026-10)
     // had nodes and no edge, until CodeRabbit noticed on 2026-10-19.
-    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'mantiks', 'fill', 'pulse', 'page', 'places', 'idxsearch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
+    ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'mantiks', 'fill', 'pulse', 'page', 'render', 'places', 'idxsearch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'st.index', to: 'st.checks', label: 'still listed?' },
     { from: 'sv.idxsearch', to: 'st.search', label: 'search_index()' },

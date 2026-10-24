@@ -348,6 +348,29 @@ function noticeLinks(page: { url: string; links: { href: string; text: string; p
    compass's actor bills per place scraped ($0.004 at our tier) with a $0.50
    floor it insists on as the run's ceiling; 30 places is about $0.12. */
 const PLACES_ACTOR = "compass~crawler-google-places";
+/* A real browser for the official pages a plain fetch cannot read: IBPS, WBPSC
+   and WBPRB refuse the connection, SSC is a script-built app (2026-10-24).
+   apify~rag-web-browser bills per page fetched ($0.00228 at our tier); run
+   synchronously, so it answers inside the edge function's 150s wall clock. */
+const RENDER_ACTOR = "apify~rag-web-browser";
+async function renderPage(url: string, secs: number): Promise<{ url: string; text: string; links: { href: string; text: string; pdf: boolean }[] } | null> {
+  const r = await apify(`/acts/${RENDER_ACTOR}/run-sync-get-dataset-items?timeout=${secs}&maxTotalChargeUsd=0.05`, {
+    method: "POST", signal: AbortSignal.timeout((secs + 10) * 1000),
+    body: JSON.stringify({ query: url, maxResults: 1, outputFormats: ["markdown"], scrapingTool: "browser-playwright",
+      // nav and footer are kept: a notice board is often a menu.
+      removeElementsCssSelector: "script, style, noscript, svg", requestTimeoutSecs: Math.max(20, secs - 10), dynamicContentWaitSecs: 8 }),
+  }).catch(() => null);
+  if (!r || !r.ok) return null;
+  const it = ((await r.json().catch(() => [])) as Any[])[0];
+  const md = String(it?.markdown || "");
+  if (!md) return null;
+  const base = String(it?.metadata?.url || url);
+  const links = [...md.matchAll(/\[([^\]]{0,160})\]\((https?:\/\/[^)\s]+|\/[^)\s]*)\)/g)].map((m) => {
+    let href = ""; try { href = new URL(m[2], base).href; } catch { /* not a link */ }
+    return { href, text: m[1].replace(/\s+/g, " ").trim().slice(0, 120), pdf: /\.pdf($|\?)/i.test(m[2]) };
+  }).filter((l) => l.href && safeUrl(l.href));
+  return { url: base, text: md.replace(/\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/[#*_>|`]+/g, " ").replace(/\s+/g, " ").trim(), links };
+}
 const PLACES_MAX = 30;
 
 async function fetchText(url: string, max: number): Promise<{ text: string; url: string } | null> {
@@ -1626,6 +1649,27 @@ async function handle(req: Request): Promise<Response> {
         if (b.follow) for (const l of noticeLinks(page)) {
           const sub = await pageText(l.href);
           if (sub && sub.text.length > 100) { followed.push(sub.url); text += `\n--- from ${sub.url} ---\n` + sub.text.slice(0, 40_000); }
+        }
+        return json({ url: page.url, text, followed });
+      }
+
+      /* The same, through a real browser, for pages page_text could not read.
+         Shares page_text's daily cap; logged at what it costs us, not charged. */
+      case "page_render": {
+        const url = safeUrl(String(b.url || ""));
+        if (!url) throw new Http(400, "a public web address");
+        const today = new Date().toISOString().slice(0, 10);
+        const { count } = await admin.from("usage_events").select("id", { count: "exact", head: true })
+          .eq("user_id", user).in("source", ["page", "render"]).gte("created_at", today);
+        if ((count || 0) >= PAGES_PER_DAY) throw new Http(429, `That is ${PAGES_PER_DAY} pages today — more tomorrow.`);
+        const page = await renderPage(url, 60);
+        await logUsage([{ user_id: user, kind: "scrape", source: "render", units: page ? 1 : 0, cost_inr: page ? inr(0.00228) : 0, note: url.slice(0, 120) }]);
+        if (!page) return json({ url, text: "", followed: [] });
+        let text = page.text.slice(0, 40_000); const followed: string[] = [];
+        if (b.follow) {
+          // A plain fetch first (it reads PDFs); the browser only for what that cannot reach, in parallel.
+          const subs = await Promise.all(noticeLinks(page).map(async (l) => (await pageText(l.href)) || (l.pdf ? null : await renderPage(l.href, 45))));
+          for (const sub of subs) if (sub && sub.text.length > 100) { followed.push(sub.url); text += `\n--- from ${sub.url} ---\n` + sub.text.slice(0, 40_000); }
         }
         return json({ url: page.url, text, followed });
       }
