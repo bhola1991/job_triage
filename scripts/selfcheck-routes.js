@@ -94,6 +94,10 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   const w = T.dateWindows(notice);
   ok(w.includes('last date for online registration is 21.08.2026') && w.length < 1200, 'dateWindows: a date deep in a long notice reaches the model, and little else does');
   ok(T.dateWindows('no dates here at all').startsWith('no dates'), 'dateWindows: with nothing to match, the start of the text');
+  const listing = Array.from({ length: 30 }, (_, k) => `POST ${k}: Wealth officer ${k}. LAST DATE TO APPLY : 0${(k % 9) + 1}-11-2026. ` + 'z'.repeat(400)).join(' ')
+    + ' JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026.';
+  ok(T.dateWindows(listing, 1500, ['Junior', 'Associates']).includes('JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026')
+    && !T.dateWindows(listing, 1500).includes('30-11-2026'), 'dateWindows: on a long listing, the item named comes first');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

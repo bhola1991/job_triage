@@ -337,8 +337,11 @@ function noticeLinks(page: { url: string; links: { href: string; text: string; p
   const y = new Date().getFullYear(), KEY = /notif|notice|advertis|recruit|how[ -_]?to[ -_]?apply|apply|deadline|last[ -_]?date|eligib|brochure|guideline|call[ -_]?for|prospectus|bulletin/i;
   const seen = new Set([page.url]);
   // The words are required; a PDF is only a bonus (an annual report is a PDF too).
+  // The words that name the notice itself outrank the ones around it (SBI's
+  // "Scribe guidelines" PDF once beat its own advertisement).
+  const STRONG = /notif|advertis|recruit|detailed|last[ -_]?date|deadline/i;
   return page.links.filter((l) => KEY.test(l.text + " " + l.href))
-    .map((l) => ({ ...l, score: (l.pdf ? 2 : 0) + (new RegExp(`${y}|${y + 1}`).test(l.text + l.href) ? 1 : 0) }))
+    .map((l) => ({ ...l, score: (STRONG.test(l.text + " " + l.href) ? 3 : 0) + (l.pdf ? 2 : 0) + (new RegExp(`${y}|${y + 1}`).test(l.text + l.href) ? 1 : 0) }))
     .filter((l) => !seen.has(l.href) && seen.add(l.href)).sort((a, b) => b.score - a.score).slice(0, 2);
 }
 /* Google Maps places near the person, for the local route (2026-10-24).
