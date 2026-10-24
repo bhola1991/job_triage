@@ -19,6 +19,7 @@ const src = [
   grab(/function grabJSON[\s\S]*?\n}\n/),
   grab(/const EXAM_SITES = \[[\s\S]*?\n\];\n/),
   grab(/const examSite = [^\n]*\n/),
+  grab(/const examOpen = [^\n]*\n/),
   grab(/async function routeOpps[\s\S]*?\n}\n/),
   grab(/const MONTHS=\{[^\n]*\n/),
   grab(/const httpUrl = [^\n]*\n/),
@@ -88,8 +89,11 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   REPLY = JSON.stringify({ items: [{ title: 'NABARD Grade A', org: 'NABARD', url: '', website: 'nabard.org', fit: 80, reach: 45 },
     { title: 'IBPS RRB', org: 'Institute of Banking Personnel Selection (IBPS)', url: 'https://www.ibps.in/index.php/crp-rrb/', fit: 80, reach: 45 }] });
   const fb2 = await T.routeOpps(trk, 'deadline', []);
-  ok(fb2[0].url === 'https://nabard.org/#nabard-grade-a' && fb2[1].url.startsWith('https://www.ibps.in/index.php/crp-rrb/#'),
-    'deadlines: an unknown body falls back to its own site; a page on the known body\'s own site is kept');
+  ok(fb2[0].url === 'https://www.nabard.org/careers-notices1.aspx?cid=693&id=26#nabard-grade-a' && fb2[1].url.startsWith('https://www.ibps.in/index.php/crp-rrb/#'),
+    'deadlines: a known body\'s dated page replaces the model\'s; a page on the known body\'s own site is kept');
+  REPLY = JSON.stringify({ items: [{ title: 'CGL', org: 'Staff Selection Commission', url: '', website: 'ssc.nic.in', fit: 80, reach: 45 }] });
+  const ssc = await T.routeOpps(trk, 'deadline', []);
+  ok(ssc[0].url === 'https://ssc.gov.in/#cgl', 'deadlines: a body whose dated page is an API sends the person to its site instead');
   ok(/^Usually: usually August$/m.test(dl[0].description) && /^Eligibility: graduate, 20-30$/m.test(dl[0].description), 'deadlines: the usual window and eligibility are kept');
 
   // deadlineOk: the quote must be on the page AND name the date.

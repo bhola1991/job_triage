@@ -3694,14 +3694,22 @@ Give 12 to 16 companies -- fewer, better-checked ones beat a long list (and a lo
    2026-10-24. ponytail: a hand list, India-first; extend it as testers name
    other bodies -- the model's own site is used for everything not on it. */
 const EXAM_SITES = [
-  [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/'],
-  [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/'],
-  [/\bUPSC\b|Union Public Service/i, 'https://upsc.gov.in/'],
+  // The page that carries dates, not the home page (found 2026-10-24). IBPS before RRB: "CRP RRB" is IBPS's.
+  [/\bSSC\b|Staff Selection Commission/i, 'https://ssc.gov.in/api/general-website/portal/ssc-calendar?page=1&limit=40&contentType=ssc-calendar&key=startDate&order=ASC&isAttachment=true&isPaginationRequired=false&language=english&attributes=id,headline,examYear,content,startDate,endDate', 'https://ssc.gov.in/'],
+  // ponytail: this file name changes every year; the stable /examinations/exam-calendar page needs "calendar" in the server's notice-link words.
+  [/\bUPSC\b|Union Public Service/i, 'https://www.upsc.gov.in/sites/default/files/Calendar-Year-2027-Engl-200526.pdf'],
+  [/\bIBPS\b|Institute of Banking Personnel/i, 'https://www.ibps.in/index.php/recruitment/'],
   [/\bWBPSC\b|West Bengal Public Service/i, 'https://psc.wb.gov.in/'],
-  [/\bWBPRB\b|West Bengal Police Recruitment/i, 'https://prb.wb.gov.in/'],
+  [/\bWBPRB\b|West Bengal Police Recruitment|Kolkata Police|West Bengal Police/i, 'https://prb.wb.gov.in/recruitments'],
+  [/\bRRBs?\b|Railway Recruitment/i, 'https://www.rrbapply.gov.in/'],
   [/\bSBI\b|State Bank of India/i, 'https://sbi.co.in/web/careers/current-openings'],
+  [/\bNABARD\b/i, 'https://www.nabard.org/careers-notices1.aspx?cid=693&id=26'],
+  [/\bRBI\b|Reserve Bank of India/i, 'https://opportunities.rbi.org.in/'],
+  [/\bWBSSC\b|West Bengal School Service/i, 'https://www.westbengalssc.com/'],
 ];
+/* [pattern, the page the dates are read from, the page a person is sent to if that one is not for people (SSC's is an API)] */
 const examSite = org => (EXAM_SITES.find(([re])=>re.test(String(org||'')))||[])[1] || '';
+const examOpen = org => { const e=EXAM_SITES.find(([re])=>re.test(String(org||''))); return e ? (e[2]||e[1]) : ''; };
 async function routeOpps(trk, route, avoid){
   const p=P(), prof=p.profile;
   const net=networkCompanies(loadConns(), trk, new Set()).slice(0,15)
@@ -3746,7 +3754,7 @@ Return ONLY a JSON object, no preamble, no markdown fences:
     // The official page, with the name after # so two cycles on one site stay two rows.
     // No page the model is sure of: the body's own site, whose notice links the server follows.
     // A known body's page beats the model's; then the model's page; then the body's site it named.
-    const known = route==='deadline' ? examSite(x.org) : '';
+    const known = route==='deadline' ? examOpen(x.org) : '';
     const official = known && !String(x.url||'').includes(new URL(known).hostname.replace(/^www\./,'')) ? known
       : httpUrl(String(x.url||'')) ? String(x.url).replace(/#.*$/,'') : j.site ? `https://${j.site}/` : '';
     if(route==='deadline' && official) j.url=official+'#'+String(x.title).toLowerCase().replace(/[^a-z0-9]+/g,'-').slice(0,40);
@@ -3802,8 +3810,9 @@ function closedOk(text, quote, words){
    page states it. One flash call for all of them. */
 async function verifyDeadlines(rows){
   // A row saved before the site fallback has only its body's site: read that.
+  // A known body's dated page is read even when the row opens another page of the same site.
   const pageOf=j=>{ const k=examSite(j.company), u=String(j.url||'').replace(/#.*$/,'');
-    return k && !u.includes(new URL(k).hostname.replace(/^www\./,'')) ? k : httpUrl(u) ? u : j.site ? `https://${j.site}/` : ''; };
+    return k || (httpUrl(u) ? u : j.site ? `https://${j.site}/` : ''); };
   const withUrl=rows.filter(j=>pageOf(j)).slice(0,10);
   // follow: the server also reads the page's likeliest notice (a PDF, a "how to apply" page).
   /* A page that comes back (nearly) empty -- refused, or built by script -- is
