@@ -1135,8 +1135,16 @@ async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer /, "");
-    // The service key is not a person: it may run the shared exam refresh and nothing else.
-    if (token && token === secret("SUPABASE_SERVICE_ROLE_KEY")) {
+    /* The service key is not a person: it may run the shared exam refresh and
+       nothing else. Read off the token's role claim, not compared as a string:
+       the key the function is given is not the legacy JWT the crawl holds
+       (2026-10-24). Safe because the gateway verifies every JWT's signature
+       before this runs (verify_jwt, on by default; there is no config.toml
+       turning it off) -- a user's token says "authenticated" and cannot be
+       re-signed. */
+    const role = (() => { try { const p = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      return JSON.parse(atob(p + "=".repeat((4 - p.length % 4) % 4))).role; } catch { return ""; } })();
+    if (token && (role === "service_role" || token === secret("SUPABASE_SERVICE_ROLE_KEY"))) {
       const sb = await req.json().catch(() => ({}));
       if (sb.action === "exam_refresh") return json(await examRefresh(String(sb.body || "")));
       throw new Http(403, "the service key runs exam_refresh only");
