@@ -27,9 +27,13 @@ const src = [
   grab(/function placeRow[\s\S]*?\n}\n/),
   grab(/function dateWindows[\s\S]*?\n}\n/),
   grab(/function closedOk[\s\S]*?\n}\n/),
+  grab(/const daysTo = [^\n]*\n/),
+  grab(/async function verifyDeadlines[\s\S]*?\n}\n/),
+  grab(/const stripVerdict = [^\n]*\n/),
+  grab(/const plainQuote = [^\n]*\n/),
 ].join('\n');
 
-let REPLY = '', ASKED = '';
+let REPLY = '', ASKED = '', PAGES = {};
 const CONNS = [{ n: 'Ravi Das', p: 'Political editor', c: 'Ei Samay' }];
 const ctx = {
   P: () => ({ profile: { location: 'Kolkata', country: 'India' }, raw: 'cv', jobs: [] }),
@@ -40,8 +44,9 @@ const ctx = {
   blank: () => ({ title: '', company: '', url: '', location: '', description: '', contacts: '[]', channel: 'posted' }),
   fitOf: (j) => Number(j.ai_score) || 0,
   TOK_CAP: 16000, globalThis: {}, today: () => '2026-10-24',
+  hosted: async (action, b) => ({ text: PAGES[String(b.url)] || '' }),
 };
-const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk };')(...Object.values(ctx));
+const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk, verifyDeadlines };')(...Object.values(ctx));
 
 let bad = 0;
 const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) bad++; };
@@ -128,6 +133,23 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   const kp = 'Download Admit Card for PMT & PET for Recruitment to the posts of Constables/ Lady Constables in Kolkata Police - 2024';
   ok(!T.closedOk(kp, kp, ['Constable']), 'closedOk: an older cycle\'s admit cards say nothing about this one');
   ok(T.closedOk(kp.replace('2024', '2026'), kp.replace('2024', '2026'), ['Constable']), 'closedOk: this year\'s do');
+
+  // verifyDeadlines: a re-check replaces the old verdict, and only a row it could read.
+  const pad = ' ' + 'p'.repeat(300);
+  PAGES = { 'https://prb.wb.gov.in/recruitments': 'Download Admit Card for PMT & PET for Recruitment to the posts of Constables/ Lady Constables in Kolkata Police - 2024' + pad,
+    'https://ssc.gov.in/api/cal': '{"headline":"Stenographer Examination, 2026","startDate":"2026-07-01","endDate":"2026-07-21"}' + pad };
+  const old = { title: 'Constable Recruitment', company: 'WBPRB', url: 'https://prb.wb.gov.in/recruitments#c', deadline: 'closed',
+    description: 'Registration closed for this cycle, from the official page: \u201cAdmit Card ... 2024\u201d\nWhy it fits.' };
+  const steno = { title: 'Stenographer Examination', company: 'A board not on the list', url: 'https://ssc.gov.in/api/cal#s', description: 'Why.' };
+  const unread = { title: 'Clerkship', company: 'WBPSC', url: 'https://psc.wb.gov.in/#c', deadline: 'closed', description: 'Registration closed for this cycle, from the official page: \u201cx\u201d\nKept.' };
+  REPLY = JSON.stringify({ r: [
+    { i: 0, closes: '', quote: '', closed: true, closed_quote: 'Constables/ Lady Constables in Kolkata Police - 2024' },
+    { i: 1, closes: '', quote: '', closed: true, closed_quote: '"headline":"Stenographer Examination, 2026"' } ] });
+  await T.verifyDeadlines([old, steno, unread]);
+  ok(!old.deadline && old.description === 'Why it fits.', 'verifyDeadlines: an old "closed" a re-check no longer confirms is cleared, verdict line and all');
+  ok(steno.deadline === 'closed' && steno.description.startsWith('Registration closed for this cycle, from the official page: \u201cStenographer Examination \u00b7 2026\u201d'),
+    'verifyDeadlines: JSON evidence is shown as words ' + JSON.stringify(steno.description.split('\n')[0]));
+  ok(unread.deadline === 'closed' && unread.description.endsWith('Kept.'), 'verifyDeadlines: a row whose page could not be read keeps what it had');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

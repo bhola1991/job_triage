@@ -3843,19 +3843,30 @@ If the page does not state a closing date, give an empty "closes". Never work a 
 
 ${have.map((x,i)=>`ITEM ${i}: ${x.j.title} (${x.j.company})\nPAGE TEXT (the parts that mention dates): ${dateWindows(x.text, 5000, String(x.j.title).split(/[^A-Za-z0-9]+/).filter(w=>!/^(the|and|for|with|examination|exam|recruitment|process|common)$/i.test(w)))}`).join('\n\n')}`, TOK_CAP, 'flash');
   const d=grabJSON(txt), list=Array.isArray(d)?d:(d.r||[]);
+  /* Every row that was read gets a fresh verdict: a re-check that no longer
+     confirms an earlier "closed" (or a date now past) puts the row back to
+     "check the page" rather than keeping it. A row whose page could not be
+     read is not in `have`, so it keeps what it had. */
+  const answered=new Map(list.map(a=>[+a.i, a]));
   let n=0;
-  list.forEach(a=>{ const x=have[+a.i]; if(!x) return;
+  have.forEach((x,i)=>{ const a=answered.get(i)||{};
+    x.j.description=stripVerdict(x.j.description); if(x.j.deadline) delete x.j.deadline;
     /* A past date is not kept: it says nothing to act on, and on a listing
        page the line just above an item's heading belongs to the post before
        it (SBI, 2026-10-24) -- a check on the words cannot tell. A closed cycle
        shows only with its own evidence, below. */
     if(deadlineOk(x.text, a.closes, a.quote) && daysTo(a.closes)>=0){
-      x.j.deadline=a.closes; x.j.description=`Closes ${a.closes}, from the official page: \u201c${String(a.quote).slice(0,200)}\u201d\n`+x.j.description; n++; return; }
+      x.j.deadline=a.closes; x.j.description=`Closes ${a.closes}, from the official page: \u201c${plainQuote(a.quote)}\u201d\n`+x.j.description; n++; return; }
     if(a.closed && closedOk(x.text, a.closed_quote, String(x.j.title).split(/[^A-Za-z0-9]+/))){
-      x.j.deadline='closed'; x.j.description=`Registration closed for this cycle, from the official page: \u201c${String(a.closed_quote).slice(0,200)}\u201d\n`+x.j.description; n++; }
+      x.j.deadline='closed'; x.j.description=`Registration closed for this cycle, from the official page: \u201c${plainQuote(a.closed_quote)}\u201d\n`+x.j.description; n++; }
   });
   return n;
 }
+/* The verdict line verifyDeadlines puts first in a description, taken off before a new one goes on. */
+const stripVerdict = d => String(d||'').replace(/^(?:Closes \d{4}-\d{2}-\d{2}|Registration closed for this cycle), from the official page: \u201c[^\n]*\u201d\n/, '');
+/* Evidence as a person reads it: SSC's comes from its calendar API as raw JSON
+   ("headline":"...","startDate":"..."), checked as it is but shown as words. */
+const plainQuote = q => String(q||'').replace(/"[A-Za-z_]+"\s*:/g,' ').replace(/[{}\[\]"]/g,' ').replace(/\s*,\s*/g,' \u00b7 ').replace(/\s+/g,' ').trim().slice(0,200);
 /* A Google Maps place as a row. ponytail: fit and reachability are a rule of
    thumb here (the kind of place asked for; a smaller place answers more
    often), not a model's reading -- a flash call over the list is the upgrade
@@ -3901,8 +3912,8 @@ async function routeFill(trk, route, more){
   try{
     const have=p.jobs.filter(j=>chOf(j)===ROUTE_CH[route] && inDir(j,p)).map(j=>`${j.title} (${j.company})`);
     const rows = route==='local' ? await localOpps(trk) : await routeOpps(trk, route, have);
-    // New rows, and any earlier one still without a date or a closed cycle: each look is another read.
-    if(route==='deadline') await verifyDeadlines(rows.concat(p.jobs.filter(j=>chOf(j)==='deadline' && inDir(j,p) && stOf(j)==='new' && !j.deadline)))
+    // New rows, then earlier ones with no date, a closed cycle or a date now past: each look is another read.
+    if(route==='deadline') await verifyDeadlines(rows.concat(p.jobs.filter(j=>chOf(j)==='deadline' && inDir(j,p) && stOf(j)==='new' && (!j.deadline || j.deadline==='closed' || daysTo(j.deadline)<0))))
       .catch(e=>console.warn('deadline pages not read:', e.message));
     const n=addJobs(rows);
     try{ localStorage.setItem(k, today()); }catch(e){}
