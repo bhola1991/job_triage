@@ -38,7 +38,7 @@ const ctx = {
   claude: async (prompt) => { ASKED = prompt; return REPLY; },
   blank: () => ({ title: '', company: '', url: '', location: '', description: '', contacts: '[]', channel: 'posted' }),
   fitOf: (j) => Number(j.ai_score) || 0,
-  TOK_CAP: 16000, globalThis: {},
+  TOK_CAP: 16000, globalThis: {}, today: () => '2026-10-24',
 };
 const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk };')(...Object.values(ctx));
 
@@ -116,6 +116,9 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   ok(T.closedOk(sbi, 'JUNIOR ASSOCIATES (CUSTOMER SUPPORT & SALES) (PRELIMINARY EXAMINATION CALL LETTER IS AVAILABLE', ja), 'closedOk: an admit-card line naming the item counts');
   ok(!T.closedOk(sbi, 'SPECIALIST CADRE OFFICERS (RESULT DECLARED)', ja), 'closedOk: a line about another post on the same page does not');
   ok(!T.closedOk(sbi, 'JUNIOR ASSOCIATES REGISTRATION CLOSED', ja), 'closedOk: words that are not on the page do not');
+  const kp = 'Download Admit Card for PMT & PET for Recruitment to the posts of Constables/ Lady Constables in Kolkata Police - 2024';
+  ok(!T.closedOk(kp, kp, ['Constable']), 'closedOk: an older cycle\'s admit cards say nothing about this one');
+  ok(T.closedOk(kp.replace('2024', '2026'), kp.replace('2024', '2026'), ['Constable']), 'closedOk: this year\'s do');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

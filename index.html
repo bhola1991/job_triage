@@ -3793,6 +3793,9 @@ function dateWindows(text, cap=5000, words=[]){
 function closedOk(text, quote, words){
   const norm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim(), q=norm(quote);
   if(q.length<12 || !norm(text).includes(q)) return false;
+  // An older cycle's admit cards say nothing about this one (WBPRB's "Constables - 2024", 2026-10-24).
+  const years=(q.match(/\b20\d\d\b/g)||[]).map(Number);
+  if(years.length && Math.max(...years) < Number(today().slice(0,4))) return false;
   return words.map(w=>String(w).toLowerCase()).filter(w=>w.length>3).some(w=>q.includes(w));
 }
 /* Read each deadline's official page and keep a closing date only where the
