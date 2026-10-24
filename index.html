@@ -5070,7 +5070,7 @@ function liveBoard(trk, prof, track){
          "Scoring now", and the same objects are scored in place -- a job under
          the bar or closed at its source is taken back out when its batch lands. */
       const p=P(), mine=new Set();
-      const shown=addJobs(f.jobs); if(shown){ f.jobs.forEach(j=>{ if(p.jobs.includes(j)) mine.add(j); }); renderSoon(); }
+      const shown=addJobs(f.jobs); if(shown){ f.jobs.forEach(j=>{ if(p.jobs.includes(j)) mine.add(j); }); renderSoon(); saveSoon(); }   // saved now: someone who leaves in the first minute keeps them, and autoScore finishes them next time
       for(let i=0;i<f.jobs.length && !stopped();i+=SCORE_BATCH){
         st.checking++; draw();
         const part=f.jobs.slice(i,i+SCORE_BATCH);
@@ -5170,7 +5170,10 @@ function resumePending(){
       : apifyRun('', {}, {every:8000, cap:120, runId:run.id, source:run.source, label:run.label}).then(items=>(items||[]).map(jsearchRow)))
     .then(jobs=>live.add(jobs||[]))
     .catch(e=>{ failed.push(`${run.label||'search'}: ${e.message}`); }));
-  Promise.all(work).then(()=>finishSearch(trk, live, failed, false)).catch(e=>{ busy=false; render(); setSearchInfo(e.message); });
+  /* Then the open's own fill: runs that come back empty (expired, aborted)
+     must not leave the direction empty until some later visit. */
+  Promise.all(work).then(()=>finishSearch(trk, live, failed, false)).catch(e=>{ busy=false; render(); setSearchInfo(e.message); })
+    .then(()=>fillDirection());
   return true;
 }
 
