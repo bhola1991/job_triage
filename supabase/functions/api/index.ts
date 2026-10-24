@@ -358,7 +358,11 @@ async function renderPage(url: string, secs: number): Promise<{ url: string; tex
     method: "POST", signal: AbortSignal.timeout((secs + 10) * 1000),
     body: JSON.stringify({ query: url, maxResults: 1, outputFormats: ["markdown"], scrapingTool: "browser-playwright",
       // nav and footer are kept: a notice board is often a menu.
-      removeElementsCssSelector: "script, style, noscript, svg", requestTimeoutSecs: Math.max(20, secs - 10), dynamicContentWaitSecs: 8 }),
+      removeElementsCssSelector: "script, style, noscript, svg", requestTimeoutSecs: Math.max(20, secs - 10), dynamicContentWaitSecs: 8,
+      /* From India. IBPS, WBPSC and WBPRB answered nothing to Apify's overseas
+         browsers but load in full from an Indian address (tested 2026-10-24).
+         Residential is the group that offers IN; ~$8/GB, so about $0.02 a page. */
+      proxyConfiguration: { useApifyProxy: true, apifyProxyGroups: ["RESIDENTIAL"], apifyProxyCountry: "IN" } }),
   }).catch(() => null);
   if (!r || !r.ok) return null;
   const it = ((await r.json().catch(() => [])) as Any[])[0];
@@ -1663,7 +1667,8 @@ async function handle(req: Request): Promise<Response> {
           .eq("user_id", user).in("source", ["page", "render"]).gte("created_at", today);
         if ((count || 0) >= PAGES_PER_DAY) throw new Http(429, `That is ${PAGES_PER_DAY} pages today — more tomorrow.`);
         const page = await renderPage(url, 60);
-        await logUsage([{ user_id: user, kind: "scrape", source: "render", units: page ? 1 : 0, cost_inr: page ? inr(0.00228) : 0, note: url.slice(0, 120) }]);
+        // ponytail: the cost is an estimate (page fee + ~2.5 MB of residential traffic); read the real one off Apify's usage if it matters.
+        await logUsage([{ user_id: user, kind: "scrape", source: "render", units: page ? 1 : 0, cost_inr: inr(0.00228 + 0.02), note: url.slice(0, 120) }]);
         if (!page) return json({ url, text: "", followed: [] });
         let text = page.text.slice(0, 40_000); const followed: string[] = [];
         if (b.follow) {
