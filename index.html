@@ -6374,10 +6374,21 @@ function askWants(){
   ONB=Object.assign(blankOnb(), { step:3, parsed:p.profile, track:p.track, editing:DB.current });
   VIEW='onb'; render();
 }
+/* What opening the app does, once it is really in the app. Called from
+   afterAuth and again when the one-time "what you want" screen (askWants)
+   is closed: that screen takes the first render, so afterAuth finds the
+   app not yet open and these were skipped -- every older account's first
+   visit after it shipped went without its fill (found 2026-10-24). */
+function openSteps(){
+  const p=P(); if(VIEW!=='app' || !p) return;
+  if(decideReady(p)<READY_MIN) TAB='you';
+  if(!resumePending()) fillDirection();
+}
 async function finishOnb(){
   if(ONB.editing){
     try{ localStorage.setItem(wantsKey(),'1'); }catch(e){}
     VIEW='app'; ONB=blankOnb();
+    openSteps();
     await save(); render(); return;
   }
   /* A second tap on the button, before the first has finished saving and
@@ -10132,9 +10143,7 @@ async function afterAuth(){
     checkMail(true);                    // not awaited: news must not hold up the app
     { const pr=Object.values(DB.profiles||{}).filter(usable);
       track('open',{ profiles:pr.length, jobs:pr.reduce((n,p)=>n+((p.jobs||[]).length),0) }); }
-    if(VIEW==='app' && P() && decideReady(P())<READY_MIN) TAB='you';
-    // Directions in use before fills existed get theirs on the next visit.
-    if(VIEW==='app' && !resumePending()) fillDirection();
+    openSteps();
   }catch(e){
     // Reaching here with nothing on screen is the one outcome worth guarding
     // against. Whatever is on this device beats a page that never finishes.
