@@ -23,6 +23,7 @@ const src = [
   grab(/function deadlineOk[\s\S]*?\n}\n/),
   grab(/function placeRow[\s\S]*?\n}\n/),
   grab(/function dateWindows[\s\S]*?\n}\n/),
+  grab(/function closedOk[\s\S]*?\n}\n/),
 ].join('\n');
 
 let REPLY = '', ASKED = '';
@@ -37,7 +38,7 @@ const ctx = {
   fitOf: (j) => Number(j.ai_score) || 0,
   TOK_CAP: 16000, globalThis: {},
 };
-const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows };')(...Object.values(ctx));
+const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows, closedOk };')(...Object.values(ctx));
 
 let bad = 0;
 const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) bad++; };
@@ -98,6 +99,13 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
     + ' JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026.';
   ok(T.dateWindows(listing, 1500, ['Junior', 'Associates']).includes('JUNIOR ASSOCIATES (CUSTOMER SUPPORT) LAST DATE TO APPLY : 30-11-2026')
     && !T.dateWindows(listing, 1500).includes('30-11-2026'), 'dateWindows: on a long listing, the item named comes first');
+
+  // closedOk: "registration is over" needs words from the page that name the item.
+  const sbi = 'RECRUITMENT OF JUNIOR ASSOCIATES (CUSTOMER SUPPORT & SALES) (PRELIMINARY EXAMINATION CALL LETTER IS AVAILABLE FOR DOWNLOAD) ENGAGEMENT OF SPECIALIST CADRE OFFICERS (RESULT DECLARED)';
+  const ja = ['Junior', 'Associate', 'Customer', 'Support'];
+  ok(T.closedOk(sbi, 'JUNIOR ASSOCIATES (CUSTOMER SUPPORT & SALES) (PRELIMINARY EXAMINATION CALL LETTER IS AVAILABLE', ja), 'closedOk: an admit-card line naming the item counts');
+  ok(!T.closedOk(sbi, 'SPECIALIST CADRE OFFICERS (RESULT DECLARED)', ja), 'closedOk: a line about another post on the same page does not');
+  ok(!T.closedOk(sbi, 'JUNIOR ASSOCIATES REGISTRATION CLOSED', ja), 'closedOk: words that are not on the page do not');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

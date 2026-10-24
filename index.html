@@ -3768,6 +3768,14 @@ function dateWindows(text, cap=5000, words=[]){
   let out=''; for(const [a,b] of spans){ if(out.length>=cap) break; out+=(out?' \u2026 ':'')+t.slice(a,b); }
   return out.slice(0,cap);
 }
+/* "This cycle's registration is over" needs evidence too: words from the page
+   that name the item (an admit card, a result, "registration closed"). A
+   quote that names a different post on the same listing does not count. */
+function closedOk(text, quote, words){
+  const norm=x=>String(x||'').toLowerCase().replace(/\s+/g,' ').trim(), q=norm(quote);
+  if(q.length<12 || !norm(text).includes(q)) return false;
+  return words.map(w=>String(w).toLowerCase()).filter(w=>w.length>3).some(w=>q.includes(w));
+}
 /* Read each deadline's official page and keep a closing date only where the
    page states it. One flash call for all of them. */
 async function verifyDeadlines(rows){
@@ -3778,14 +3786,23 @@ async function verifyDeadlines(rows){
   if(!have.length) return 0;
   const txt=await claude(`For each item, read ONLY its own page text and find the LAST DATE to apply or register for the current or next cycle of that item. Today is ${today()}.
 Return ONLY a JSON object, no preamble, no markdown fences:
-{"r":[{"i":0,"closes":"YYYY-MM-DD or empty","quote":"the exact words from the page that state that date, copied character for character"}]}
+{"r":[{"i":0,"closes":"YYYY-MM-DD or empty","quote":"the exact words from the page that state that date, copied character for character","closed":false,"closed_quote":""}]}
 If the page does not state a closing date, give an empty "closes". Never work a date out from a pattern or from memory.
+"closed": true only if the page shows that applying for THIS item's current cycle is already over (registration closed, admit cards or call letters out, results declared) and no new window is open; then "closed_quote" is the exact words that show it, and they must name the item. Otherwise false and empty.
 
 ${have.map((x,i)=>`ITEM ${i}: ${x.j.title} (${x.j.company})\nPAGE TEXT (the parts that mention dates): ${dateWindows(x.text, 5000, String(x.j.title).split(/[^A-Za-z0-9]+/).filter(w=>!/^(the|and|for|with|examination|exam|recruitment|process|common)$/i.test(w)))}`).join('\n\n')}`, TOK_CAP, 'flash');
   const d=grabJSON(txt), list=Array.isArray(d)?d:(d.r||[]);
   let n=0;
-  list.forEach(a=>{ const x=have[+a.i]; if(!x || !deadlineOk(x.text, a.closes, a.quote)) return;
-    x.j.deadline=a.closes; x.j.description=`Closes ${a.closes}, from the official page: \u201c${String(a.quote).slice(0,200)}\u201d\n`+x.j.description; n++; });
+  list.forEach(a=>{ const x=have[+a.i]; if(!x) return;
+    /* A past date is not kept: it says nothing to act on, and on a listing
+       page the line just above an item's heading belongs to the post before
+       it (SBI, 2026-10-24) -- a check on the words cannot tell. A closed cycle
+       shows only with its own evidence, below. */
+    if(deadlineOk(x.text, a.closes, a.quote) && daysTo(a.closes)>=0){
+      x.j.deadline=a.closes; x.j.description=`Closes ${a.closes}, from the official page: \u201c${String(a.quote).slice(0,200)}\u201d\n`+x.j.description; n++; return; }
+    if(a.closed && closedOk(x.text, a.closed_quote, String(x.j.title).split(/[^A-Za-z0-9]+/))){
+      x.j.deadline='closed'; x.j.description=`Registration closed for this cycle, from the official page: \u201c${String(a.closed_quote).slice(0,200)}\u201d\n`+x.j.description; n++; }
+  });
   return n;
 }
 /* A Google Maps place as a row. ponytail: fit and reachability are a rule of
@@ -3997,7 +4014,7 @@ If the request is vague, interpret it as the nearest real job family and name th
 For boards: give the registries where this specific field posts, not general job sites. Bare domains, no protocol.
 For mode: "permanent" for a salaried post (use this when unsure), "freelance" for project or contract work with several clients, "gig" for platform task work paid per task.
 ${ROUTES_RULES}
-Use ONLY what is in the profile. Do not invent experience.`, TOK_CAP);
+Use ONLY what is in the profile. Do not invent experience.`, TOK_CAP, 'flash');   // flash: pro can run past the edge function's 150s wall clock (see extractProfile)
   const t = grabJSON(txt);
   t.id = (t.id||'custom')+'_'+Math.random().toString(36).slice(2,5);
   ['transfers','missing','titles','boards'].forEach(k=>{ if(!Array.isArray(t[k])) t[k]=[]; });
@@ -7113,7 +7130,7 @@ function jobCard(j,i){
                  : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='deadline'
-                      ? (d=>fact('closes', d===null?'check the page':d<0?'next cycle':esc(mmdd(j.deadline)), d!==null&&d>=0&&d<=CLOSING_DAYS?'closing':'quiet'))(daysTo(j.deadline))
+                      ? (d=>fact('closes', j.deadline==='closed'?'closed \u00b7 next cycle':d===null?'check the page':d<0?'next cycle':esc(mmdd(j.deadline)), d!==null&&d>=0&&d<=CLOSING_DAYS?'closing':'quiet'))(daysTo(j.deadline))
                     : ch==='place'
                       ? fact('ask for', esc(((String(j.description||'').match(/^Ask about: (.+)$/m)||[])[1]||'a trial').replace(/^(.{34}).+$/,'$1\u2026')), 'quiet')
                     : ch==='pitch'||ch==='person'
