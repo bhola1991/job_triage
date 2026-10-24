@@ -13,6 +13,9 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { JUDGE_EXEMPLAR_CAP, judge } from "../_shared/judge.ts";
+// Reads the text out of an exam or fellowship's PDF notice (page_text). Pinned:
+// unpdf wraps pdf.js for serverless runtimes and has no dependencies of its own.
+import { extractText, getDocumentProxy } from "npm:unpdf@1.8.1";
 
 // Prices are server-side only; the browser sends just the pack id. paise: ₹1 = 100.
 // A credit sells for ₹0.80 (Pro) to ₹0.99 (Starter).
@@ -302,6 +305,42 @@ function safeUrl(raw: string): string {
   try { const u = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : "https://" + raw.trim()); u.hash = ""; return u.href; } catch { return ""; }
 }
 const PAGES_PER_DAY = 60;
+/* One official page as text: HTML through textOf, a PDF through unpdf. Its
+   likeliest notice links come back too, so the caller can follow them.
+   ponytail: a scanned PDF (an image of text) gives no text; that needs OCR. */
+async function pageText(url: string): Promise<{ url: string; text: string; links: { href: string; text: string; pdf: boolean }[] } | null> {
+  try {
+    const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; jobtriage/1.0)", Accept: "text/html,application/pdf;q=0.9,*/*;q=0.5" },
+      redirect: "follow", signal: AbortSignal.timeout(15000) });
+    if (!r.ok || !r.body || !safeSite(r.url)) return null;
+    const reader = r.body.getReader(); const parts: Uint8Array[] = []; let n = 0; const MAX = 4_000_000;
+    while (n < MAX) { const { done, value } = await reader.read(); if (done) break; parts.push(value); n += value.length; }
+    reader.cancel().catch(() => {});
+    const buf = new Uint8Array(Math.min(n, MAX)); let o = 0;
+    for (const p of parts) { const take = Math.min(p.length, buf.length - o); buf.set(p.subarray(0, take), o); o += take; if (o >= buf.length) break; }
+    if (new TextDecoder().decode(buf.subarray(0, 5)).startsWith("%PDF")) {
+      const { text } = await extractText(await getDocumentProxy(buf), { mergePages: true });
+      return { url: r.url, text: String(text || "").replace(/\s+/g, " ").trim(), links: [] };
+    }
+    const h = new TextDecoder().decode(buf.subarray(0, 800_000));
+    const links = [...h.matchAll(/<a\s[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]{0,300}?)<\/a>/gi)].map((m) => {
+      let href = ""; try { href = new URL(m[1], r.url).href; } catch { /* not a link */ }
+      return { href, text: textOf(m[2]).slice(0, 120), pdf: /\.pdf($|\?)/i.test(m[1]) };
+    }).filter((l) => l.href && safeUrl(l.href));
+    return { url: r.url, text: textOf(h), links };
+  } catch { return null; }
+}
+/* Which links on an official page are its notice: a PDF, or one that says
+   notification / advertisement / how to apply / last date, this year or next
+   scoring higher. The best two, so a page and its notice cost three fetches. */
+function noticeLinks(page: { url: string; links: { href: string; text: string; pdf: boolean }[] }) {
+  const y = new Date().getFullYear(), KEY = /notif|notice|advertis|recruit|how[ -_]?to[ -_]?apply|apply|deadline|last[ -_]?date|eligib|brochure|guideline|call[ -_]?for|prospectus|bulletin/i;
+  const seen = new Set([page.url]);
+  // The words are required; a PDF is only a bonus (an annual report is a PDF too).
+  return page.links.filter((l) => KEY.test(l.text + " " + l.href))
+    .map((l) => ({ ...l, score: (l.pdf ? 2 : 0) + (new RegExp(`${y}|${y + 1}`).test(l.text + l.href) ? 1 : 0) }))
+    .filter((l) => !seen.has(l.href) && seen.add(l.href)).sort((a, b) => b.score - a.score).slice(0, 2);
+}
 /* Google Maps places near the person, for the local route (2026-10-24).
    compass's actor bills per place scraped ($0.004 at our tier) with a $0.50
    floor it insists on as the run's ceiling; 30 places is about $0.12. */
@@ -1575,8 +1614,17 @@ async function handle(req: Request): Promise<Response> {
           .eq("user_id", user).eq("source", "page").gte("created_at", today);
         if ((count || 0) >= PAGES_PER_DAY) throw new Http(429, `That is ${PAGES_PER_DAY} pages today — more tomorrow.`);
         await logUsage([{ user_id: user, kind: "api", source: "page", units: 1, cost_inr: 0, note: url.slice(0, 120) }]);
-        const page = await fetchText(url, 600_000);
-        return json({ url: page?.url || url, text: page ? textOf(page.text).slice(0, 40_000) : "" });
+        const page = await pageText(url);
+        if (!page) return json({ url, text: "", followed: [] });
+        /* follow: the dates are usually in the notice, not on the page (a PDF on
+           government sites; a "how to apply" page on fellowships). Each part is
+           marked, so a quote can be traced back to where it was read. */
+        let text = page.text.slice(0, 40_000); const followed: string[] = [];
+        if (b.follow) for (const l of noticeLinks(page)) {
+          const sub = await pageText(l.href);
+          if (sub && sub.text.length > 100) { followed.push(sub.url); text += `\n--- from ${sub.url} ---\n` + sub.text.slice(0, 40_000); }
+        }
+        return json({ url: page.url, text, followed });
       }
 
       /* Places near the person for the local route: one Google Maps run over a

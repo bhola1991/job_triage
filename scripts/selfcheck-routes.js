@@ -22,6 +22,7 @@ const src = [
   grab(/const httpUrl = [^\n]*\n/),
   grab(/function deadlineOk[\s\S]*?\n}\n/),
   grab(/function placeRow[\s\S]*?\n}\n/),
+  grab(/function dateWindows[\s\S]*?\n}\n/),
 ].join('\n');
 
 let REPLY = '', ASKED = '';
@@ -36,7 +37,7 @@ const ctx = {
   fitOf: (j) => Number(j.ai_score) || 0,
   TOK_CAP: 16000, globalThis: {},
 };
-const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow };')(...Object.values(ctx));
+const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow, dateWindows };')(...Object.values(ctx));
 
 let bad = 0;
 const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) bad++; };
@@ -87,6 +88,12 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   ok(!T.deadlineOk(page, '2026-08-25', 'Last date for fee payment 21 August 2026'), 'a date the quote does not name fails');
   ok(!T.deadlineOk(page, '2026-09-21', 'Last date for fee payment 21 September 2026'), 'a quote that is not on the page fails');
   ok(!T.deadlineOk(page, '21-08-2026', 'Last date for fee payment 21 August 2026') && !T.deadlineOk(page, '2026-08-21', '21 Aug'), 'a malformed date, or a quote too short to mean anything, fails');
+
+  // dateWindows: what the model is shown of a long notice.
+  const notice = 'x'.repeat(20000) + ' The last date for online registration is 21.08.2026 at 6 pm. ' + 'y'.repeat(20000);
+  const w = T.dateWindows(notice);
+  ok(w.includes('last date for online registration is 21.08.2026') && w.length < 1200, 'dateWindows: a date deep in a long notice reaches the model, and little else does');
+  ok(T.dateWindows('no dates here at all').startsWith('no dates'), 'dateWindows: with nothing to match, the start of the text');
 
   // placeRow: a Maps place as a row.
   const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',

@@ -3746,11 +3746,25 @@ function deadlineOk(text, closes, quote){
   const monthIn=q.includes(Object.keys(MONTHS)[m-1]) || new RegExp(`(^|\\D)0?${m}[./-]|[./-]0?${m}(\\D|$)`).test(q);
   return dayIn && monthIn;
 }
+/* The parts of a long page or notice that can hold a closing date: a window
+   around every "last date", "closing date", "deadline"..., merged, up to `cap`
+   characters; the start of the text when nothing matches. A PDF notice puts
+   its dates anywhere but the top. The quote is still checked against all of it. */
+function dateWindows(text, cap=5000){
+  const t=String(text||''), re=/last date|closing date|deadline|apply (?:by|before|till|until|on or before)|closes? on|applications? (?:open|close)|online (?:registration|application)|important dates|schedule of/gi;
+  const spans=[]; let m;
+  while((m=re.exec(t)) && spans.length<40){ const a=Math.max(0,m.index-250), b=Math.min(t.length,m.index+350);
+    if(spans.length && a<=spans[spans.length-1][1]) spans[spans.length-1][1]=b; else spans.push([a,b]); }
+  if(!spans.length) return t.slice(0, Math.min(cap, 2500));
+  let out=''; for(const [a,b] of spans){ if(out.length>=cap) break; out+=(out?' \u2026 ':'')+t.slice(a,b); }
+  return out.slice(0,cap);
+}
 /* Read each deadline's official page and keep a closing date only where the
    page states it. One flash call for all of them. */
 async function verifyDeadlines(rows){
   const withUrl=rows.filter(j=>httpUrl(String(j.url||''))).slice(0,10);
-  const pages=await Promise.all(withUrl.map(j=>hosted('page_text',{url:String(j.url).replace(/#.*$/,'')}).then(r=>String(r.text||'')).catch(()=>'')));
+  // follow: the server also reads the page's likeliest notice (a PDF, a "how to apply" page).
+  const pages=await Promise.all(withUrl.map(j=>hosted('page_text',{url:String(j.url).replace(/#.*$/,''), follow:true}).then(r=>String(r.text||'')).catch(()=>'')));
   const have=withUrl.map((j,k)=>({j, text:pages[k]})).filter(x=>x.text.length>200);
   if(!have.length) return 0;
   const txt=await claude(`For each item, read ONLY its own page text and find the LAST DATE to apply or register for the current or next cycle of that item. Today is ${today()}.
@@ -3758,7 +3772,7 @@ Return ONLY a JSON object, no preamble, no markdown fences:
 {"r":[{"i":0,"closes":"YYYY-MM-DD or empty","quote":"the exact words from the page that state that date, copied character for character"}]}
 If the page does not state a closing date, give an empty "closes". Never work a date out from a pattern or from memory.
 
-${have.map((x,i)=>`ITEM ${i}: ${x.j.title} (${x.j.company})\nPAGE TEXT: ${x.text.slice(0,6000)}`).join('\n\n')}`, TOK_CAP, 'flash');
+${have.map((x,i)=>`ITEM ${i}: ${x.j.title} (${x.j.company})\nPAGE TEXT (the parts that mention dates): ${dateWindows(x.text)}`).join('\n\n')}`, TOK_CAP, 'flash');
   const d=grabJSON(txt), list=Array.isArray(d)?d:(d.r||[]);
   let n=0;
   list.forEach(a=>{ const x=have[+a.i]; if(!x || !deadlineOk(x.text, a.closes, a.quote)) return;
