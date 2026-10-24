@@ -6999,7 +6999,7 @@ function jobCard(j,i){
                  : scored ? fact('fit / reach', `${f} · ${r}`) : fact('score', 'not yet', 'quiet');
   const facts =
       st==='new'  ? fitReach + (ch==='pitch'||ch==='person'
-                      ? fact(ch==='pitch'?'pitch to':'kind', esc(ch==='pitch' ? ((String(j.description||'').match(/^Commissioned by: (.+)$/m)||[])[1]||'the commissioning editor') : OPP[ch].one), 'quiet')
+                      ? fact(ch==='pitch'?'pitch to':'ask for', esc(((String(j.description||'').match(ch==='pitch'?/^Commissioned by: (.+)$/m:/^Ask: (.+)$/m)||[])[1]||(ch==='pitch'?'the commissioning editor':'advice')).slice(0,60)), 'quiet')
                     : ch==='cold'
                       ? fact('contacts', cts.length?`${cts.length} found`:'none yet', cts.length?'':'quiet')
                       : fact('posted', age===null?'unknown':esc(ageLabel(j)),
