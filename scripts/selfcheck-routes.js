@@ -18,6 +18,10 @@ const src = [
   grab(/const YOU_RULE = [^\n]*\n/),
   grab(/function grabJSON[\s\S]*?\n}\n/),
   grab(/async function routeOpps[\s\S]*?\n}\n/),
+  grab(/const MONTHS=\{[^\n]*\n/),
+  grab(/const httpUrl = [^\n]*\n/),
+  grab(/function deadlineOk[\s\S]*?\n}\n/),
+  grab(/function placeRow[\s\S]*?\n}\n/),
 ].join('\n');
 
 let REPLY = '', ASKED = '';
@@ -28,11 +32,11 @@ const ctx = {
   networkCompanies: (conns) => [{ name: 'Ei Samay', people: conns }],
   senderBlock: () => 'WHO THEY ARE: a reporter',
   claude: async (prompt) => { ASKED = prompt; return REPLY; },
-  blank: () => ({ title: '', company: '', location: '', description: '', contacts: '[]', channel: 'posted' }),
+  blank: () => ({ title: '', company: '', url: '', location: '', description: '', contacts: '[]', channel: 'posted' }),
   fitOf: (j) => Number(j.ai_score) || 0,
   TOK_CAP: 16000, globalThis: {},
 };
-const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps };')(...Object.values(ctx));
+const T = new Function(...Object.keys(ctx), src + '; return { chOf, OPP, routeOpps, deadlineOk, placeRow };')(...Object.values(ctx));
 
 let bad = 0;
 const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) bad++; };
@@ -64,6 +68,31 @@ const ok = (c, m) => { console.log((c ? '  ok    ' : '  FAIL  ') + m); if (!c) b
   const pitch = await T.routeOpps(trk, 'pitch', []);
   ok(pitch.length === 1 && pitch[0].channel === 'pitch' && /^Commissioned by: metro editor$/m.test(pitch[0].description), 'pitch: who commissions it is kept on the row');
   ok(pitch[0].site === 'scroll.in' && pitch[0].ai_score === '85' && pitch[0].ai_reachability === '40', 'pitch: site trimmed to a domain, scores carried');
+
+  // Deadlines: two cycles on one official site stay two rows, and no date comes from the model.
+  REPLY = JSON.stringify({ items: [
+    { title: 'IBPS PO', org: 'IBPS', url: 'https://www.ibps.in/', window: 'usually August', ask: 'graduate, 20-30', fit: 80, reach: 50 },
+    { title: 'IBPS Clerk', org: 'IBPS', url: 'https://www.ibps.in/', window: 'usually July', fit: 70, reach: 60 },
+    { title: 'Coaching site', org: 'X', url: 'javascript:alert(1)', fit: 70, reach: 60 },
+  ] });
+  const dl = await T.routeOpps(trk, 'deadline', []);
+  ok(dl.length === 3 && dl[0].url !== dl[1].url && dl[0].url.startsWith('https://www.ibps.in/#ibps-po'), 'deadlines: two cycles on one site are two rows');
+  ok(dl[2].url === '' && dl.every(j => j.channel === 'deadline' && !j.deadline), 'deadlines: a non-web url is dropped, and no row carries a date from the model');
+  ok(/^Usually: usually August$/m.test(dl[0].description) && /^Eligibility: graduate, 20-30$/m.test(dl[0].description), 'deadlines: the usual window and eligibility are kept');
+
+  // deadlineOk: the quote must be on the page AND name the date.
+  const page = 'Online registration of application: 01.08.2026 to 21.08.2026. Last date for fee payment 21 August 2026.';
+  ok(T.deadlineOk(page, '2026-08-21', 'Last date for fee payment 21 August 2026'), 'a quote on the page that names the date passes (month by name)');
+  ok(T.deadlineOk(page, '2026-08-21', 'from 01.08.2026 to 21.08.2026'.replace('from ', '')), 'a quote on the page that names the date passes (month by number)');
+  ok(!T.deadlineOk(page, '2026-08-25', 'Last date for fee payment 21 August 2026'), 'a date the quote does not name fails');
+  ok(!T.deadlineOk(page, '2026-09-21', 'Last date for fee payment 21 September 2026'), 'a quote that is not on the page fails');
+  ok(!T.deadlineOk(page, '21-08-2026', 'Last date for fee payment 21 August 2026') && !T.deadlineOk(page, '2026-08-21', '21 Aug'), 'a malformed date, or a quote too short to mean anything, fails');
+
+  // placeRow: a Maps place as a row.
+  const pl = T.placeRow({ title: 'Bhojohori Manna', url: 'https://maps.google.com/?cid=1', categoryName: 'Bengali restaurant', city: 'Kolkata',
+    neighborhood: 'Ekdalia', phone: '+91 33 0000', reviewsCount: 90, totalScore: 4.3, website: 'https://bhojohorimanna.com/menu' }, { id: 'chef', label: 'Chef' }, 'Commis chef');
+  ok(pl.channel === 'place' && pl.company === 'Bhojohori Manna' && pl.title === 'Commis chef' && pl.location === 'Ekdalia, Kolkata' && pl.dir === 'chef', 'placeRow: name, role, where and direction');
+  ok(pl.site === 'bhojohorimanna.com' && /^Ask about: Commis chef$/m.test(pl.description) && pl.ai_reachability === '75', 'placeRow: site trimmed, what to ask kept, a small place is more reachable');
 
   console.log(bad ? `${bad} FAILED` : 'ALL PASS');
   process.exit(bad ? 1 : 0);

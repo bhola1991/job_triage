@@ -295,6 +295,19 @@ function safeSite(raw: string): string {
     return `${u.protocol}//${h}/`;
   } catch { return ""; }
 }
+/* A whole page address (path kept) on the same terms as safeSite: the open
+   web only. For reading one official page, such as an exam's notice. */
+function safeUrl(raw: string): string {
+  const site = safeSite(raw); if (!site) return "";
+  try { const u = new URL(/^https?:\/\//i.test(raw.trim()) ? raw.trim() : "https://" + raw.trim()); u.hash = ""; return u.href; } catch { return ""; }
+}
+const PAGES_PER_DAY = 60;
+/* Google Maps places near the person, for the local route (2026-10-24).
+   compass's actor bills per place scraped ($0.004 at our tier) with a $0.50
+   floor it insists on as the run's ceiling; 30 places is about $0.12. */
+const PLACES_ACTOR = "compass~crawler-google-places";
+const PLACES_MAX = 30;
+
 async function fetchText(url: string, max: number): Promise<{ text: string; url: string } | null> {
   try {
     const r = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0 (compatible; jobtriage/1.0)", Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.5" },
@@ -1551,6 +1564,50 @@ async function handle(req: Request): Promise<Response> {
         }
       }
 
+      /* The text of one official page, so a deadline can be read off the page
+         that sets it instead of being remembered by a model. Free, capped per
+         day like company_pulse. */
+      case "page_text": {
+        const url = safeUrl(String(b.url || ""));
+        if (!url) throw new Http(400, "a public web address");
+        const today = new Date().toISOString().slice(0, 10);
+        const { count } = await admin.from("usage_events").select("id", { count: "exact", head: true })
+          .eq("user_id", user).eq("source", "page").gte("created_at", today);
+        if ((count || 0) >= PAGES_PER_DAY) throw new Http(429, `That is ${PAGES_PER_DAY} pages today — more tomorrow.`);
+        await logUsage([{ user_id: user, kind: "api", source: "page", units: 1, cost_inr: 0, note: url.slice(0, 120) }]);
+        const page = await fetchText(url, 600_000);
+        return json({ url: page?.url || url, text: page ? textOf(page.text).slice(0, 40_000) : "" });
+      }
+
+      /* Places near the person for the local route: one Google Maps run over a
+         few kinds of place. Charged as one board search, so the free searches
+         cover it; refunded if the run does not start. Polled and collected with
+         apify_status / apify_items like any other run (source "places"). */
+      case "places_start": {
+        const kinds = (Array.isArray(b.kinds) ? b.kinds : []).map((k: unknown) => String(k).trim().slice(0, 60)).filter(Boolean).slice(0, 3);
+        const where = String(b.where || "").trim().slice(0, 100);
+        if (!kinds.length || !where) throw new Http(400, "kinds of place and where");
+        const s = await spend("spend_search", { p_user: user, p_n: COST.boardSearch, p_board: true });
+        try {
+          const per = Math.max(5, Math.floor(PLACES_MAX / kinds.length));
+          const r = await apify(`/acts/${PLACES_ACTOR}/runs?timeout=300&maxTotalChargeUsd=0.5`, {
+            method: "POST",
+            body: JSON.stringify({ searchStringsArray: kinds, locationQuery: where, maxCrawledPlacesPerSearch: per,
+              language: "en", skipClosedPlaces: true }),
+          }).catch(() => null);
+          const run = r && r.ok ? await r.json().then((d) => d?.data).catch(() => null) : null;
+          if (!run?.id) {
+            await refund(user, s, "search", COST.boardSearch, "places: no run started");
+            throw new Http(502, "The places search couldn't start. Nothing was used.");
+          }
+          await admin.from("apify_runs").insert({ run_id: run.id, user_id: user, dataset_id: run.defaultDatasetId, source: "places" });
+          return json({ id: run.id, ...wallet(s) });
+        } catch (e) {
+          if (!(e instanceof Http)) await refund(user, s, "search", COST.boardSearch, `places: ${String((e as Error)?.message || e).slice(0, 110)}`);
+          throw e;
+        }
+      }
+
       case "apify_status": {
         await ownRun(user, b.id);
         const r = await apify(`/actor-runs/${encodeURIComponent(b.id)}`);
@@ -1561,6 +1618,12 @@ async function handle(req: Request): Promise<Response> {
         const ds = await ownRun(user, b.id);
         const r = await apify(`/datasets/${encodeURIComponent(ds)}/items?clean=true&format=json`);
         const items = r.ok ? await r.json() : [];
+        // Places are not postings: they go back as they are and never into the corpus.
+        if (b.source === "places") {
+          await logUsage([{ user_id: user, kind: "scrape", source: "places", units: (items as Any[]).length,
+            cost_inr: inr((items as Any[]).length * 0.004) }]);
+          return json({ items });
+        }
         // A scraper run comes back in the same Job shape as the API sources; a Google run raw.
         if (Object.hasOwn(SCRAPERS, String(b.source))) {
           const rows = items as Any[];
