@@ -2932,8 +2932,7 @@ async function backfillRoutes(){
   ROUTES_ASKED=true;
   try{
     const txt=await claude(`A person based in ${p.profile.location||'an unstated place'}${p.profile.country?', '+p.profile.country:''} is pursuing these kinds of work:
-${need.map(t=>`- id "${t.id}": ${t.label||''}${(t.titles||[]).length?` (titles: ${t.titles.slice(0,5).join(', ')})`:''}`).join('
-')}
+${need.map(t=>`- id "${t.id}": ${t.label||''}${(t.titles||[]).length?` (titles: ${t.titles.slice(0,5).join(', ')})`:''}`).join('\n')}
 
 Return ONLY a JSON object, no preamble, no markdown fences, keyed by id:
 {"<id>":{"routes":${ROUTES_JSON},"how_hired":""}}
