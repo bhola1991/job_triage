@@ -6778,7 +6778,6 @@ function askWants(){
    visit after it shipped went without its fill (found 2026-10-24). */
 function openSteps(){
   const p=P(); if(VIEW!=='app' || !p) return;
-  if(decideReady(p)<READY_MIN) TAB='you';
   // Then whatever an earlier visit left unscored (a search cut off when the
   // page closed): autoScore stands aside while a search is busy, and keeps its cap.
   if(!resumePending()) fillDirection().then(()=>autoScore()).catch(e=>console.warn('open fill:', e && e.message));
@@ -6798,7 +6797,9 @@ async function finishOnb(){
   if(!ONB.parsed) return;
   const id = 'p_'+Date.now().toString(36);
   DB.profiles[id]={ profile:ONB.parsed, raw:ONB.raw, track:ONB.track, jobs:[], created:today() };
-  DB.current=id; VIEW='app'; TAB='you';      // an empty To decide is not a first screen
+  // To decide, never You: the list is not empty any more (jobs show the moment they are found), and
+  // both newcomers of 25-26 Oct landed on You, waited there, and left without ever seeing a job.
+  DB.current=id; VIEW='app'; TAB='unapplied';
   ONB=blankOnb();
   await save(); render();
   fillDirection();                    // not awaited: it runs like a search the person can watch
@@ -7674,7 +7675,11 @@ function bindShutter(){
    every CV -- the one they gave and each one tailored to a job. The analytics
    that were the Dashboard are one fixed button away (.youswitch). */
 const AVATARS = [['watch','The watcher'],['woman','The calm one'],['girl','The new start'],['man','The patient one'],['boy','The newcomer']];
-/* You is the first screen until To decide holds READY_MIN jobs over the bar
+/* (Until 2026-10-26 You was the first screen until To decide held READY_MIN
+   jobs. Both newcomers who met that rule stayed on You and left without
+   opening To decide, so the app now always opens on To decide; this row stays
+   on You as a status line.)
+   You was the first screen until To decide holds READY_MIN jobs over the bar
    for the picked direction: a short or unscored list is where people lost
    interest and left (2026-10-23). It is only the screen the app OPENS on;
    nobody is moved off To decide once they are there. */
