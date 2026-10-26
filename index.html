@@ -374,6 +374,10 @@
   .kv{display:grid;grid-template-columns:132px 1fr;gap:8px 14px;font-size:13px}
   .kv .k{color:var(--muted);font-size:12px}
   .chips{display:flex;gap:6px;flex-wrap:wrap}
+  /* The first screen's search: what work, where, and go -- one row, wrapping on a phone. */
+  .first-q{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .first-q #firstQ{flex:2 1 220px} .first-q #firstWhere{flex:1 1 140px}
+  button.chip{cursor:pointer;border:1px solid var(--hair);font:inherit;font-size:11.5px;color:var(--text)}
   .chip{font-size:11.5px;padding:3px 8px;border-radius:2px;background:var(--panel2);
     border:1px solid var(--line);color:var(--muted)}
   .chip.g{color:var(--good);border-color:var(--good-line)}
@@ -1517,6 +1521,46 @@ let VIEW = 'onb';        // 'onb' | 'app'
 const blankOnb = () => ({ step:0, raw:'', fileName:'', parsed:null, track:null,
   error:'', assessing:false, assessed:null, assessErr:'', wantText:'', editing:null });
 let ONB = blankOnb();
+/* The first screen's hook (2026-10-26): real jobs before anything is asked of
+   the person. A tester opened the app and left on the CV drop zone without
+   ever seeing what it does (whyname, 24 Oct). One box -- what work, where --
+   reads the shared job collection (index_search: free, no CV, seconds), and
+   the CV becomes the offer to rank what they are already looking at. */
+let FIRST = { q:'', where:'', busy:false, rows:null, err:'' };
+const FIRST_IDEAS = ['Content writer','Data analyst','Accounts assistant','Sales executive','Teacher','Customer support'];
+async function firstSearch(){
+  const q=FIRST.q.trim(); if(q.length<3){ FIRST.err='Say a kind of work, for example "content writer".'; return render(); }
+  FIRST.busy=true; FIRST.err=''; render();
+  try{
+    const r=await hosted('index_search',{ titles:[q], since_days:30, limit:200 });
+    FIRST.rows=(r && r.jobs)||[];
+    track('first_search',{ n:FIRST.rows.length, where:!!FIRST.where.trim() });
+  }catch(e){ FIRST.err='The job collection did not answer just now. Try again, or start with your CV below.'; }
+  FIRST.busy=false; render();
+}
+/* The search, and what it found: those near them first, as plain rows. */
+function firstHtml(){
+  const w=FIRST.where.trim().toLowerCase(), rows=FIRST.rows||[];
+  const near=w ? rows.filter(j=>String(j.location||'').toLowerCase().includes(w)) : [];
+  const remote=rows.filter(j=>/remote|anywhere|work from home|wfh/i.test(String(j.location||'')) && !near.includes(j));
+  const show=(w ? near.concat(remote) : rows).slice(0,8);
+  const head = !FIRST.rows ? '' : !rows.length
+    ? `<p class="say" style="margin-top:14px">Nothing in the last 30 days under "${esc(FIRST.q)}". Try a broader name for the work, or add your CV and we will work out what to look for.</p>`
+    : `<p class="say" style="margin-top:14px"><b>${rows.length}${rows.length>=200?'+':''}</b> "${esc(FIRST.q)}" jobs posted in the last 30 days${w?` \u2014 <b>${near.length}</b> in ${esc(FIRST.where.trim())}${remote.length?`, ${remote.length} remote`:''}`:''}.</p>`;
+  // The rank slot carries how many days ago it was posted: there is no rank before a CV.
+  const list = show.map(j=>rowCard({ rank: ageOf(j)===null?'\u2014':`${ageOf(j)}d`, quiet:true, title:esc(j.title), sub:[j.company, j.location].filter(Boolean).map(esc).join(' \u00b7 '),
+    acts: httpUrl(String(j.url||'')) ? `<button class="btn-sm" data-firstopen="${esc(j.url)}">Open \u2197</button>` : '' })).join('');
+  return `<p class="lede">What work are you looking for?</p>
+    <div class="first-q">
+      <input type="text" id="firstQ" placeholder="e.g. content writer, data analyst, chef" value="${esc(FIRST.q)}" ${FIRST.busy?'disabled':''}>
+      <input type="text" id="firstWhere" placeholder="Where (optional)" value="${esc(FIRST.where)}" ${FIRST.busy?'disabled':''}>
+      <button class="btn-go" id="firstGo" ${FIRST.busy?'disabled':''}>${FIRST.busy?'<span class="spin"></span> Looking\u2026':'Show me jobs'}</button></div>
+    ${FIRST.rows?'':`<div class="chips" style="margin-top:10px">${FIRST_IDEAS.map(x=>`<button class="chip" data-firstidea="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
+    ${FIRST.err?`<p class="err">${esc(FIRST.err)}</p>`:''}
+    ${head}${rows.length?`<div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="firstCv">Rank these for me: add my CV</button><span class="say" style="margin:0">Days since posted on the left.</span></div>`:''}
+    ${list?`<div style="margin-top:10px">${list}</div>`:''}
+    ${rows.length>show.length?`<p class="say" style="margin-top:8px">${rows.length-show.length} more. Add your CV and they are ranked by how well they fit you, and how likely you are to hear back.</p>`:''}`;
+}
 let RANGE = null, TAB = 'unapplied', busy = false;   // To decide is home (feedback #21); the map lives inside it
 let MAPON = false;
 let YOUSUB = 'me';   // the You view: 'me' (who you are, your CVs) or 'stats' (the analytics that were the Dashboard)   // on a narrow screen, whether the map is open at the top of To decide
@@ -6398,7 +6442,12 @@ function renderOnb(){
   let body='';
 
   if(ONB.step===0){
-    body=`<p class="lede">Drop in your profile. We'll work out what you should be applying for.</p>
+    // Signed in, the jobs come first; the CV is the offer to rank them. Local-only mode has no shared collection to show.
+    const hook=cloudNow();
+    body=`${hook?firstHtml():''}
+      <div ${hook?'style="margin-top:30px;padding-top:22px;border-top:1px solid var(--line)"':''}>
+      <p class="lede">${!hook ? `Drop in your profile. We'll work out what you should be applying for.`
+        : FIRST.rows && FIRST.rows.length ? `Rank these for you: add your CV (about 45 seconds).` : `Or start with your CV, and we'll work out what you should be applying for.`}</p>
       <p class="say">A CV, a résumé, a career summary — a PDF, markdown or text file describing your background. It never leaves your browser except to be read once.</p>
       <div class="drop" id="dropProf" style="padding:38px 18px">
         <div style="font-size:15px;color:var(--text);margin-bottom:6px">Drop your CV here</div>
@@ -6406,6 +6455,7 @@ function renderOnb(){
       <input type="file" id="fileProf" accept=".pdf,application/pdf,.md,.txt,.markdown" style="display:none">
       <p class="say" style="margin:14px 0 0">No file? <a href="#" id="pasteProf" class="lnk">Paste your background instead</a></p>
       ${ONB.error?`<p class="err">${esc(ONB.error)}</p>`:''}
+      </div>
       <div style="margin-top:34px;padding-top:20px;border-top:1px solid var(--line)">
         <div class="eyebrow">First time here?</div>
         ${cloudNow()
@@ -6570,6 +6620,14 @@ function renderOnb(){
     USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
   };
   if(ONB.step===0){
+    if($('#firstGo')){
+      const take=()=>{ FIRST.q=$('#firstQ').value; FIRST.where=$('#firstWhere').value; };
+      $('#firstGo').onclick=()=>{ take(); firstSearch(); };
+      ['#firstQ','#firstWhere'].forEach(id=>$(id).onkeydown=e=>{ if(e.key==='Enter'){ take(); firstSearch(); } });
+      document.querySelectorAll('[data-firstidea]').forEach(b=>b.onclick=()=>{ take(); FIRST.q=b.dataset.firstidea; firstSearch(); });
+      document.querySelectorAll('[data-firstopen]').forEach(b=>b.onclick=()=>{ track('first_open'); window.open(b.dataset.firstopen,'_blank','noopener'); });
+      if($('#firstCv')) $('#firstCv').onclick=()=>{ track('first_cv'); $('#dropProf').scrollIntoView({behavior:'smooth', block:'center'}); };
+    }
     hookDrop($('#dropProf'),$('#fileProf'),onProfileFile);
     $('#pasteProf').onclick=e=>{ e.preventDefault(); pasteProfileDialog(); };
     $('#onbKeys').onclick=()=>keyDialog(()=>render());
@@ -6591,7 +6649,8 @@ function renderOnb(){
       DB.current=b.dataset.open; VIEW='app'; await save(); render(); });
   }
   if(ONB.step===1 && ONB.parsed){
-    $('#onbNext').onclick=()=>{ ONB.step=2; ONB.track=(ONB.parsed.tracks[0]||{}).id; render(); };
+    // What they searched for on the first screen is offered as a direction of their own.
+    $('#onbNext').onclick=()=>{ ONB.step=2; ONB.track=(ONB.parsed.tracks[0]||{}).id; if(!ONB.wantText && FIRST.q) ONB.wantText=FIRST.q.trim(); render(); };
     $('#onbBack').onclick=()=>{ ONB=blankOnb(); render(); };
   }
   if(ONB.step===2){

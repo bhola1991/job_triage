@@ -532,6 +532,17 @@ message and a Try again button, instead of a red mono line. The reason is kept i
 `#syncInfo`; it clears when a save gets through. It is a wait, not an alarm, so
 there is no red and no warning colour.
 
+**The first screen shows jobs before it asks for anything** (2026-10-26, a
+tester left on the CV drop zone without seeing what the app does). Signed in,
+onboarding's first step opens on "What work are you looking for?" with an
+optional place and six suggestion chips (`FIRST`, `firstHtml`, `firstSearch`):
+one free `index_search` over the shared collection, answered in about 5s, with
+the count, those in the place and remote, and eight rows whose rank slot shows
+days since posting. The CV drop zone follows as the offer to rank them ("Rank
+these for me: add my CV" scrolls to it), and what they searched is pre-filled
+as a direction of their own on "Pick a direction". Local-only mode keeps the
+plain CV screen.
+
 **Each onboarding step has its own figure.** In `renderOnb` the band under the
 top bar holds the cast only on "What we found"; on the other steps one person
 stands over the right edge of the 680px column (`.au-solo`): the woman in pink
