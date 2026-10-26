@@ -532,6 +532,17 @@ message and a Try again button, instead of a red mono line. The reason is kept i
 `#syncInfo`; it clears when a save gets through. It is a wait, not an alarm, so
 there is no red and no warning colour.
 
+**The first screen shows jobs before it asks for anything** (2026-10-26, a
+tester left on the CV drop zone without seeing what the app does). Signed in,
+onboarding's first step opens on "What work are you looking for?" with an
+optional place and six suggestion chips (`FIRST`, `firstHtml`, `firstSearch`):
+one free `index_search` over the shared collection, answered in about 5s, with
+the count, those in the place and remote, and eight rows whose rank slot shows
+days since posting. The CV drop zone follows as the offer to rank them ("Rank
+these for me: add my CV" scrolls to it), and what they searched is pre-filled
+as a direction of their own on "Pick a direction". Local-only mode keeps the
+plain CV screen.
+
 **Each onboarding step has its own figure.** In `renderOnb` the band under the
 top bar holds the cast only on "What we found"; on the other steps one person
 stands over the right edge of the 680px column (`.au-solo`): the woman in pink
@@ -706,7 +717,11 @@ front of users with nothing in between. So:
 
 - Every change goes on its own branch (`git switch -c <topic>`), pushed, with a
   PR (`gh pr create`). It reaches `main` only when the owner merges it.
-- Each branch gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
+- Each branch gets a **Cloudflare preview** (`<branch>-jobtriage.reachbhola.workers.dev`,
+  public, posted on the PR by the Cloudflare bot). The edge function accepts
+  calls from those addresses (`PREVIEW_ORIGIN`), so a preview works end to end
+  against the live backend and real data -- sign in with a test account.
+- Each branch also gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
   linked from the PR's checks). It sits behind Vercel's sign-in: the owner can
   open it, a tester cannot.
 - **The edge function deploy and database migrations wait for the merge** too.

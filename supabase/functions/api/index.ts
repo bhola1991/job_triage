@@ -130,6 +130,10 @@ const asCaller = (token: string) =>
    is on the list, per response -- never by mutating this object, which every
    concurrent request shares. */
 const ORIGINS = (Deno.env.get("APP_ORIGIN") ?? "*").split(",").map((s) => s.trim()).filter(Boolean);
+/* Cloudflare's per-branch previews (<branch>-jobtriage.reachbhola.workers.dev),
+   so a PR can be tried end to end before it is merged (2026-10-26). Only
+   workers on the owner's own workers.dev subdomain can carry these names. */
+const PREVIEW_ORIGIN = /^https:\/\/[a-z0-9-]+-jobtriage\.reachbhola\.workers\.dev$/;
 const cors = {
   "Access-Control-Allow-Origin": ORIGINS[0],
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -1907,7 +1911,7 @@ async function handle(req: Request): Promise<Response> {
 Deno.serve(async (req) => {
   const res = await handle(req);
   const origin = req.headers.get("Origin") || "";
-  if (ORIGINS.includes(origin)) res.headers.set("Access-Control-Allow-Origin", origin);
+  if (ORIGINS.includes(origin) || PREVIEW_ORIGIN.test(origin)) res.headers.set("Access-Control-Allow-Origin", origin);
   res.headers.append("Vary", "Origin");
   return res;
 });
