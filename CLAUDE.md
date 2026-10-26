@@ -697,6 +697,23 @@ ui-kit/
   scripts/selfcheck.js              Render assertion for all exports.
 ```
 
+### How changes reach users: a branch and a PR, never `main` directly
+
+**A push to `main` is a deploy**: Cloudflare Workers Builds serves it at
+jobtriage.in within about a minute. Until 2026-10-26 a whole working session
+pushed straight to `main`, which put a 3-minute outage and a failed deploy in
+front of users with nothing in between. So:
+
+- Every change goes on its own branch (`git switch -c <topic>`), pushed, with a
+  PR (`gh pr create`). It reaches `main` only when the owner merges it.
+- Each branch gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
+  linked from the PR's checks). It sits behind Vercel's sign-in: the owner can
+  open it, a tester cannot.
+- **The edge function deploy and database migrations wait for the merge** too.
+  Neither is part of the push -- `supabase functions deploy api` and the
+  migration are run by hand -- so run them after the PR is merged, and say in
+  the PR which of the two it needs.
+
 ### Organisation pattern
 
 Organised **by artefact type, not by feature**. The app has no feature folders —
