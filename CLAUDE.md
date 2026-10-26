@@ -717,7 +717,11 @@ front of users with nothing in between. So:
 
 - Every change goes on its own branch (`git switch -c <topic>`), pushed, with a
   PR (`gh pr create`). It reaches `main` only when the owner merges it.
-- Each branch gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
+- Each branch gets a **Cloudflare preview** (`<branch>-jobtriage.reachbhola.workers.dev`,
+  public, posted on the PR by the Cloudflare bot). The edge function accepts
+  calls from those addresses (`PREVIEW_ORIGIN`), so a preview works end to end
+  against the live backend and real data -- sign in with a test account.
+- Each branch also gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
   linked from the PR's checks). It sits behind Vercel's sign-in: the owner can
   open it, a tester cannot.
 - **The edge function deploy and database migrations wait for the merge** too.

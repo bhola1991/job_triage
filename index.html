@@ -1529,8 +1529,10 @@ let ONB = blankOnb();
 let FIRST = { q:'', where:'', busy:false, rows:null, err:'' };
 const FIRST_IDEAS = ['Content writer','Data analyst','Accounts assistant','Sales executive','Teacher','Customer support'];
 async function firstSearch(){
+  if(FIRST.busy) return;              // one search at a time: a late answer must not overwrite a newer one
   const q=FIRST.q.trim(); if(q.length<3){ FIRST.err='Say a kind of work, for example "content writer".'; return render(); }
-  FIRST.busy=true; FIRST.err=''; render();
+  // The last results go now, so a failed search cannot show them under the new words.
+  FIRST.busy=true; FIRST.err=''; FIRST.rows=null; render();
   try{
     const r=await hosted('index_search',{ titles:[q], since_days:30, limit:200 });
     FIRST.rows=(r && r.jobs)||[];
@@ -1543,7 +1545,9 @@ function firstHtml(){
   const w=FIRST.where.trim().toLowerCase(), rows=FIRST.rows||[];
   const near=w ? rows.filter(j=>String(j.location||'').toLowerCase().includes(w)) : [];
   const remote=rows.filter(j=>/remote|anywhere|work from home|wfh/i.test(String(j.location||'')) && !near.includes(j));
-  const show=(w ? near.concat(remote) : rows).slice(0,8);
+  // Near first, then remote, then the rest -- a place that matches nothing still shows jobs.
+  const rest=w ? rows.filter(j=>!near.includes(j) && !remote.includes(j)) : [];
+  const show=(w ? near.concat(remote, rest) : rows).slice(0,8);
   const head = !FIRST.rows ? '' : !rows.length
     ? `<p class="say" style="margin-top:14px">Nothing in the last 30 days under "${esc(FIRST.q)}". Try a broader name for the work, or add your CV and we will work out what to look for.</p>`
     : `<p class="say" style="margin-top:14px"><b>${rows.length}${rows.length>=200?'+':''}</b> "${esc(FIRST.q)}" jobs posted in the last 30 days${w?` \u2014 <b>${near.length}</b> in ${esc(FIRST.where.trim())}${remote.length?`, ${remote.length} remote`:''}`:''}.</p>`;
