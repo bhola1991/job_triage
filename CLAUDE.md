@@ -543,6 +543,15 @@ these for me: add my CV" scrolls to it), and what they searched is pre-filled
 as a direction of their own on "Pick a direction". Local-only mode keeps the
 plain CV screen.
 
+**After onboarding, the rest is asked one step at a time** (2026-10-27).
+`SETUP` in `index.html` lists the steps -- CV, figure, work model, LinkedIn
+connections, and reply forwarding (only once something has been applied to) --
+each with how to tell it is done and the screen that already does it
+(`doStep`). To decide shows one plain card for the next step not done
+(`setupCard`, "n of m", with "Not now" hiding it until tomorrow:
+`triage:stepx:<profile>:<id>`); You lists them all under "Getting set up" until
+every one is done. A new step is one entry in `SETUP`.
+
 **Each onboarding step has its own figure.** In `renderOnb` the band under the
 top bar holds the cast only on "What we found"; on the other steps one person
 stands over the right edge of the 680px column (`.au-solo`): the woman in pink
