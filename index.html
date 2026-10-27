@@ -7541,7 +7541,7 @@ function renderUnapplied(){
     : THIN && THIN.from===p.track ? `<div class="mapnote thin"><span>Only <b>${THIN.n}</b> ${THIN.n===1?'role':'roles'} for this direction right now. <b>${esc(THIN.label)}</b> has ${THIN.m}${THIN.m>=60?'+':''} in the index.</span>
       <span class="btn-row" style="margin:0"><button class="btn-go btn-sm" data-thinswitch="${esc(THIN.to)}">Look at ${esc(THIN.label)}</button><button class="btn-sm" data-thinx>Not now</button></span></div>` : '';
   const mapNote = narrow ? `<div class="mapnote"><span>Showing the <b>${all.length}</b> in the map's view${MAPSEL?` · ${esc(MAPSEL.l)}`:''}</span><button class="btn-sm" data-mapclear>Show all</button></div>` : '';
-  return `${thin}${mapNote}<div class="listhead">
+  return `${narrow?'':setupCard(p)}${thin}${mapNote}<div class="listhead">
       <span style="color:var(--muted);font-size:12px">${mine.length} to decide on</span>
       <button class="btn-sm" data-findmore style="margin-left:10px" title="Search the boards for more">Find more work</button>
       ${gated.length?`<button class="btn-sm" id="showGated" style="margin-left:10px"
@@ -7675,6 +7675,43 @@ function bindShutter(){
    every CV -- the one they gave and each one tailored to a job. The analytics
    that were the Dashboard are one fixed button away (.youswitch). */
 const AVATARS = [['watch','The watcher'],['woman','The calm one'],['girl','The new start'],['man','The patient one'],['boy','The newcomer']];
+/* Getting set up, one step at a time (2026-10-27). Everything past the CV --
+   the figure, the work model, LinkedIn connections, reply forwarding -- used to
+   be either asked up front or found by accident. Now To decide shows ONE card,
+   the next step not done, and You shows the list. Each step is the screen it
+   already had; this only says which comes next and how far along they are.
+   Reply forwarding waits until something has been applied to, because before
+   that it has nothing to do. "Not now" hides a step until tomorrow, here. */
+const SETUP = [
+  { id:'cv',      title:'Your CV',                         why:'Read once, so every job is scored against what you have actually done.', btn:'',                          done:p=>!!String(p.raw||'').trim() },
+  { id:'figure',  title:'Pick your figure',                why:'Five seconds. It stands for you in the app.',                             btn:'Pick one',                  done:p=>!!p.profile.avatar },
+  { id:'work',    title:'What matters to you at work',     why:'Two minutes. It decides which companies are worth your time, and says why.', btn:'Tell us',               done:p=>workSet(p.profile) },
+  { id:'network', title:'Add your LinkedIn connections',   why:'Shows where you already know someone, so a note to them comes before any application.', btn:'Add the file', done:()=>loadConns().length>0 },
+  { id:'replies', title:'Let replies mark themselves',     why:'One Gmail filter, set once: a reply moves the job to In conversation on its own.', btn:'Set it up',     done:()=>!!MAIL_TOKEN,
+    when:p=>p.jobs.some(j=>['sent','live'].includes(stOf(j))) },
+];
+const stepLaterKey = id => 'triage:stepx:'+DB.current+':'+id;
+const setupSteps = p => SETUP.filter(x=>!x.when || x.when(p)).map(x=>({ ...x, ok:!!x.done(p) }));
+function nextSetup(p){
+  return setupSteps(p).find(x=>{ if(x.ok || !x.btn) return false;
+    try{ return localStorage.getItem(stepLaterKey(x.id))!==today(); }catch(e){ return true; } }) || null;
+}
+/* The one card on To decide. Plain, no accent: it is a suggestion, and the
+   rows below carry the instructions. */
+function setupCard(p){
+  const all=setupSteps(p), n=nextSetup(p); if(!n) return '';
+  return rowCard({ title:esc(n.title), sub:esc(n.why), quiet:true, rank:'',
+    facts:[['set up', `${all.filter(x=>x.ok).length} of ${all.length}`, 'quiet']],
+    acts:`<button class="btn-sm" data-step="${n.id}">${esc(n.btn)}</button><button class="btn-sm" data-steplater="${n.id}">Not now</button>` });
+}
+function doStep(id){
+  track('step_open',{ id });
+  if(id==='figure'){ TAB='you'; YOUSUB='me'; render(); const f=document.querySelector('.youpick'); if(f) f.scrollIntoView({behavior:'smooth', block:'center'}); return; }
+  if(id==='work') return workModelDialog();
+  if(id==='network'){ goApproach(); const b=$('#coConns'); if(b) b.click(); return; }   // still inside the click, so the file chooser may open
+  if(id==='replies') return replyInboxDialog();
+}
+
 /* (Until 2026-10-26 You was the first screen until To decide held READY_MIN
    jobs. Both newcomers who met that rule stayed on You and left without
    opening To decide, so the app now always opens on To decide; this row stays
@@ -7730,7 +7767,12 @@ function renderYou(){
     sub: esc(t.how_hired || (t.routes?'':'Not judged yet: counted as all advertised for now.')),
     facts: Object.entries(routesOf(t)).filter(([,v])=>v>=0.1).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>[ROUTE_LABEL[k].toLowerCase(), Math.round(v*100)+'%', 'quiet']),
     acts:`<button class="btn-sm" data-routes="${esc(t.id)}">Change</button>` })).join('');
+  const steps=setupSteps(p);
+  const stepRows=steps.map(x=>rowCard({ title:`${x.ok?'\u2713 ':''}${esc(x.title)}`, sub:esc(x.why), quiet:true, rank:'',
+    facts:[['', x.ok?'done':'to do', 'quiet']],
+    acts: x.ok || !x.btn ? '' : `<button class="btn-sm" data-step="${x.id}">${esc(x.btn)}</button>` })).join('');
   return `${filling}${card}
+    ${steps.some(x=>!x.ok)?sectOf('','Getting set up',`${steps.filter(x=>x.ok).length} of ${steps.length} done. Each one makes what we find and what we write for you more yours.`,steps.length,stepRows):''}
     ${tracks.length?sectOf('','How people get this work','Per direction. It decides where we look for you.',tracks.length,dirRows):''}
     ${sectOf('','Your work model','',1,wm)}
     ${sectOf('','Your CVs',`The one you gave, and each one tailored to a job${tailored.length?'':' — tailor one from any job\u2019s pane: "Your CV for this job"'}.`,1+tailored.length, base+rows)}`;
@@ -9694,6 +9736,10 @@ document.addEventListener('click',e=>{
   if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
   if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
   if(e.target.closest && e.target.closest('[data-opendecide]')){ TAB='unapplied'; SEL_JOB=null; render(); window.scrollTo(0,0); return; }
+  const st=e.target.closest && e.target.closest('[data-step]');
+  if(st) return doStep(st.dataset.step);
+  const sl=e.target.closest && e.target.closest('[data-steplater]');
+  if(sl){ try{ localStorage.setItem(stepLaterKey(sl.dataset.steplater), today()); }catch(e){} track('step_later',{ id:sl.dataset.steplater }); return render(); }
   const mr=e.target.closest && e.target.closest('[data-moreroute]');
   if(mr){ const p=P(), t=p&&(p.profile.tracks||[]).find(x=>x.id===p.track); if(t) routeFill(t, mr.dataset.moreroute, true); return; }
   const rt=e.target.closest && e.target.closest('[data-routes]');
