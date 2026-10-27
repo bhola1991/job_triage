@@ -710,8 +710,14 @@ ui-kit/
 
 ### How changes reach users: a branch and a PR, never `main` directly
 
-**A push to `main` is a deploy**: Cloudflare Workers Builds serves it at
-jobtriage.in within about a minute. Until 2026-10-26 a whole working session
+**A merge to `main` is a deploy**, twice over: Cloudflare Workers Builds
+builds it, and `.github/workflows/deploy.yml` runs `wrangler deploy` and then
+checks jobtriage.in serves that commit's `index.html` byte for byte. The second
+exists because Workers Builds missed twice in four days (a failed build on 24
+Oct, no build at all for #49 on 26 Oct), and with `main` protected an empty
+commit can no longer retrigger it; its "Run workflow" button redeploys `main` by
+hand. It needs the `CLOUDFLARE_API_TOKEN` secret (an "Edit Cloudflare Workers"
+token). Until 2026-10-26 a whole working session
 pushed straight to `main`, which put a 3-minute outage and a failed deploy in
 front of users with nothing in between. So:
 
@@ -721,9 +727,14 @@ front of users with nothing in between. So:
   public, posted on the PR by the Cloudflare bot). The edge function accepts
   calls from those addresses (`PREVIEW_ORIGIN`), so a preview works end to end
   against the live backend and real data -- sign in with a test account.
-- Each branch also gets a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
+- **Vercel no longer builds this repo** (`vercel.json`: `git.deploymentEnabled:
+  false`, 2026-10-27). It built every push and served nothing -- jobtriage.in is
+  Cloudflare's, and Vercel has no `/api/contact`, `/api/feedback` or inbound
+  email -- and its "Production" label for a build nobody served caused a wrong
+  read on 26 Oct. Delete `vercel.json` to turn it back on.
+- (Until then each branch also got a **Vercel preview** (`job-triage-git-<branch>-soumya-0d48.vercel.app`,
   linked from the PR's checks). It sits behind Vercel's sign-in: the owner can
-  open it, a tester cannot.
+  open it, a tester cannot.)
 - **The edge function deploy and database migrations wait for the merge** too.
   Neither is part of the push -- `supabase functions deploy api` and the
   migration are run by hand -- so run them after the PR is merged, and say in

@@ -1,0 +1,52 @@
+# Deploy jobtriage.in on every merge to main (2026-10-27).
+#
+# Cloudflare's own Workers Builds also deploys on push, but it missed twice in
+# four days: a failed build on 24 Oct (ee55d37) and no build at all for #49 on
+# 26 Oct. With main protected, an empty commit can no longer retrigger it, so
+# this deploys the same thing from GitHub as well. Two deploys of one commit
+# are harmless: each uploads the same files as a new version.
+#
+# What gets uploaded is decided by .assetsignore (an allow-list), exactly as in
+# Cloudflare's build; .git and the rest of the checkout stay private.
+#
+# Secret (Settings -> Secrets and variables -> Actions): CLOUDFLARE_API_TOKEN,
+# a Cloudflare token from the "Edit Cloudflare Workers" template. Without it
+# the job fails loudly rather than skipping.
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:              # "Run workflow" redeploys main by hand
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: bff58757dacbdf623b43ebfe1ea70438
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Deploy the Worker and its assets
+        run: |
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || { echo "CLOUDFLARE_API_TOKEN is not set: nothing deployed"; exit 1; }
+          npx --yes wrangler@4.149.0 deploy
+      - name: Check the live site is this commit
+        run: |
+          # The page served must be byte-identical to this commit's index.html.
+          for i in 1 2 3 4 5 6; do
+            curl -sL "https://jobtriage.in/?v=$GITHUB_SHA" | cmp -s - index.html && { echo "live: $GITHUB_SHA"; exit 0; }
+            sleep 10
+          done
+          echo "jobtriage.in is not serving this commit's index.html"; exit 1
