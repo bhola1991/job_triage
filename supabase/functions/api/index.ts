@@ -1154,14 +1154,18 @@ async function handle(req: Request): Promise<Response> {
       if (sb.action === "exam_refresh") return json(await examRefresh(String(sb.body || "")));
       throw new Http(403, "the service key runs exam_refresh only");
     }
+    const b = await req.json().catch(() => ({}));
     const { data: auth } = await admin.auth.getUser(token);
-    const user = auth?.user?.id;
-    if (!user) throw new Http(401, "sign in first");
+    const user = auth?.user?.id ?? "";
+    /* Signed out, the one thing open is index_search (2026-10-28): the landing
+       page shows real jobs before asking for an account. It reads job_index --
+       public postings -- touches no person's rows and spends nothing. Every
+       other action still needs a user, and nothing below is reached without one. */
+    // ponytail: no rate limit on the signed-out search; add a per-IP one if job_index gets scraped through it.
+    if (!user && b.action !== "index_search") throw new Http(401, "sign in first");
     // The same token, now as a client the database will police. See the note by
     // `admin` above for which queries are allowed to use which.
     const me = asCaller(token);
-
-    const b = await req.json().catch(() => ({}));
     switch (b.action) {
       case "packs":
         return json({ packs: PACKS, costs: { ...COST, llmPro: LLM_COST.pro, llmFlash: LLM_COST.flash } });
