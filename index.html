@@ -1554,7 +1554,9 @@ async function firstSearch(){
     const r=await hosted('index_search',{ titles:[q], since_days:30, limit:200 });
     FIRST.rows=(r && r.jobs)||[];
     track('first_search',{ n:FIRST.rows.length, where:!!FIRST.where.trim() });
-  }catch(e){ FIRST.err='The job collection did not answer just now. Try again, or start with your CV below.'; }
+  }catch(e){ FIRST.err=USER ? 'The job collection did not answer just now. Try again, or start with your CV below.'
+    : String(e && e.message || '').startsWith('That is a lot of searches') ? e.message
+    : 'The job collection did not answer just now. Try again, or make your free account.'; }
   FIRST.busy=false; render();
 }
 /* The search, and what it found: those near them first, as plain rows. */
