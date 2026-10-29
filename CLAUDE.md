@@ -199,19 +199,22 @@ Four accents, one instruction each (`index.html:13-23`, `design/README.md`):
 
 | Token | Dark | Light | Means |
 | --- | --- | --- | --- |
-| `--go` | `#4CC76B` | `#1C6B38` | Do this now. The only fill-weight button. |
+| `--go` | `#4CC76B` | `#1C6B38` | Do this now. A row's edge and text. |
 | `--due` | `#FF7A70` | `#B02E2A` | Overdue — past the follow-up date. |
 | `--closing` | `#F5B700` | `#7A5000` | Posting old enough to be filled soon. |
 | `--awaiting` | `#8FA2FF` | `#2A45AC` | Sent; the next move is theirs. |
 | `--closed` | `#4A5058` | `#BFAEA2` | Grey = the absence of an instruction. |
+| `--accent` | `#ECECE8` | `#211A16` | Not a status. The one fill-weight button and the focus ring. Hueless ink (`--on-accent` for its text). Added 2026-10-29 (v3). |
+
+**v3 amendment (2026-10-29, branch `redesign-v3`, `design/README.md`).** Colour still says what to do, but the button that does it is ink, not green. Rules 1 and 2 below were relaxed; rule 3 stands. Everything above this line in §1 about `go` being "the only fill" is superseded by `--accent`.
 
 Three rules a Figma import must not violate:
 
-1. **A row carries at most one accent.** Both closing and overdue → nearer deadline wins, the other becomes plain text.
-2. **A score is never an accent.** Colour says what to do; the number says how good it is. Reachability stays grey — a second axis, not a verdict.
+1. **A row carries at most one *status* accent** (it may also carry the ink `--accent` button). Both closing and overdue → nearer deadline wins, the other becomes plain text.
+2. **A score is never a status colour.** It may be set in weight and size (bold, larger); the number says how good it is, colour says what to do. Reachability stays grey — a second axis, not a verdict.
 3. **The accent is on the row's edge; the card stays plain.** A row is a white (or charcoal) card with a 1.5px outline and a solid 5px edge in its accent, in both themes. Every `--*-row` equals `--panel`. Rows were tinted until 2026-10-14; an artboard that washes the whole cell is out of date, not the code.
 
-If a Figma frame colours a score, or stacks two accents on one row, **flag it
+If a Figma frame colours a score in a status colour, or stacks two status accents on one row, **flag it
 rather than implementing it.**
 
 ---
@@ -462,7 +465,7 @@ Their colours are hard-coded in the SVG and are not tokens: a yellow shirt says
 nothing about a closing job. The palette is fixed: ink `#14181A`, yellow
 `#F5B700`, red `#E5484D`, blue `#2F5BEA`, green `#1F9D55`, brown `#6B4A2F`,
 window grey `#B9C6D3`, and the three skin tones `#F2B79C` `#8E5B3D` `#C98A68`.
-`--brand` (purple) is the one brand colour and is likewise not an accent.
+`--brand` (purple) still styles the "Job Triage" wordmark in the header; the rail's JT tile and every fill button moved to `--accent` (ink) in v3. It is not a status accent.
 
 All the art is one `ART` object in `index.html` (`cast` = the three people and
 the car as drawn, `car` = the car alone for the waiting scene, `woman` and
