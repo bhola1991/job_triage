@@ -8,6 +8,7 @@
   --ink: #111315; --panel: #1A1D21; --panel2: #23272C; --line: #59616A; --hair: #2C3137;
   --text: #ECECE8; --muted: #AEB4BA; --dim: #8D949B;
 
+  --accent: #ECECE8; --on-accent: #111315;
   --go: #4CC76B; --on-go: #0E1410; --go-line: #2B6B3C; --go-tint: #17301F;
   --due: #FF7A70; --on-due: #1A0A08; --due-line: #7A3A35; --due-tint: #3C1F1D;
   --closing: #F5B700; --closing-line: #6B5410; --closing-tint: #3A3110;
@@ -33,6 +34,7 @@
   --ink: #F4E1D2; --panel: #FCF1E7; --panel2: #EBD3C1; --line: #2B211C; --hair: #E0C6B3;
   --text: #211A16; --muted: #5A4A40; --dim: #6F5E53;
 
+  --accent: #211A16; --on-accent: #FCF1E7;
   --go: #1C6B38; --on-go: #FFFFFF; --go-line: #1C6B38; --go-chip: #E1E8D2; --go-row: #FCF1E7;
   --due: #B02E2A; --on-due: #FFFFFF; --due-line: #B02E2A; --due-chip: #F5D6CE; --due-row: #FCF1E7;
   --closing: #7A5000; --closing-line: #7A5000; --closing-chip: #F3DFBE; --closing-row: #FCF1E7;

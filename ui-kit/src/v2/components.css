@@ -19,7 +19,7 @@
 
 /* action button */
 .btn2 { -webkit-user-select: none; user-select: none; font-family: var(--disp); font-size: 13px;
-  cursor: pointer; border-radius: 5px; border: 1px solid var(--line); background: var(--panel2);
+  cursor: pointer; border-radius: 8px; border: 1px solid var(--line); background: var(--panel2);
   color: var(--text); padding: 9px 14px; }
 .btn2:disabled { opacity: .4; cursor: not-allowed; }
 .btn2.sm { padding: 6px 10px; font-size: 12px; }
@@ -27,9 +27,10 @@
    these existed, and emphasis defaults to outline -- so <ActionButton tone="go">,
    the primary call to action, matched nothing and rendered identically to
    tone="neutral". selfcheck could not see it: it only ever passes fill. */
-.btn2.fill.go { background: var(--go); border-color: var(--go); color: var(--on-go); font-weight: 700; }
-.btn2.fill.due { background: var(--due); border-color: var(--due); color: var(--on-due); font-weight: 700; }
-.btn2.fill.awaiting { background: var(--awaiting); border-color: var(--awaiting); color: var(--ink); font-weight: 700; }
+/* v3: every fill is the one ink button; the tone is said by its outline, not a second fill colour. */
+.btn2.fill.go { background: var(--accent); border-color: var(--go); color: var(--on-accent); font-weight: 700; }
+.btn2.fill.due { background: var(--accent); border-color: var(--due); color: var(--on-accent); font-weight: 700; }
+.btn2.fill.awaiting { background: var(--accent); border-color: var(--awaiting); color: var(--on-accent); font-weight: 700; }
 .btn2.outline.go { background: var(--go-tint); border-color: var(--go-line); color: var(--go); }
 .btn2.outline.due { background: var(--due-tint); border-color: var(--due-line); color: var(--due); }
 .btn2.outline.awaiting { background: var(--awaiting-tint); border-color: var(--awaiting-line); color: var(--awaiting); }

@@ -45,6 +45,7 @@
     --ink:#111315; --panel:#1A1D21; --panel2:#23272C; --line:#59616A; --hair:#2C3137;
     --text:#ECECE8; --muted:#AEB4BA; --dim:#8D949B;
 
+    --accent:#ECECE8;    --on-accent:#111315;
     --go:#4CC76B;       --on-go:#0E1410;  --go-line:#2B6B3C;       --go-tint:#17301F;
     --due:#FF7A70;      --on-due:#1A0A08; --due-line:#7A3A35;      --due-tint:#3C1F1D;
     --closing:#F5B700;  --closing-line:#6B5410;  --closing-tint:#3A3110;
@@ -98,6 +99,7 @@
     --ink:#F4E1D2; --panel:#FCF1E7; --panel2:#EBD3C1; --line:#2B211C; --hair:#E0C6B3;
     --text:#211A16; --muted:#5A4A40; --dim:#6F5E53;
 
+    --accent:#211A16;    --on-accent:#FCF1E7;
     --go:#1C6B38;       --on-go:#FFFFFF;  --go-line:#1C6B38;       --go-tint:#E1E8D2;
     --due:#B02E2A;      --on-due:#FFFFFF; --due-line:#B02E2A;      --due-tint:#F5D6CE;
     --closing:#7A5000;  --closing-line:#7A5000;  --closing-tint:#F3DFBE;
@@ -329,6 +331,7 @@
     --ink:var(--au-paper);--panel:var(--au-card);--panel2:var(--au-wash);--line:var(--au-ink);--hair:#E0C6B3;
     --text:var(--au-ink);--muted:#5A4A40;--dim:#6F5E53;
     --signal:var(--au-gr);--signal-hi:#155530;--on-signal:#fff;--cool:var(--au-gr);
+    --accent:var(--au-ink);--on-accent:var(--au-paper);
     --go:var(--au-gr);--on-go:#fff;--good:var(--au-gr);--go-line:var(--au-gr);--good-line:var(--au-gr);
     --go-tint:#E1E8D2;--good-tint:#E1E8D2;--signal-tint:#E1E8D2;--signal-glow:transparent;
     --warn:var(--au-rd);--due:var(--au-rd);--warn-line:var(--au-rd);--warn-tint:#F5D6CE;
@@ -725,14 +728,14 @@
     .qitem .qrow:hover{transform:translateY(-2px) scale(1.012);background:var(--panel);
       box-shadow:var(--shadow-md);position:relative;z-index:1}
   }
-  .qrank{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:17px;line-height:1;color:var(--text)}
+  .qrank{font-family:var(--mono);font-variant-numeric:tabular-nums;font-size:20px;font-weight:700;line-height:1;color:var(--text)}
   /* No accent on the rank: colour is an instruction and a score is not one
      (see the colour law at the top of this file). The row's edge and the
      section it sits in already say what to do, and a green rank on an amber
      closing row put two accents on one row. Grey stays: it is the absence
      of an instruction, not an accent. */
   .qrank.quiet{color:var(--muted)}
-  .qt{font-size:14px;line-height:1.35}
+  .qt{font-size:15px;line-height:1.3;font-weight:650;letter-spacing:-.005em}
   .qs{font-size:12px;color:var(--muted);margin-top:2px}
   /* The pipeline as one bar, so its shape reads before any of its rows do.
      Only the two stages that mean something take an accent (law: one
@@ -747,8 +750,10 @@
   .qfact .v.go{color:var(--go)} .qfact .v.due{color:var(--due)}
   .qfact .v.closing{color:var(--closing)} .qfact .v.awaiting{color:var(--awaiting)}
   .qacts{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
-  .btn-due{background:var(--due);border-color:var(--due);color:var(--on-due);font-weight:700}
-  .btn-due:hover:not(:disabled){background:var(--due);border-color:var(--due);color:var(--on-due);filter:brightness(1.08)}
+  /* v3: overdue is said by the row's edge and a due-coloured outline; the fill is
+     the one ink button, so a red row never carries a second fill-weight colour. */
+  .btn-due{background:var(--accent);border-color:var(--due);color:var(--on-accent);font-weight:700}
+  .btn-due:hover:not(:disabled){background:var(--accent);border-color:var(--due);color:var(--on-accent);opacity:.88}
   .btn-await{background:var(--awaiting-tint);border-color:var(--awaiting-line);color:var(--awaiting)}
   .btn-await:hover:not(:disabled){border-color:var(--awaiting);color:var(--awaiting)}
   /* The row's overflow. Always visible rather than revealed on hover, because a
@@ -1080,7 +1085,16 @@
   body{margin:0;background:var(--ink)}
   button{border-width:1.5px;border-color:var(--line);border-radius:8px;font-weight:600;background:var(--panel)}
   button:hover:not(:disabled){border-color:var(--text);color:var(--text);transform:none;background:var(--panel2)}
-  .btn-go,.btn-go:hover:not(:disabled){background:var(--go);color:var(--on-go);border-color:var(--go);box-shadow:none}
+  /* v3: the one fill-weight button is ink, not green. Green is a row's edge and
+     text ("do this now"); the button that does it is hueless, so it can sit on a
+     green, red, yellow or blue row without a second accent. */
+  .btn-go,.btn-go:hover:not(:disabled){background:var(--accent);color:var(--on-accent);border-color:var(--accent);box-shadow:none}
+  .btn-go:hover:not(:disabled){opacity:.88}
+  /* At night a near-white fill on every row of a long list glares, so a row at
+     rest outlines its button in the same ink and only the selected row, the
+     pane and the deck card fill it. Paper keeps the fill: ink on salmon is calm. */
+  :root:not([data-theme="light"]) .qitem:not(.sel) .btn-go:not(:hover):not(:focus-visible){background:transparent;color:var(--accent)}
+  button:focus-visible{outline-color:var(--accent)}
   .btn-due,.btn-due:hover:not(:disabled){border-color:var(--due)}
   select,input[type=text],textarea{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
   .segs{border:1.5px solid var(--line);border-radius:8px}
@@ -1108,7 +1122,7 @@
   @media(hover:hover){.qitem .qrow:hover{transform:none;box-shadow:var(--shadow-md);background:var(--panel)}}
   /* The selected row, blown up to its name and its one button. Everything else
      about it is in the pane beside it, so the row stops repeating it. */
-  .qitem.sel .qrow{grid-template-columns:6px minmax(0,1fr) auto;align-items:center;gap:0 20px;
+  .qitem.sel .qrow{grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:0 20px;
     padding:26px 24px 26px 14px;border-width:2px;border-color:var(--text);box-shadow:5px 5px 0 var(--hard);
     background:var(--panel);transform:none}
   .qitem.sel .qbar{grid-row:auto;align-self:stretch;min-height:56px;box-shadow:none}
@@ -1116,9 +1130,10 @@
   /* Company and place stay: they are what you compare rows by, and the list
      lost them the moment you picked one. The numbers are still in the pane. */
   .qitem.sel .qs{font-size:14px;margin-top:6px}
-  .qitem.sel .qt{font-size:25px;line-height:1.15;font-weight:750;letter-spacing:-.02em;white-space:normal}
+  .qitem.sel .qt{font-size:26px;line-height:1.12;font-weight:750;letter-spacing:-.022em;white-space:normal}
   .qitem.sel .qacts{grid-column:auto;grid-row:auto}
   .qitem.sel .qacts>*:not(.act-primary){display:none}
+  .qitem.sel .qacts .act-primary{min-width:150px}
   .qitem.sel .qacts button,.pane-pri button{font-size:16px;padding:12px 22px;border-radius:10px}
   .next,.next.calm,.next.warn{border:1.5px solid var(--line);border-radius:12px;background:var(--panel);box-shadow:none}
   .next .nh{font-size:16px;font-weight:700}
@@ -1140,12 +1155,12 @@
     white-space:nowrap;position:relative;font-weight:400}
   .rail .r-it[hidden]{display:none}
   .r-ic{flex:0 0 42px;width:42px;height:42px;display:grid;place-items:center;position:relative;color:var(--text);
-    border:1.5px solid var(--line);border-radius:11px;background:var(--panel)}
+    border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   button.r-it:hover .r-ic,.r-dir:hover .r-ic{background:var(--panel2);border-color:var(--text)}
-  .r-it.primary .r-ic,button.r-it.primary:hover .r-ic{background:var(--go);border-color:var(--go);color:var(--on-go)}
+  .r-it.primary .r-ic,button.r-it.primary:hover .r-ic{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
   /* Neutral on purpose: an accent here would be an instruction about nothing. */
   .r-ic.r-av{background:var(--panel2);border-radius:50%;font:700 13px var(--mono)}
-  .r-ic.r-jt{background:var(--brand);border-color:var(--brand);color:var(--panel);font:800 14px var(--disp);letter-spacing:-.02em}
+  .r-ic.r-jt{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font:800 14px var(--disp);letter-spacing:-.02em}
   .r-lb{font-size:13.5px;font-weight:650;line-height:1.25;display:none;min-width:0}
   .r-lb small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
   .r-bd{position:absolute;right:-8px;top:-8px;min-width:19px;height:19px;border-radius:10px;border:1.5px solid var(--panel);
@@ -1252,7 +1267,7 @@
       font:12px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
     .deck-stack{display:grid}
     .dcard{grid-area:1/1;position:relative;display:grid;gap:10px;align-content:start;min-height:290px;
-      background:var(--panel);border:1.5px solid var(--line);border-left:6px solid var(--closed);border-radius:16px;
+      background:var(--panel);border:1.5px solid var(--line);border-left:6px solid var(--closed);border-radius:10px;
       padding:20px 20px 18px;touch-action:pan-y;user-select:none;-webkit-user-select:none;
       transition:transform .2s cubic-bezier(.16,1,.3,1)}
     .dcard.go{border-left-color:var(--go)} .dcard.due{border-left-color:var(--due)}
@@ -1263,7 +1278,7 @@
     #app .dcard h3{margin:0;font-size:24px;line-height:1.15;font-weight:750;letter-spacing:-.02em;color:var(--text)}
     .dc-co{margin:0;color:var(--muted)}
     .dc-facts{display:flex;gap:28px}
-    .dc-facts b{display:block;margin-top:3px;font:500 15px var(--mono);font-variant-numeric:tabular-nums}
+    .dc-facts b{display:block;margin-top:3px;font:700 16px var(--mono);font-variant-numeric:tabular-nums}
     .dc-why{margin:0;font-size:14.5px;line-height:1.5}
     .dcard .btn-sm{justify-self:start}
     /* The stamp while the card leans: words, not a fifth accent. */
@@ -7739,7 +7754,7 @@ function nextSetup(p){
    rows below carry the instructions. */
 function setupCard(p){
   const all=setupSteps(p), n=nextSetup(p); if(!n) return '';
-  return rowCard({ title:esc(n.title), sub:esc(n.why), quiet:true, rank:'',
+  return rowCard({ title:esc(n.title), sub:esc(n.why), quiet:true, rank:String(all.findIndex(x=>x.id===n.id)+1),
     facts:[['set up', `${all.filter(x=>x.ok).length} of ${all.length}`, 'quiet']],
     acts:`<button class="btn-sm" data-step="${n.id}">${esc(n.btn)}</button><button class="btn-sm" data-steplater="${n.id}">Not now</button>` });
 }
