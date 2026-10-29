@@ -510,7 +510,10 @@ the card has scrolled away the same button rides along the bottom
 (`.au-stick`). The card's headline is "Get to your next job, one clear step at
 a time." Signed out, the edge function runs `index_search` and nothing else:
 the last 30 days only, and at most `ANON_PER_MIN` searches a minute per
-address (in memory, per instance). Landing events (`land_*`, `first_*`) wait
+address, counted in `usage_events` (source `anon_search`, the address only as a
+salted hash; it was in memory until 2026-10-29 and counted nothing in
+production -- and Supabase sends the address as `cf-connecting-ip`, not
+`x-forwarded-for`). Landing events (`land_*`, `first_*`) wait
 in `sessionStorage` and are sent after sign-in, for testers only, like every
 other `track()`.
 
