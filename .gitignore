@@ -16,6 +16,8 @@ __preview_local.html
 # Design-tool exports. The .dc.html sources and the tokens are tracked under
 # design/; these are the runtime and the packaging around them.
 *.zip
+# ...but not test fixtures: selfcheck-linkedin reads a made-up LinkedIn archive.
+!scripts/fixtures/*.zip
 design/support.js
 .thumbnail
 Job triage app mockups/

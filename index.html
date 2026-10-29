@@ -7686,7 +7686,9 @@ const SETUP = [
   { id:'cv',      title:'Your CV',                         why:'Read once, so every job is scored against what you have actually done.', btn:'',                          done:p=>!!String(p.raw||'').trim() },
   { id:'figure',  title:'Pick your figure',                why:'Five seconds. It stands for you in the app.',                             btn:'Pick one',                  done:p=>!!p.profile.avatar },
   { id:'work',    title:'What matters to you at work',     why:'Two minutes. It decides which companies are worth your time, and says why.', btn:'Tell us',               done:p=>workSet(p.profile) },
-  { id:'network', title:'Add your LinkedIn connections',   why:'Shows where you already know someone, so a note to them comes before any application.', btn:'Add the file', done:()=>loadConns().length>0 },
+  { id:'network', title:'Add your LinkedIn data',          why:'Shows who you know and who you actually talk to, brings in what you already applied to, and your profile to tune.', btn:'Add the file', done:()=>loadConns().length>0 },
+  { id:'linkedin', title:'Tune your LinkedIn for this direction', why:'Your headline, About and Open to work titles, in the words this field uses. Ready to paste.', btn:'Write it',
+    done:p=>!!(p.profile.lio||{})[p.track] },
   { id:'replies', title:'Let replies mark themselves',     why:'One Gmail filter, set once: a reply moves the job to In conversation on its own.', btn:'Set it up',     done:()=>!!MAIL_TOKEN,
     when:p=>p.jobs.some(j=>['sent','live'].includes(stOf(j))) },
 ];
@@ -7709,6 +7711,7 @@ function doStep(id){
   if(id==='figure'){ TAB='you'; YOUSUB='me'; render(); const f=document.querySelector('.youpick'); if(f) f.scrollIntoView({behavior:'smooth', block:'center'}); return; }
   if(id==='work') return workModelDialog();
   if(id==='network'){ goApproach(); const b=$('#coConns'); if(b) b.click(); return; }   // still inside the click, so the file chooser may open
+  if(id==='linkedin') return tuneLinkedIn(P().track);
   if(id==='replies') return replyInboxDialog();
 }
 
@@ -7767,12 +7770,19 @@ function renderYou(){
     sub: esc(t.how_hired || (t.routes?'':'Not judged yet: counted as all advertised for now.')),
     facts: Object.entries(routesOf(t)).filter(([,v])=>v>=0.1).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([k,v])=>[ROUTE_LABEL[k].toLowerCase(), Math.round(v*100)+'%', 'quiet']),
     acts:`<button class="btn-sm" data-routes="${esc(t.id)}">Change</button>` })).join('');
+  const lio=prof.lio||{};
+  const liRows=tracks.map(t=>{ const o=lio[t.id];
+    return rowCard({ title:`${dirMark(t.id)}LinkedIn for ${esc(t.label||'')}`, quiet:true, rank:'',
+      sub: o ? `Written ${esc(o.on)}${o.change?`: ${esc(o.change)}`:''}` : esc('Your headline, About, the job titles to set under Open to work, and the skills to pin, in the words this field uses.'),
+      facts:o?[['gaps', String(o.gaps.length), o.gaps.length?'':'quiet']]:[],
+      acts:o?`<button class="btn-sm" data-lio="${esc(t.id)}">Open</button>`:`<button class="btn-sm" data-liotune="${esc(t.id)}">Write it</button>` }); }).join('');
   const steps=setupSteps(p);
   const stepRows=steps.map(x=>rowCard({ title:`${x.ok?'\u2713 ':''}${esc(x.title)}`, sub:esc(x.why), quiet:true, rank:'',
     facts:[['', x.ok?'done':'to do', 'quiet']],
     acts: x.ok || !x.btn ? '' : `<button class="btn-sm" data-step="${x.id}">${esc(x.btn)}</button>` })).join('');
   return `${filling}${card}
     ${steps.some(x=>!x.ok)?sectOf('','Getting set up',`${steps.filter(x=>x.ok).length} of ${steps.length} done. Each one makes what we find and what we write for you more yours.`,steps.length,stepRows):''}
+    ${tracks.length?sectOf('','Your LinkedIn, for each direction',prof.linkedin?'From your LinkedIn data and the postings each direction turned up.':'From your CV for now; add your LinkedIn data for an exact rewrite.',tracks.length,liRows):''}
     ${tracks.length?sectOf('','How people get this work','Per direction. It decides where we look for you.',tracks.length,dirRows):''}
     ${sectOf('','Your work model','',1,wm)}
     ${sectOf('','Your CVs',`The one you gave, and each one tailored to a job${tailored.length?'':' — tailor one from any job\u2019s pane: "Your CV for this job"'}.`,1+tailored.length, base+rows)}`;
@@ -8539,10 +8549,150 @@ function parseConnections(text){
     p: (r[pos]||'').trim(), u: /^https?:\/\//.test(r[url]||'') ? r[url].trim() : '', d: (r[on]||'').trim() }))
     .filter(x => x.n && x.c);
 }
-/* Who the person knows at a company. */
+/* Who the person knows at a company -- someone they have actually been
+   writing to first (m: their last message, from the archive), then the rest. */
 function warmFor(company, conns){
   const k = normCo(company); if(!k) return [];
-  return conns.filter(x => normCo(x.c) === k);
+  return conns.filter(x => normCo(x.c) === k).sort((a,b)=>String(b.m||'').localeCompare(String(a.m||'')));
+}
+
+/* The LinkedIn data archive (2026-10-29): Settings -> Data privacy -> Get a
+   copy of your data, a .zip. Read in this browser only.
+     - Connections, enriched from messages.csv with WHEN they last wrote to each
+       other and how often (m, k, mf) -- never what was said: message text is
+       not read beyond the row it sits on, and nothing from it is kept.
+     - Profile, Positions, Education, Skills: saved to the profile
+       (profile.linkedin), for the LinkedIn optimiser and as a CV when there
+       is none.
+     - Job Applications: the last year's become rows (the last 30 days as sent,
+       older ones closed), so nothing applied to is suggested again.
+     - Connections in recruiting who wrote in the last year become people to ask.
+   The browser's own DecompressionStream unpacks the zip: no library. */
+async function readZip(file){
+  const buf=new Uint8Array(await file.arrayBuffer()), dv=new DataView(buf.buffer), dec=new TextDecoder();
+  let e=-1; for(let i=buf.length-22;i>=Math.max(0,buf.length-65557);i--) if(dv.getUint32(i,true)===0x06054b50){ e=i; break; }
+  if(e<0) throw new Error('That is not a .zip file.');
+  const ents=new Map(); let off=dv.getUint32(e+16,true);
+  for(let k=0, n=dv.getUint16(e+10,true); k<n && dv.getUint32(off,true)===0x02014b50; k++){
+    const nlen=dv.getUint16(off+28,true);
+    ents.set(dec.decode(buf.subarray(off+46,off+46+nlen)), { method:dv.getUint16(off+10,true), size:dv.getUint32(off+20,true), at:dv.getUint32(off+42,true) });
+    off+=46+nlen+dv.getUint16(off+30,true)+dv.getUint16(off+32,true);
+  }
+  const find=base=>[...ents.keys()].find(n=>n.toLowerCase()===base.toLowerCase() || n.toLowerCase().endsWith('/'+base.toLowerCase()));
+  return { names:[...ents.keys()], async text(base){
+    const name=find(base), x=name && ents.get(name); if(!x) return null;
+    const st=x.at+30+dv.getUint16(x.at+26,true)+dv.getUint16(x.at+28,true), data=buf.subarray(st, st+x.size);
+    if(x.method===0) return dec.decode(data);
+    if(x.method!==8 || typeof DecompressionStream==='undefined') return null;
+    return await new Response(new Blob([data]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).text();
+  } };
+}
+/* A LinkedIn CSV as objects keyed by its lower-cased header (the first row
+   that has more than one column; some files open with a note). */
+function csvObjects(text){
+  // A file with one column (Skills.csv is just "Name") has no wider row: then the first row that has anything.
+  const rows=parseCSV(String(text||'')), wide=rows.findIndex(r=>r.filter(c=>String(c).trim()).length>1);
+  const h=wide>=0 ? wide : rows.findIndex(r=>r.some(c=>String(c).trim()));
+  if(h<0) return [];
+  const head=rows[h].map(c=>String(c).trim().toLowerCase());
+  return rows.slice(h+1).filter(r=>r.some(c=>String(c).trim())).map(r=>Object.fromEntries(head.map((k,i)=>[k, String(r[i]??'').trim()])));
+}
+/* LinkedIn writes dates three ways: "2024-05-03 14:22:10 UTC", "10/27/24, 9:41 AM", "27 Oct 2024". */
+function liDate(s){
+  s=String(s||'').trim(); if(!s) return '';
+  let m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) return `${m[1]}-${m[2]}-${m[3]}`;
+  m=s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if(m){ const y=m[3].length===2?'20'+m[3]:m[3]; return `${y}-${m[1].padStart(2,'0')}-${m[2].padStart(2,'0')}`; }
+  // The local date, not toISOString: that is UTC, and east of it (all of India) "27 Oct" came back as the 26th.
+  const d=new Date(s); return isNaN(d) ? '' : `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+const liUrl = u => String(u||'').toLowerCase().replace(/^https?:\/\/(www\.)?/,'').replace(/\/+$/,'');
+const RECRUITER = /recruit|talent|hiring|sourc|staffing|\bhr\b|human resources|people partner|headhunt/i;
+async function importArchive(file, now=Date.now()){
+  const z=await readZip(file);
+  const out={ conns:0, talked:0, apps:0, waiting:0, recruiters:0, positions:0, skills:0 };
+  // Connections
+  const ctext=await z.text('Connections.csv');
+  const conns=ctext ? (parseConnections(ctext)||[]) : loadConns();
+  // Who you write to, and when -- not what.
+  const prof=csvObjects(await z.text('Profile.csv'))[0]||{};
+  const me=[prof['first name'],prof['last name']].filter(Boolean).join(' ').toLowerCase();
+  const stat=new Map(), bump=(key,on,fromThem)=>{ if(!key) return; const s=stat.get(key)||{m:'',k:0,mf:''};
+    s.k++; if(on>s.m) s.m=on; if(fromThem && on>s.mf) s.mf=on; stat.set(key,s); };
+  for(const r of csvObjects(await z.text('messages.csv'))){
+    const on=liDate(r.date), from=String(r.from||'').toLowerCase();
+    if(from && from!==me){ bump(liUrl(r['sender profile url'])||from, on, true); continue; }
+    const urls=String(r['recipient profile urls']||'').split(/[,;]\s*/).map(liUrl).filter(Boolean);
+    (urls.length?urls:String(r.to||'').toLowerCase().split(/,\s*/)).forEach(k=>bump(k,on,false));
+  }
+  conns.forEach(c=>{ const s=stat.get(liUrl(c.u))||stat.get(c.n.toLowerCase()); if(s){ c.m=s.m; c.k=s.k; if(s.mf) c.mf=s.mf; } });
+  if(conns.length && !saveConns(conns)) throw new Error('This browser would not store your connections (private window, or storage blocked).');
+  out.conns=conns.length;
+  const yearAgo=new Date(now-365*864e5).toISOString().slice(0,10);
+  out.talked=conns.filter(c=>c.m && c.m>=yearAgo).length;
+  // Your profile, for the optimiser and as a CV when there is none.
+  const positions=csvObjects(await z.text('Positions.csv')).map(r=>({ title:r.title, company:r['company name'], start:r['started on'], end:r['finished on'], desc:String(r.description||'').slice(0,1200), where:r.location })).filter(x=>x.title||x.company);
+  const education=csvObjects(await z.text('Education.csv')).map(r=>({ school:r['school name'], degree:r['degree name'], start:r['start date'], end:r['end date'] })).filter(x=>x.school);
+  const skills=csvObjects(await z.text('Skills.csv')).map(r=>r.name).filter(Boolean).slice(0,80);
+  const p=P();
+  if(p && (prof.headline || positions.length)){
+    p.profile.linkedin={ at:today(), headline:prof.headline||'', summary:String(prof.summary||'').slice(0,2600), industry:prof.industry||'',
+      positions:positions.slice(0,20), education:education.slice(0,8), skills };
+    out.positions=positions.length; out.skills=skills.length;
+    if(!String(p.raw||'').trim()) p.raw=liText(p.profile.linkedin, [prof['first name'],prof['last name']].filter(Boolean).join(' '));
+  }
+  // Past applications: never suggested again; the last month's are waiting on a reply.
+  if(p){
+    const monthAgo=new Date(now-30*864e5).toISOString().slice(0,10), rows=[];
+    for(const r of csvObjects(await z.text('Job Applications.csv'))){
+      const on=liDate(r['application date']); if(!on || on<yearAgo || !(r['job title']||r['company name'])) continue;
+      const j=Object.assign(blank(), { title:r['job title'], company:r['company name'], url:httpUrl(r['job url']||'')?r['job url']:'',
+        channel:'posted', source:'LinkedIn applications', dir:p.track });
+      setStage(j, on>=monthAgo ? 'sent' : 'closed'); j.date_applied=on; j.last_touch=on;
+      setList(j,'events',[{ on, kind:'sent', text:'applied on LinkedIn' }]);
+      rows.push(j);
+    }
+    out.apps=addJobs(rows.slice(0,300)); out.waiting=rows.filter(j=>stOf(j)==='sent').length;
+    // Recruiters you know who wrote to you this year: the warmest people to ask.
+    const trk=(p.profile.tracks||[]).find(t=>t.id===p.track)||{};
+    out.recruiters=addJobs(conns.filter(c=>c.mf && c.mf>=yearAgo && RECRUITER.test(c.p)).sort((a,b)=>b.mf.localeCompare(a.mf)).slice(0,15).map(c=>
+      Object.assign(blank(), { title:c.p||'Recruiter', company:c.c, channel:'person', source:'LinkedIn messages', dir:p.track,
+        description:`Wrote to you on LinkedIn, last on ${c.mf}.\nAsk: whether they are hiring${trk.label?` for ${trk.label}`:''}, and what they would want to see.`,
+        // ponytail: a rule of thumb, not a reading -- they wrote first, so reachability is high.
+        ai_score:'65', ai_reachability:'85', ai_confidence:'low', contacts:JSON.stringify([{ name:c.n, role:c.p }]) })));
+  }
+  track('linkedin_archive',{ conns:out.conns, talked:out.talked, apps:out.apps, recruiters:out.recruiters, positions:out.positions });
+  if(p) await save();
+  return out;
+}
+/* Reading the archive, and saying back what came of it. */
+async function archiveDialog(file){
+  const d=modal(`<div class="eyebrow">Your LinkedIn data</div><h2 style="margin:6px 0 10px">Reading ${esc(file.name)}</h2>
+    <p style="color:var(--muted)"><span class="spin"></span> In this browser. What your messages say is never read or kept.</p>`);
+  try{
+    const r=await importArchive(file);
+    const line=(n,t)=>n?`<li>${t}</li>`:'';
+    d.innerHTML=`<div class="eyebrow">Your LinkedIn data</div><h2 style="margin:6px 0 10px">Done</h2>
+      <ul class="youlist">
+        ${line(r.conns, `<b>${r.conns}</b> connections${r.talked?`, <b>${r.talked}</b> of them people you wrote to in the last year. They come first wherever you know someone.`:'.'}`)}
+        ${line(r.positions||r.skills, `Your profile: <b>${r.positions}</b> roles and <b>${r.skills}</b> skills, ready to tune for each direction on You.`)}
+        ${line(r.apps, `<b>${r.apps}</b> past applications added${r.waiting?`, <b>${r.waiting}</b> from the last month waiting on a reply in Applied`:''}. They won't be suggested again.`)}
+        ${line(r.recruiters, `<b>${r.recruiters}</b> recruiters you know who wrote to you this year, added to People to ask.`)}
+      </ul>
+      ${r.conns||r.positions||r.apps?'':`<p class="err">Nothing usable was in that file. It should be LinkedIn's data archive, the .zip they email you.</p>`}
+      <div class="btn-row" style="margin-top:12px"><button class="btn-go btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
+    render();
+  }catch(e){
+    d.innerHTML=`<div class="eyebrow">Your LinkedIn data</div><p class="err">Couldn't read it. ${esc(e.message)}</p>
+      <div class="btn-row"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`;
+  }
+}
+/* The archive's profile as plain text, the shape a CV is read in. */
+function liText(li, name){
+  const ln=[name, li.headline, '', li.summary, '', 'EXPERIENCE'];
+  li.positions.forEach(x=>ln.push(`- ${x.title} at ${x.company} (${x.start||'?'} to ${x.end||'present'})${x.where?', '+x.where:''}`, x.desc?'  '+x.desc:''));
+  if(li.education.length) ln.push('', 'EDUCATION', ...li.education.map(x=>`- ${[x.degree,x.school].filter(Boolean).join(', ')} (${x.start||''} to ${x.end||''})`));
+  if(li.skills.length) ln.push('', 'SKILLS', li.skills.join(', '));
+  return ln.filter(x=>x!==undefined).join('\n').replace(/\n{3,}/g,'\n\n').trim();
 }
 /* Companies in the network worth a look for this direction: more people there,
    and people whose job titles share words with the direction, rank higher. */
@@ -8685,16 +8835,16 @@ function renderCompanies(){
               ['culture', fit===null?'unread':fit>0?'fits you':fit<0?'clashes':'neutral', fit===null||fit===0?'quiet':fit<0?'due':'']],
       acts: pri + (warm.length?`<button class="btn-sm" data-act="pitch" data-i="${i}">Draft an approach</button>`:'')
         + `<button class="btn-sm" data-pulse="${i}" ${busy?'disabled':''}>${pu?'Check again':'What’s new?'}</button><button class="btn-sm" data-act="goto" data-i="${i}">Open</button>`,
-      pop: (warm.length?`<div><b>You know:</b> ${warm.slice(0,4).map(x=>esc(x.n)+(x.p?` (${esc(x.p)})`:'')).join(', ')}</div>`:'')
+      pop: (warm.length?`<div><b>You know:</b> ${warm.slice(0,4).map(x=>esc(x.n)+(x.p?` (${esc(x.p)})`:'')+(x.m?` \u00b7 last wrote ${esc(x.m)}`:'')).join(', ')}</div>`:'')
         + (why?`<div style="margin-top:3px">${esc(why.slice(0,240))}</div>`:'') + pulseHtml(j, prof) });
   };
   const setupDone = conns.length && workSet(prof);
   return `<div class="costrip">
       <span class="co-lead">Most work is reached through a company — best of all through someone who works there.</span>
       <button class="btn-sm ${targets.length?'':'btn-go'}" id="coSuggest" ${busy?'disabled':''}>Suggest for ${esc(trk.label||'me')}</button>
-      <button class="btn-sm" id="coConns" title="LinkedIn → Settings → Data privacy → Get a copy of your data → Connections">${conns.length?`Network · ${conns.length}`:'Add LinkedIn connections'}</button>
-      <input type="file" id="coConnFile" accept=".csv,text/csv" style="display:none"></div>
-    ${setupDone||conns.length?'':`<p class="hint" style="margin:-4px 0 14px">Get the file from LinkedIn: <b>Settings → Data privacy → Get a copy of your data → Connections</b>. It arrives by email within minutes. It is read and kept in this browser, never uploaded. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
+      <button class="btn-sm" id="coConns" title="LinkedIn → Settings → Data privacy → Get a copy of your data">${conns.length?`Network · ${conns.length}`:'Add your LinkedIn data'}</button>
+      <input type="file" id="coConnFile" accept=".zip,application/zip,.csv,text/csv" style="display:none"></div>
+    ${setupDone||conns.length?'':`<p class="hint" style="margin:-4px 0 14px">Get it from LinkedIn: <b>Settings → Data privacy → Get a copy of your data</b>, then the whole archive (or at least Connections, Messages, Profile, Positions and Job applications). It arrives by email as a .zip; add the .zip here as it is. It is read in this browser. Your connections, and who you last wrote to and when, stay in this browser; <b>what your messages say is never read or kept</b>. Your profile (headline, roles, skills) is saved to your account, so it can be tuned for each direction. Only two things go to the AI that writes for you: the <i>names of companies</i> in your network, when you ask for suggestions, and one person's name and job title, when you draft a message to them.</p>`}
     ${targets.length?`${targets.some(t=>pulseStale(t.j))?`<div class="listhead"><span style="color:var(--muted);font-size:12px">${targets.length} to approach</span><div class="spacer"></div><button class="btn-sm" id="coPulseAll" ${busy?'disabled':''}>Check what’s new at ${Math.min(10,targets.filter(t=>pulseStale(t.j)).length)} — about 2 AI credits each</button></div>`:''}
       ${sectOf('go','Ask someone you know','You know someone there. A short note asking for fifteen minutes beats any application.',targets.filter(t=>t.warm.length).length,targets.filter(t=>t.warm.length).map(coRow).join(''))}
       ${sectOf('','Approach cold','No one you know yet. One specific, short message to the right person.',targets.filter(t=>!t.warm.length).length,targets.filter(t=>!t.warm.length).map(coRow).join(''))}`
@@ -8710,6 +8860,7 @@ function bindCompanies(){
   const s=$('#coSuggest'); if(s) s.onclick=()=>{ track('companies_suggest'); suggestDialog(); };
   const f=$('#coConnFile'), b=$('#coConns');
   if(b && f){ b.onclick=()=>f.click(); f.onchange=e=>{ const file=e.target.files[0]; if(!file) return;
+    if(/\.zip$/i.test(file.name)){ f.value=''; return archiveDialog(file); }
     const r=new FileReader(); r.onload=()=>{
       const list=parseConnections(String(r.result||''));
       if(!list){ alert("That doesn't look like LinkedIn's Connections.csv — it needs the First Name and Company columns."); return; }
@@ -9736,6 +9887,8 @@ document.addEventListener('click',e=>{
   if(e.target.closest && e.target.closest('[data-wants]')) return askWants();
   if(e.target.closest && e.target.closest('[data-showprof]')) return showProfile();
   if(e.target.closest && e.target.closest('[data-opendecide]')){ TAB='unapplied'; SEL_JOB=null; render(); window.scrollTo(0,0); return; }
+  const lo=e.target.closest && e.target.closest('[data-lio]'); if(lo) return showLinkedIn(lo.dataset.lio);
+  const lt=e.target.closest && e.target.closest('[data-liotune]'); if(lt) return tuneLinkedIn(lt.dataset.liotune);
   const st=e.target.closest && e.target.closest('[data-step]');
   if(st) return doStep(st.dataset.step);
   const sl=e.target.closest && e.target.closest('[data-steplater]');
@@ -10065,6 +10218,89 @@ Return ONLY this JSON:
 }
 /* The saved CV: read it, edit it, copy it, or print it to PDF. Edits are saved
    back to the job, so the version you sent is the version that is kept. */
+/* Your LinkedIn, for one direction (2026-10-29). One AI call over the profile
+   from the archive (or the CV when there is none) and the wording of the
+   postings this direction actually turned up, so it is tuned to what
+   employers in that field write. The same rule as the tailored CV: it rewords
+   what the person has done and never invents any of it; what the postings
+   want that the profile does not show is said, not written in. Saved per
+   direction on the profile (profile.lio). */
+async function tuneLinkedIn(tid){
+  const p=P(), prof=p.profile, trk=(prof.tracks||[]).find(t=>t.id===tid); if(!trk) return;
+  const li=prof.linkedin, base=li ? liText(li, prof.name||'') : String(p.raw||'');
+  if(!base.trim()) return modal(`<div class="eyebrow">Your LinkedIn</div><h2 style="margin:6px 0 8px">Add your LinkedIn data or CV first</h2>
+    <p style="color:var(--muted)">This rewrites your own profile for the direction, so it needs one to start from.</p>
+    <div class="btn-row" style="margin-top:12px"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  const posts=p.jobs.filter(j=>chOf(j)==='posted' && isScored(j) && (j.dir===tid || (!j.dir && tid===p.track)))
+    .sort((a,b)=>fitOf(b)-fitOf(a)).slice(0,12);
+  const d=modal(`<div class="eyebrow">Your LinkedIn</div><h2 style="margin:6px 0 14px">For ${esc(trk.label)}</h2>
+    <p style="color:var(--muted)"><span class="spin"></span> Reading your profile against ${posts.length||'the'} postings for this direction…</p>`);
+  try{
+    const txt=await claude(`Tune a person's LinkedIn profile for one kind of work.
+
+THEIR PROFILE (the ONLY source of facts${li?', from their LinkedIn data':', from their CV'}):
+${base.slice(0,9000)}
+${li&&li.headline?`\nTHEIR CURRENT HEADLINE: ${li.headline}`:''}
+
+THE DIRECTION: ${trk.label}${(trk.titles||[]).length?` (titles: ${trk.titles.slice(0,6).join(', ')})`:''}
+
+WHAT EMPLOYERS IN THIS FIELD ARE WRITING (${posts.length} postings this person was shown):
+${posts.map(j=>`- ${j.title} at ${j.company}: ${String(j.description||'').replace(/\s+/g,' ').slice(0,500)}`).join('\n')||'(none yet -- use the direction and titles)'}
+
+${YOU_RULE}
+Rules -- these are absolute:
+- Use ONLY facts in the profile. Never add a skill, tool, number, employer, title, date or achievement it does not state.
+- You MAY reword so the profile uses the words these postings use, where the profile genuinely supports it, and lead with what matters for this direction.
+- Plain and specific. No buzzwords, no "passionate", no "results-driven", no emoji.
+
+Return ONLY this JSON, no preamble, no markdown fences:
+{"headline":"the LinkedIn headline, at most 220 characters",
+ "about":"the About section, 3 short paragraphs, first person, at most 1,500 characters",
+ "open_to_work":["the 5 job titles to set under Open to work, as LinkedIn and these postings name them"],
+ "skills":["10 skills to list, the 3 to pin first; only skills the profile shows"],
+ "experience":[{"title":"","company":"","bullets":["2-4 bullets reworded from what the profile says, for this direction"]}],
+ "gaps":["what these postings ask for that the profile does not show -- 0 to 6, short; NOT added above"],
+ "change":"one sentence: the biggest difference between how the current profile reads and what this direction needs, or empty"}`, TOK_CAP, 'flash');
+    const r=grabJSON(txt);
+    if(!r || !String(r.headline||'').trim()) throw new Error('the answer came back empty');
+    const arr=(x,n)=>[].concat(x||[]).map(String).filter(Boolean).slice(0,n);
+    prof.lio=Object.assign({}, prof.lio, { [tid]: { on:today(), from:li?'linkedin':'cv', posts:posts.length,
+      headline:String(r.headline).slice(0,240), about:String(r.about||'').slice(0,2000),
+      open_to_work:arr(r.open_to_work,5), skills:arr(r.skills,12), gaps:arr(r.gaps,6), change:String(r.change||'').slice(0,300),
+      experience:[].concat(r.experience||[]).slice(0,8).map(x=>({ title:String(x.title||''), company:String(x.company||''), bullets:arr(x.bullets,4) })) } });
+    track('linkedin_tuned',{ from:li?'linkedin':'cv', posts:posts.length, gaps:(r.gaps||[]).length });
+    await save(); d.remove(); render(); showLinkedIn(tid);
+  }catch(e){
+    d.remove();
+    if(e.message==='NEEDKEY'){ keyDialog(()=>tuneLinkedIn(tid)); return; }
+    modal(`<div class="eyebrow">Your LinkedIn</div><p class="err">Couldn't tune it. ${esc(e.message)}</p>
+      <div class="btn-row"><button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  }
+}
+/* Each piece with its own Copy, in the order LinkedIn's edit screens ask for them. */
+function showLinkedIn(tid){
+  const p=P(), trk=(p.profile.tracks||[]).find(t=>t.id===tid)||{}, o=(p.profile.lio||{})[tid]; if(!o) return tuneLinkedIn(tid);
+  const box=(label,text,id)=>`<div class="eyebrow" style="margin-top:14px">${label}</div>
+    <div style="display:flex;gap:8px;align-items:flex-start;margin-top:6px"><div style="flex:1;white-space:pre-wrap;font-size:13.5px;line-height:1.5">${esc(text)}</div>
+    <button class="btn-sm" data-copy="${id}">Copy</button></div>`;
+  const texts={ h:o.headline, a:o.about, t:o.open_to_work.join('\n'), s:o.skills.join(', '),
+    ...Object.fromEntries(o.experience.map((x,k)=>['x'+k, x.bullets.map(b=>'- '+b).join('\n')])) };
+  const d=modal(`<div class="eyebrow">Your LinkedIn · for ${esc(trk.label||'this direction')}</div>
+    <h2 style="margin:6px 0 4px">Ready to paste</h2>
+    <p style="color:var(--muted);font-size:12.5px;margin:0">Written ${esc(o.on)} from your ${o.from==='linkedin'?'LinkedIn data':'CV'} and ${o.posts} postings for this direction. Nothing here is new about you; it is what you have done, in the words this field uses.</p>
+    ${o.change?`<div class="card" style="margin:12px 0 0;font-size:13.5px"><b>The biggest change:</b> ${esc(o.change)}</div>`:''}
+    ${box('Headline', o.headline, 'h')}
+    ${box('About', o.about, 'a')}
+    ${box('Open to work: job titles', o.open_to_work.join('\n'), 't')}
+    ${box('Skills (pin the first three)', o.skills.join(', '), 's')}
+    ${o.experience.map((x,k)=>box(`${esc(x.title)} \u00b7 ${esc(x.company)}`, texts['x'+k], 'x'+k)).join('')}
+    ${o.gaps.length?`<div class="eyebrow" style="margin-top:16px">What these postings ask for that your profile doesn't show</div>
+      <ul class="youlist">${o.gaps.map(g=>`<li>${esc(g)}</li>`).join('')}</ul><p class="hint">Not written in. If you have done any of it, add it to LinkedIn in your own words.</p>`:''}
+    <div class="btn-row" style="margin-top:16px"><button class="btn-sm" data-retune="${esc(tid)}">Write it again</button>
+      <button class="btn-sm" onclick="this.closest('.modal').remove()">Close</button></div>`);
+  d.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{ navigator.clipboard.writeText(texts[b.dataset.copy]||'').then(()=>{ b.textContent='Copied'; track('linkedin_copy',{ part:b.dataset.copy }); }, ()=>{ b.textContent='Copy failed'; }); });
+  const re=d.querySelector('[data-retune]'); if(re) re.onclick=()=>{ d.remove(); tuneLinkedIn(tid); };
+}
 function showCv(i){
   const p=P(), j=p.jobs[i], cv=cvOf(j); if(!cv) return tailorCv(i);
   const d=modal(`<div class="eyebrow">Your CV for ${esc(j.title)} · ${esc(j.company)}</div>
