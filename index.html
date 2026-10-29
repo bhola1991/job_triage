@@ -331,6 +331,7 @@
     --ink:var(--au-paper);--panel:var(--au-card);--panel2:var(--au-wash);--line:var(--au-ink);--hair:#E0C6B3;
     --text:var(--au-ink);--muted:#5A4A40;--dim:#6F5E53;
     --signal:var(--au-gr);--signal-hi:#155530;--on-signal:#fff;--cool:var(--au-gr);
+    --accent:var(--au-ink);--on-accent:var(--au-paper);
     --go:var(--au-gr);--on-go:#fff;--good:var(--au-gr);--go-line:var(--au-gr);--good-line:var(--au-gr);
     --go-tint:#E1E8D2;--good-tint:#E1E8D2;--signal-tint:#E1E8D2;--signal-glow:transparent;
     --warn:var(--au-rd);--due:var(--au-rd);--warn-line:var(--au-rd);--warn-tint:#F5D6CE;
@@ -1072,6 +1073,10 @@
      green, red, yellow or blue row without a second accent. */
   .btn-go,.btn-go:hover:not(:disabled){background:var(--accent);color:var(--on-accent);border-color:var(--accent);box-shadow:none}
   .btn-go:hover:not(:disabled){opacity:.88}
+  /* At night a near-white fill on every row of a long list glares, so a row at
+     rest outlines its button in the same ink and only the selected row, the
+     pane and the deck card fill it. Paper keeps the fill: ink on salmon is calm. */
+  :root:not([data-theme="light"]) .qitem:not(.sel) .btn-go:not(:hover):not(:focus-visible){background:transparent;color:var(--accent)}
   button:focus-visible{outline-color:var(--accent)}
   .btn-due,.btn-due:hover:not(:disabled){border-color:var(--due)}
   select,input[type=text],textarea{border:1.5px solid var(--line);border-radius:8px;background:var(--panel);color:var(--text)}
@@ -7712,7 +7717,7 @@ function nextSetup(p){
    rows below carry the instructions. */
 function setupCard(p){
   const all=setupSteps(p), n=nextSetup(p); if(!n) return '';
-  return rowCard({ title:esc(n.title), sub:esc(n.why), quiet:true, rank:'',
+  return rowCard({ title:esc(n.title), sub:esc(n.why), quiet:true, rank:String(all.findIndex(x=>x.id===n.id)+1),
     facts:[['set up', `${all.filter(x=>x.ok).length} of ${all.length}`, 'quiet']],
     acts:`<button class="btn-sm" data-step="${n.id}">${esc(n.btn)}</button><button class="btn-sm" data-steplater="${n.id}">Not now</button>` });
 }
