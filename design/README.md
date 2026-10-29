@@ -28,3 +28,12 @@ Three rules:
 1. A row carries at most one accent. If a job is both closing and overdue, the nearer deadline wins and the other becomes plain text.
 2. Score is never an accent. Colour says what to do; the number says how good it is.
 3. The accent is stated on the row's edge in both themes; the card behind it stays plain.
+
+## v3 amendment (2026-10-29, on branch `redesign-v3`)
+
+Monochrome plus one pop. The four status colours above keep their meaning, but they are no longer the only way to act:
+
+- `accent` / `on-accent` (ink on paper, near-white at night) are the one fill-weight button and the focus ring. Hueless, so they never read as a status. This replaces "go is the only filled button": go is now a row's edge and text.
+- Rule 1 is relaxed: a row carries at most one *status* accent, and may also carry the accent button.
+- Rule 2 is relaxed: a score may be set in weight and size (bold, larger), but never in a status colour.
+- Rule 3 stands: the status colour is the row's edge, the card stays plain.
