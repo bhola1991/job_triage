@@ -1137,16 +1137,25 @@ ${shown}` }] }),
 }
 
 /* The signed-out search's limit: ANON_PER_MIN searches a minute from one
-   address. ponytail: kept in this instance's memory, so each running instance
-   counts on its own and a cold start forgets; a table-backed limit is the
-   upgrade if job_index is ever scraped through it. */
+   address, counted in usage_events (source 'anon_search'). It was kept in
+   this function's memory until 2026-10-29, and in production that counted
+   nothing: 25 searches in a row were all answered, because requests do not
+   come back to the same running copy. The address is stored only as a salted
+   hash (the salt is the service key, which never leaves the server).
+   Supabase passes it as cf-connecting-ip / x-real-ip; there is no
+   x-forwarded-for, which is the other half of why the first version saw every
+   caller as "unknown". */
 const ANON_PER_MIN = 10;
-const ANON_HITS = new Map<string, number[]>();
-function anonAllowed(ip: string) {
-  const now = Date.now(), recent = (ANON_HITS.get(ip) || []).filter((t) => now - t < 60_000);
-  if (recent.length >= ANON_PER_MIN) return false;
-  recent.push(now); ANON_HITS.set(ip, recent);
-  if (ANON_HITS.size > 5000) ANON_HITS.clear();        // never grows without bound
+async function anonAllowed(req: Request) {
+  const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret("SUPABASE_SERVICE_ROLE_KEY") + "|" + ip));
+  const who = Array.from(new Uint8Array(digest).slice(0, 12), (b) => b.toString(16).padStart(2, "0")).join("");
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const { count, error } = await admin.from("usage_events").select("id", { count: "exact", head: true })
+    .eq("source", "anon_search").eq("note", who).gte("created_at", since);
+  if (error) return true;                 // a ledger hiccup must not take the landing's search down
+  if ((count || 0) >= ANON_PER_MIN) return false;
+  await logUsage([{ user_id: null, kind: "api", source: "anon_search", units: 1, cost_inr: 0, note: who }]);
   return true;
 }
 
@@ -1176,7 +1185,7 @@ async function handle(req: Request): Promise<Response> {
        public postings -- touches no person's rows and spends nothing. Every
        other action still needs a user, and nothing below is reached without one. */
     if (!user && b.action !== "index_search") throw new Http(401, "sign in first");
-    if (!user && !anonAllowed((req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown"))
+    if (!user && !(await anonAllowed(req)))
       throw new Http(429, "That is a lot of searches in a minute. Try again shortly, or make your free account.");
     // The same token, now as a client the database will police. See the note by
     // `admin` above for which queries are allowed to use which.
