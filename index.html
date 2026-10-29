@@ -10288,7 +10288,7 @@ function showLinkedIn(tid){
   const d=modal(`<div class="eyebrow">Your LinkedIn · for ${esc(trk.label||'this direction')}</div>
     <h2 style="margin:6px 0 4px">Ready to paste</h2>
     <p style="color:var(--muted);font-size:12.5px;margin:0">Written ${esc(o.on)} from your ${o.from==='linkedin'?'LinkedIn data':'CV'} and ${o.posts} postings for this direction. Nothing here is new about you; it is what you have done, in the words this field uses.</p>
-    ${o.change?`<div class="callout" style="margin-top:12px">${esc(o.change)}</div>`:''}
+    ${o.change?`<div class="card" style="margin:12px 0 0;font-size:13.5px"><b>The biggest change:</b> ${esc(o.change)}</div>`:''}
     ${box('Headline', o.headline, 'h')}
     ${box('About', o.about, 'a')}
     ${box('Open to work: job titles', o.open_to_work.join('\n'), 't')}
