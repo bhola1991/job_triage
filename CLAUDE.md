@@ -503,6 +503,23 @@ phone, and is absent in between, where the card's own headline carries the
 page. Returning visitors ("Welcome back.") and the reset, claim and recover
 screens do not get it.
 
+**First-time visitors also get a landing under the card** (2026-10-28,
+`landHtml`, `bindLand`): the free job search with no account (`firstHtml`, the
+same one onboarding opens on; "Or try a search first, no account ↓" links to
+it), "How your first week could go" (five steps, labelled an example), four
+tips that help whether or not they sign up, and "Ready when you are." with the
+real free allowance. Every "Make my free account" goes back to the card; once
+the card has scrolled away the same button rides along the bottom
+(`.au-stick`). The card's headline is "Get to your next job, one clear step at
+a time." Signed out, the edge function runs `index_search` and nothing else:
+the last 30 days only, and at most `ANON_PER_MIN` searches a minute per
+address, counted in `usage_events` (source `anon_search`, the address only as a
+salted hash; it was in memory until 2026-10-29 and counted nothing in
+production -- and Supabase sends the address as `cf-connecting-ip`, not
+`x-forwarded-for`). Landing events (`land_*`, `first_*`) wait
+in `sessionStorage` and are sent after sign-in, for testers only, like every
+other `track()`.
+
 **A board search is the long wait, so it gets a second character.** `waitScene`
 gives the wait a companion (`.wait.co`, `.wait-pal`): someone stands at the end
 of a taller road and the car drives up to them, then starts over (`driveTo`). A

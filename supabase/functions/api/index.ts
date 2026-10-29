@@ -1136,6 +1136,29 @@ ${shown}` }] }),
   return { body: id, read: read.text.length, rendered, followed: read.followed.length, named: list.length, kept: rows.length };
 }
 
+/* The signed-out search's limit: ANON_PER_MIN searches a minute from one
+   address, counted in usage_events (source 'anon_search'). It was kept in
+   this function's memory until 2026-10-29, and in production that counted
+   nothing: 25 searches in a row were all answered, because requests do not
+   come back to the same running copy. The address is stored only as a salted
+   hash (the salt is the service key, which never leaves the server).
+   Supabase passes it as cf-connecting-ip / x-real-ip; there is no
+   x-forwarded-for, which is the other half of why the first version saw every
+   caller as "unknown". */
+const ANON_PER_MIN = 10;
+async function anonAllowed(req: Request) {
+  const ip = req.headers.get("cf-connecting-ip") || req.headers.get("x-real-ip") || (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret("SUPABASE_SERVICE_ROLE_KEY") + "|" + ip));
+  const who = Array.from(new Uint8Array(digest).slice(0, 12), (b) => b.toString(16).padStart(2, "0")).join("");
+  const since = new Date(Date.now() - 60_000).toISOString();
+  const { count, error } = await admin.from("usage_events").select("id", { count: "exact", head: true })
+    .eq("source", "anon_search").eq("note", who).gte("created_at", since);
+  if (error) return true;                 // a ledger hiccup must not take the landing's search down
+  if ((count || 0) >= ANON_PER_MIN) return false;
+  await logUsage([{ user_id: null, kind: "api", source: "anon_search", units: 1, cost_inr: 0, note: who }]);
+  return true;
+}
+
 async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -1154,14 +1177,19 @@ async function handle(req: Request): Promise<Response> {
       if (sb.action === "exam_refresh") return json(await examRefresh(String(sb.body || "")));
       throw new Http(403, "the service key runs exam_refresh only");
     }
+    const b = await req.json().catch(() => ({}));
     const { data: auth } = await admin.auth.getUser(token);
-    const user = auth?.user?.id;
-    if (!user) throw new Http(401, "sign in first");
+    const user = auth?.user?.id ?? "";
+    /* Signed out, the one thing open is index_search (2026-10-28): the landing
+       page shows real jobs before asking for an account. It reads job_index --
+       public postings -- touches no person's rows and spends nothing. Every
+       other action still needs a user, and nothing below is reached without one. */
+    if (!user && b.action !== "index_search") throw new Http(401, "sign in first");
+    if (!user && !(await anonAllowed(req)))
+      throw new Http(429, "That is a lot of searches in a minute. Try again shortly, or make your free account.");
     // The same token, now as a client the database will police. See the note by
     // `admin` above for which queries are allowed to use which.
     const me = asCaller(token);
-
-    const b = await req.json().catch(() => ({}));
     switch (b.action) {
       case "packs":
         return json({ packs: PACKS, costs: { ...COST, llmPro: LLM_COST.pro, llmFlash: LLM_COST.flash } });
@@ -1661,7 +1689,8 @@ async function handle(req: Request): Promise<Response> {
         const titles = (Array.isArray(b.titles) ? b.titles : [])
           .map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, MAX_TITLES);
         if (!titles.length) throw new Http(400, "no titles");
-        const days = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), 365);
+        // Signed out: the last 30 days only, which is all the landing asks for.
+        const days = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), user ? 365 : 30);
         const limit = Math.min(Math.max(Math.ceil(Number(b.limit) || 60), 1), 200);
         const { data, error } = await admin.rpc("search_index",
           { p_titles: titles, p_days: days, p_limit: limit });

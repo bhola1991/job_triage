@@ -365,6 +365,23 @@
     .au-hero{display:block;margin:16px 16px 0 22px}.au-hero svg{height:104px}
     .au-sign button,.au-mail>summary{min-height:44px}
   }
+  /* The landing under the card: the onboarding paper, one 760px column. */
+  .au-peek{display:block;margin-top:12px;text-align:center;font-size:14px;font-weight:600;color:var(--au-ink)}
+  .au-land{min-height:0;padding:8px 16px 110px;border-top:1.5px solid var(--au-ink)}
+  .land-sec{max-width:760px;margin:0 auto;padding:36px 0 8px}
+  #app .land-sec h2{font-size:26px;line-height:1.15;letter-spacing:-.02em;font-weight:750;margin:0 0 8px}
+  .land-sec h3{font-size:16px;margin:0 0 6px}
+  .land-sec .card p{margin:0;font-size:14.5px;line-height:1.5}
+  .land-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+  .land-grid .card{margin:0}
+  .land-path{margin:14px 0 18px;padding:0;list-style:none;counter-reset:lp}
+  .land-path li{counter-increment:lp;position:relative;padding:0 0 14px 42px;font-size:15px;line-height:1.5}
+  .land-path li::before{content:counter(lp);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;
+    border:1.5px solid var(--au-ink);display:flex;align-items:center;justify-content:center;font:700 13px var(--mono)}
+  .au-stick{position:fixed;left:0;right:0;bottom:0;z-index:20;display:flex;justify-content:center;
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom));background:var(--au-paper);border-top:1.5px solid var(--au-ink)}
+  .au-stick[hidden]{display:none}
+  .au-land .btn-go{min-height:44px}
   .steps{display:flex;gap:0;margin-bottom:30px;border-bottom:1px solid var(--line)}
   .stp{flex:1;padding:0 0 9px;font-size:11.5px;color:var(--dim);border-bottom:2px solid transparent;
     font-family:var(--mono);letter-spacing:.06em;text-transform:uppercase}
@@ -1545,14 +1562,16 @@ let FIRST = { q:'', where:'', busy:false, rows:null, err:'' };
 const FIRST_IDEAS = ['Content writer','Data analyst','Accounts assistant','Sales executive','Teacher','Customer support'];
 async function firstSearch(){
   if(FIRST.busy) return;              // one search at a time: a late answer must not overwrite a newer one
-  const q=FIRST.q.trim(); if(q.length<3){ FIRST.err='Say a kind of work, for example "content writer".'; return render(); }
+  const q=FIRST.q.trim(); if(q.length<3){ FIRST.err='Type a kind of work, for example "content writer".'; return render(); }
   // The last results go now, so a failed search cannot show them under the new words.
   FIRST.busy=true; FIRST.err=''; FIRST.rows=null; render();
   try{
     const r=await hosted('index_search',{ titles:[q], since_days:30, limit:200 });
     FIRST.rows=(r && r.jobs)||[];
     track('first_search',{ n:FIRST.rows.length, where:!!FIRST.where.trim() });
-  }catch(e){ FIRST.err='The job collection did not answer just now. Try again, or start with your CV below.'; }
+  }catch(e){ FIRST.err=USER ? 'The job collection did not answer just now. Try again, or start with your CV below.'
+    : String(e && e.message || '').startsWith('That is a lot of searches') ? e.message
+    : 'The job collection did not answer just now. Try again, or make your free account.'; }
   FIRST.busy=false; render();
 }
 /* The search, and what it found: those near them first, as plain rows. */
@@ -1576,9 +1595,20 @@ function firstHtml(){
       <button class="btn-go" id="firstGo" ${FIRST.busy?'disabled':''}>${FIRST.busy?'<span class="spin"></span> Looking\u2026':'Show me jobs'}</button></div>
     ${FIRST.rows?'':`<div class="chips" style="margin-top:10px">${FIRST_IDEAS.map(x=>`<button class="chip" data-firstidea="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
     ${FIRST.err?`<p class="err">${esc(FIRST.err)}</p>`:''}
-    ${head}${rows.length?`<div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="firstCv">Rank these for me: add my CV</button><span class="say" style="margin:0">Days since posted on the left.</span></div>`:''}
+    ${head}${rows.length?`<div class="btn-row" style="margin-top:8px"><button class="btn-go btn-sm" id="firstCv">${USER?'Rank these for me: add my CV':'Rank these for me: make my free account'}</button><span class="say" style="margin:0">Days since posted on the left.</span></div>`:''}
     ${list?`<div style="margin-top:10px">${list}</div>`:''}
-    ${rows.length>show.length?`<p class="say" style="margin-top:8px">${rows.length-show.length} more. Add your CV and they are ranked by how well they fit you, and how likely you are to hear back.</p>`:''}`;
+    ${rows.length>show.length?`<p class="say" style="margin-top:8px">${rows.length-show.length} more. ${USER?'Add your CV':'Make an account, add your CV,'} and they are ranked by how well they fit you, and how likely you are to hear back.</p>`:''}`;
+}
+/* The search's controls, wherever firstHtml is drawn: onboarding's first step,
+   and the signed-out landing. Only what "add my CV" does differs. */
+function bindFirst(onCv){
+  if(!$('#firstGo')) return;
+  const take=()=>{ FIRST.q=$('#firstQ').value; FIRST.where=$('#firstWhere').value; };
+  $('#firstGo').onclick=()=>{ take(); firstSearch(); };
+  ['#firstQ','#firstWhere'].forEach(id=>$(id).onkeydown=e=>{ if(e.key==='Enter'){ take(); firstSearch(); } });
+  document.querySelectorAll('[data-firstidea]').forEach(b=>b.onclick=()=>{ take(); FIRST.q=b.dataset.firstidea; firstSearch(); });
+  document.querySelectorAll('[data-firstopen]').forEach(b=>b.onclick=()=>{ track('first_open'); window.open(b.dataset.firstopen,'_blank','noopener'); });
+  if($('#firstCv')) $('#firstCv').onclick=onCv;
 }
 let RANGE = null, TAB = 'unapplied', busy = false;   // To decide is home (feedback #21); the map lives inside it
 let MAPON = false;
@@ -5937,14 +5967,21 @@ function trackSend(row){
   try{ SB.from('activity').insert(row).then(()=>{},()=>{}); }catch(e){}
 }
 function track(kind, detail){
-  if(!CLOUD || !USER) return;
+  if(!CLOUD) return;
   const row={ kind:String(kind).slice(0,40), detail:detail||{} };
+  /* Signed out, public.activity takes nothing (insert is for authenticated
+     rows only), so the landing's events wait in this tab and go with the
+     first batch after sign-in. Google's redirect keeps the tab; an email
+     confirmation opened in a new one does not, and those are lost. */
+  if(!USER){ if(!/^(land_|first_)/.test(row.kind)) return; try{ const q=JSON.parse(sessionStorage.getItem('triage:preq')||'[]');
+    if(q.length<50){ q.push(row); sessionStorage.setItem('triage:preq',JSON.stringify(q)); } }catch(e){} return; }
   if(!TRACK_READY){ if(TRACK_Q.length<50) TRACK_Q.push(row); return; }
   if(TESTER) trackSend(row);
 }
 function trackReady(){
   TRACK_READY=true;
-  const q=TRACK_Q; TRACK_Q=[];
+  let pre=[]; try{ pre=JSON.parse(sessionStorage.getItem('triage:preq')||'[]'); sessionStorage.removeItem('triage:preq'); }catch(e){}
+  const q=pre.concat(TRACK_Q); TRACK_Q=[];
   if(CLOUD && USER && TESTER) q.forEach(trackSend);
 }
 /* Errors that only ever happen in somebody's browser. Capped per page load:
@@ -6456,8 +6493,14 @@ document.addEventListener('click',e=>{
 });
 
 /* ═══════════════ ONBOARDING ═══════════════ */
+let ONB_SEEN=-1;   // the step last drawn, so each start and finish is tracked once, not once per render
 function renderOnb(){
   const steps=['Your profile','What we found','Pick a direction','What you want'];
+  if(ONB.step!==ONB_SEEN){
+    if(ONB_SEEN>=0 && ONB.step>ONB_SEEN) track('profile_step_completed',{ step:ONB_SEEN+1 });
+    track('profile_step_started',{ step:ONB.step+1 });
+    ONB_SEEN=ONB.step;
+  }
   let body='';
 
   if(ONB.step===0){
@@ -6639,14 +6682,7 @@ function renderOnb(){
     USER=null; DB={profiles:{},current:null}; VIEW='onb'; render();
   };
   if(ONB.step===0){
-    if($('#firstGo')){
-      const take=()=>{ FIRST.q=$('#firstQ').value; FIRST.where=$('#firstWhere').value; };
-      $('#firstGo').onclick=()=>{ take(); firstSearch(); };
-      ['#firstQ','#firstWhere'].forEach(id=>$(id).onkeydown=e=>{ if(e.key==='Enter'){ take(); firstSearch(); } });
-      document.querySelectorAll('[data-firstidea]').forEach(b=>b.onclick=()=>{ take(); FIRST.q=b.dataset.firstidea; firstSearch(); });
-      document.querySelectorAll('[data-firstopen]').forEach(b=>b.onclick=()=>{ track('first_open'); window.open(b.dataset.firstopen,'_blank','noopener'); });
-      if($('#firstCv')) $('#firstCv').onclick=()=>{ track('first_cv'); $('#dropProf').scrollIntoView({behavior:'smooth', block:'center'}); };
-    }
+    bindFirst(()=>{ track('first_cv'); $('#dropProf').scrollIntoView({behavior:'smooth', block:'center'}); });
     hookDrop($('#dropProf'),$('#fileProf'),onProfileFile);
     $('#pasteProf').onclick=e=>{ e.preventDefault(); pasteProfileDialog(); };
     $('#onbKeys').onclick=()=>keyDialog(()=>render());
@@ -6815,6 +6851,7 @@ async function finishOnb(){
   // To decide, never You: the list is not empty any more (jobs show the moment they are found), and
   // both newcomers of 25-26 Oct landed on You, waited there, and left without ever seeing a job.
   DB.current=id; VIEW='app'; TAB='unapplied';
+  track('profile_step_completed',{ step:4 }); ONB_SEEN=-1;
   ONB=blankOnb();
   await save(); render();
   fillDirection();                    // not awaited: it runs like a search the person can watch
@@ -10575,8 +10612,8 @@ function renderAuth(){
      sight of: a half-typed name, a sign-up in progress, a "check your email". */
   const mailOpen = up || AUTH.open || !!AUTH.user || !!AUTH.pass || !!AUTH.msg;
   $('#root').innerHTML=auScene(`
-      <h2>${returning?'Welcome back.':'Stop applying to jobs that won\u2019t write back.'}</h2>
-      ${returning?'':`<p class="au-pitch">We score every job twice \u2014 <b>can you do it</b>, and <b>will they reply</b> \u2014 then show you which to apply to first.</p>`}
+      <h2>${returning?'Welcome back.':'Get to your next job, one clear step at a time.'}</h2>
+      ${returning?'':`<p class="au-pitch">Tell us the work you want. We find the jobs worth your time, show you <b>which are likely to write back</b>, and help you send each one.</p>`}
       <button class="au-b au-go" id="authGoogle" ${AUTH.busy?'disabled':''}>
         <span class="au-g"><svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84a4.14 4.14 0 0 1-1.8 2.72v2.26h2.92c1.7-1.57 2.68-3.88 2.68-6.62z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.92-2.26c-.81.54-1.84.87-3.04.87-2.34 0-4.32-1.58-5.03-3.7H.96v2.33A9 9 0 0 0 9 18z"/><path fill="#FBBC05" d="M3.97 10.73A5.4 5.4 0 0 1 3.68 9c0-.6.1-1.19.29-1.73V4.94H.96A9 9 0 0 0 0 9c0 1.45.35 2.83.96 4.06l3.01-2.33z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0A9 9 0 0 0 .96 4.94l3.01 2.33C4.68 5.16 6.66 3.58 9 3.58z"/></svg></span>
         Continue with Google
@@ -10605,7 +10642,10 @@ function renderAuth(){
           </div>
         </div>
       </details>
-      <div class="au-fine">${LEGAL_LINKS}</div>`, returning ? '' : artSvg('they','','they can\u2019t help you.'));
+      ${returning?'':`<a href="#landTry" class="au-peek" data-landcta="peek">Or try a search first, no account \u2193</a>`}
+      <div class="au-fine">${LEGAL_LINKS}</div>`, returning ? '' : artSvg('they','','they can\u2019t help you.'))
+    + (returning ? '' : landHtml());
+  if(!returning) bindLand();
 
   // Swapping mode or hitting an error re-renders the form, which would throw
   // away what was typed. Read it back into state before anything re-renders.
@@ -10692,6 +10732,63 @@ function renderAuth(){
     AUTH.mode='reset'; AUTH.err=''; AUTH.msg='';
     renderAuth();
   };
+}
+
+/* The landing.
+   What a first-time visitor sees under the sign-in card (2026-10-28): the
+   free search, so real jobs come before any account; a week as it could go;
+   four things worth knowing whether or not they sign up; and the account
+   offered again at the end, and at every depth once the card has scrolled
+   away. Every line says what the app does for them -- never what they lack. */
+const LAND_SEEN=new Set();   // landing events fire once per page load, not once per render
+const landCta = where => `<button class="btn-go" data-landcta="${where}">Make my free account</button>`;
+function landHtml(){
+  const q=FIRST.q.trim();
+  const tips=[
+    ['strong','What a strong application has','The posting\u2019s own words near the top of your CV. One line on why this place. Sent while the posting is fresh. We reword your CV for each job from what you have actually done, and tell you plainly anything it asks for that your CV does not show.'],
+    ['start','Start with one kind of work','Pick one, not five. Search it above, open three postings, and note the words they repeat. Those are the words your CV should be using.'],
+    ['silence','Silence is normal','Plenty of places never reply to anyone, and it says little about you. That is why every job here gets a second score, how likely they are to write back, so your effort goes where it is heard.'],
+    ['routes','Ads are one way in','A lot of work is filled by asking. Alongside postings you get people to ask, companies to approach and dates to watch, each with a message drafted for you.'] ];
+  return `<div class="ob-paper au-land">
+    <section class="land-sec" id="landTry" data-land="try"><div class="eyebrow">Try it now \u00b7 no account needed</div>${firstHtml()}</section>
+    <section class="land-sec" data-land="path"><h2>How your first week could go</h2>
+      <p class="say">An example of how it goes for one person. Your pace is yours.</p>
+      <ol class="land-path">
+        <li><b>Today.</b> Say the work you want${q?` \u2014 ${esc(q)}`:''}, and see what is open right now.</li>
+        <li><b>Add your CV.</b> Every job gets two scores: can you do it, and will they write back. The best few come first.</li>
+        <li><b>Send three.</b> Each with your CV reworded for that posting.</li>
+        <li><b>Follow up.</b> When a follow-up date passes, the app shows you who to nudge.</li>
+        <li><b>Hear back.</b> Replies land in one place, and the next step is always one button.</li></ol>
+      <div class="btn-row">${landCta('path')}</div></section>
+    <section class="land-sec"><h2>Useful before you sign up</h2>
+      <div class="land-grid">${tips.map(([id,h,t])=>`<div class="card" data-land="${id}"><h3>${h}</h3><p>${t}</p></div>`).join('')}</div></section>
+    <section class="land-sec" data-land="end"><h2>Ready when you are.</h2>
+      <p class="say">Your first ${FREE_SEARCH_START} job board searches are free, and so is the scoring that goes with them. You can delete everything from inside the app.</p>
+      <div class="btn-row">${landCta('end')}</div></section>
+    <div class="au-stick" id="auStick" hidden>${landCta('sticky')}</div></div>`;
+}
+function bindLand(){
+  bindFirst(()=>landGo('results'));
+  document.querySelectorAll('button[data-landcta]').forEach(b=>b.onclick=()=>landGo(b.dataset.landcta));
+  const peek=$('a[data-landcta]'); if(peek) peek.onclick=()=>track('land_peek');
+  $('#authGoogle').addEventListener('click',()=>track('land_cta',{ where:'card' }));
+  if(!LAND_SEEN.has('hook')){ LAND_SEEN.add('hook'); track('land_hook_view'); }
+  if(!window.IntersectionObserver) return;
+  const seen=new IntersectionObserver(es=>es.forEach(e=>{
+    const id=e.target.dataset.land;
+    if(e.isIntersecting && !LAND_SEEN.has(id)){ LAND_SEEN.add(id); track('land_block_view',{ block:id }); seen.unobserve(e.target); }
+  }),{ threshold:.5 });
+  document.querySelectorAll('[data-land]').forEach(el=>{ if(!LAND_SEEN.has(el.dataset.land)) seen.observe(el); });
+  // The account at every depth: once the card is out of sight, it rides along the bottom.
+  const stick=$('#auStick');
+  new IntersectionObserver(([e])=>{ stick.hidden=e.isIntersecting; }).observe($('.au-sign'));
+}
+/* Every "make my account" goes back to the card, with Google ready under the
+   keyboard and email one click below it -- the account is made in one place. */
+function landGo(where){
+  track('land_cta',{ where });
+  $('.au-sign').scrollIntoView({ behavior:'smooth', block:'start' });
+  $('#authGoogle').focus({ preventScroll:true });
 }
 
 /* Reset goes by email, not by username: the recovery link is sent to the
