@@ -732,8 +732,10 @@
   .qfact .v.go{color:var(--go)} .qfact .v.due{color:var(--due)}
   .qfact .v.closing{color:var(--closing)} .qfact .v.awaiting{color:var(--awaiting)}
   .qacts{display:flex;gap:7px;justify-content:flex-end;flex-wrap:wrap}
-  .btn-due{background:var(--due);border-color:var(--due);color:var(--on-due);font-weight:700}
-  .btn-due:hover:not(:disabled){background:var(--due);border-color:var(--due);color:var(--on-due);filter:brightness(1.08)}
+  /* v3: overdue is said by the row's edge and a due-coloured outline; the fill is
+     the one ink button, so a red row never carries a second fill-weight colour. */
+  .btn-due{background:var(--accent);border-color:var(--due);color:var(--on-accent);font-weight:700}
+  .btn-due:hover:not(:disabled){background:var(--accent);border-color:var(--due);color:var(--on-accent);opacity:.88}
   .btn-await{background:var(--awaiting-tint);border-color:var(--awaiting-line);color:var(--awaiting)}
   .btn-await:hover:not(:disabled){border-color:var(--awaiting);color:var(--awaiting)}
   /* The row's overflow. Always visible rather than revealed on hover, because a
@@ -1131,12 +1133,12 @@
     white-space:nowrap;position:relative;font-weight:400}
   .rail .r-it[hidden]{display:none}
   .r-ic{flex:0 0 42px;width:42px;height:42px;display:grid;place-items:center;position:relative;color:var(--text);
-    border:1.5px solid var(--line);border-radius:11px;background:var(--panel)}
+    border:1.5px solid var(--line);border-radius:10px;background:var(--panel)}
   button.r-it:hover .r-ic,.r-dir:hover .r-ic{background:var(--panel2);border-color:var(--text)}
-  .r-it.primary .r-ic,button.r-it.primary:hover .r-ic{background:var(--go);border-color:var(--go);color:var(--on-go)}
+  .r-it.primary .r-ic,button.r-it.primary:hover .r-ic{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
   /* Neutral on purpose: an accent here would be an instruction about nothing. */
   .r-ic.r-av{background:var(--panel2);border-radius:50%;font:700 13px var(--mono)}
-  .r-ic.r-jt{background:var(--brand);border-color:var(--brand);color:var(--panel);font:800 14px var(--disp);letter-spacing:-.02em}
+  .r-ic.r-jt{background:var(--accent);border-color:var(--accent);color:var(--on-accent);font:800 14px var(--disp);letter-spacing:-.02em}
   .r-lb{font-size:13.5px;font-weight:650;line-height:1.25;display:none;min-width:0}
   .r-lb small{display:block;font-weight:400;color:var(--muted);font-size:11.5px}
   .r-bd{position:absolute;right:-8px;top:-8px;min-width:19px;height:19px;border-radius:10px;border:1.5px solid var(--panel);
