@@ -1136,6 +1136,20 @@ ${shown}` }] }),
   return { body: id, read: read.text.length, rendered, followed: read.followed.length, named: list.length, kept: rows.length };
 }
 
+/* The signed-out search's limit: ANON_PER_MIN searches a minute from one
+   address. ponytail: kept in this instance's memory, so each running instance
+   counts on its own and a cold start forgets; a table-backed limit is the
+   upgrade if job_index is ever scraped through it. */
+const ANON_PER_MIN = 10;
+const ANON_HITS = new Map<string, number[]>();
+function anonAllowed(ip: string) {
+  const now = Date.now(), recent = (ANON_HITS.get(ip) || []).filter((t) => now - t < 60_000);
+  if (recent.length >= ANON_PER_MIN) return false;
+  recent.push(now); ANON_HITS.set(ip, recent);
+  if (ANON_HITS.size > 5000) ANON_HITS.clear();        // never grows without bound
+  return true;
+}
+
 async function handle(req: Request): Promise<Response> {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   try {
@@ -1154,14 +1168,19 @@ async function handle(req: Request): Promise<Response> {
       if (sb.action === "exam_refresh") return json(await examRefresh(String(sb.body || "")));
       throw new Http(403, "the service key runs exam_refresh only");
     }
+    const b = await req.json().catch(() => ({}));
     const { data: auth } = await admin.auth.getUser(token);
-    const user = auth?.user?.id;
-    if (!user) throw new Http(401, "sign in first");
+    const user = auth?.user?.id ?? "";
+    /* Signed out, the one thing open is index_search (2026-10-28): the landing
+       page shows real jobs before asking for an account. It reads job_index --
+       public postings -- touches no person's rows and spends nothing. Every
+       other action still needs a user, and nothing below is reached without one. */
+    if (!user && b.action !== "index_search") throw new Http(401, "sign in first");
+    if (!user && !anonAllowed((req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "unknown"))
+      throw new Http(429, "That is a lot of searches in a minute. Try again shortly, or make your free account.");
     // The same token, now as a client the database will police. See the note by
     // `admin` above for which queries are allowed to use which.
     const me = asCaller(token);
-
-    const b = await req.json().catch(() => ({}));
     switch (b.action) {
       case "packs":
         return json({ packs: PACKS, costs: { ...COST, llmPro: LLM_COST.pro, llmFlash: LLM_COST.flash } });
@@ -1661,7 +1680,8 @@ async function handle(req: Request): Promise<Response> {
         const titles = (Array.isArray(b.titles) ? b.titles : [])
           .map((x: unknown) => String(x).trim()).filter(Boolean).slice(0, MAX_TITLES);
         if (!titles.length) throw new Http(400, "no titles");
-        const days = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), 365);
+        // Signed out: the last 30 days only, which is all the landing asks for.
+        const days = Math.min(Math.max(Math.ceil(Number(b.since_days) || 30), 1), user ? 365 : 30);
         const limit = Math.min(Math.max(Math.ceil(Number(b.limit) || 60), 1), 200);
         const { data, error } = await admin.rpc("search_index",
           { p_titles: titles, p_days: days, p_limit: limit });
