@@ -42,7 +42,10 @@ self.addEventListener('fetch', e => {
         // and 502s too, so caching unconditionally let a deploy-window error
         // page overwrite a working shell -- and then be served as the offline
         // copy, bricking the app until the next successful online fetch.
-        if (res.ok) {
+        // Never under an address with a query: a post shared into the app
+        // arrives as ./?share=1&text=..., phone numbers and all, and would be
+        // kept here, one entry per share. Offline it still finds ./ (index.html).
+        if (res.ok && !new URL(req.url).search) {
           const copy = res.clone();
           caches.open(CACHE).then(c => c.put(req, copy)).catch(() => {});
         }
