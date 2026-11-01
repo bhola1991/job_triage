@@ -6818,6 +6818,7 @@ function openSteps(){
   // page closed): autoScore stands aside while a search is busy, and keeps its cap.
   if(!resumePending()) fillDirection().then(()=>autoScore()).catch(e=>console.warn('open fill:', e && e.message));
   refreshExamRows();                  // not awaited: the shared exam dates, laid on known bodies' rows
+  takeShare();                        // a post shared into the app from another one
 }
 async function finishOnb(){
   if(ONB.editing){
@@ -9688,9 +9689,38 @@ async function onCsv(text){
   if(added) await autoScore();
 }
 
-function pasteJobDialog(){
+/* Shared into the app (manifest.json share_target, a GET to ./?share=1&text=...): a
+   WhatsApp forward, an Instagram or Facebook post. Many Indian employers only
+   ever post there, and Meta gives no open way to read it, so the person who
+   saw it brings it in. Kept in sessionStorage because sign-in may come first;
+   the address is cleaned so a reload does not add it twice. */
+try{ const q=new URLSearchParams(location.search);
+  if(q.has('share')){ sessionStorage.setItem('triage:share', JSON.stringify({ title:q.get('title')||'', text:q.get('text')||'', url:q.get('url')||'' }));
+    history.replaceState(null,'',location.pathname); } }catch(e){}
+function takeShare(){
+  let s=null; try{ s=JSON.parse(sessionStorage.getItem('triage:share')||'null'); sessionStorage.removeItem('triage:share'); }catch(e){}
+  if(!s) return;
+  const post=[s.title,s.text].filter(Boolean).join('\n'), url=s.url || (post.match(/https?:\/\/\S+/)||[''])[0];
+  let host=''; try{ host=new URL(url).hostname; }catch(e){}
+  track('share_in',{ text:!!post.replace(url,'').trim(), host });
+  pasteJobDialog({ post, url });
+}
+/* One flash call: a post as people write it -- emoji, hashtags, "DM for
+   details" -- into the fields of a posting. Only what the post says. */
+async function readPost(post){
+  return grabJSON(await claude(`This was copied from WhatsApp, Instagram, Facebook or a group chat. If it advertises work (a job, an opening, freelance or gig work, an internship), pull the posting out of it. Use only what the post says; leave a field empty when it does not say it. Never invent a company or a place.
+Return ONLY a JSON object, no preamble, no markdown fences:
+{"is_job":true,"title":"","company":"","location":"","description":"the posting in full, without emoji or hashtags, keeping how to apply (email, phone number, link) and any pay, hours and requirements"}
+
+THE POST:
+${String(post).slice(0,6000)}`, 1200, 'flash'));
+}
+function pasteJobDialog(pre={}){
   const d=modal(`<div class="eyebrow">Add a listing</div><h2 style="margin:6px 0 12px">Paste the posting</h2>
-    <label class="lab">Title</label><input type="text" id="pTitle">
+    <label class="lab">A whole post, as it is: a WhatsApp forward, an Instagram caption, a Facebook post</label>
+    <textarea id="pPost" rows="4"></textarea>
+    <div class="btn-row" style="margin:8px 0 4px"><button class="btn-sm" id="pRead">Fill in from it</button><span class="hint" id="pReadNote"></span></div>
+    <label class="lab" style="margin-top:10px">Title</label><input type="text" id="pTitle">
     <label class="lab" style="margin-top:10px">Company</label><input type="text" id="pCo">
     <label class="lab" style="margin-top:10px">Location</label><input type="text" id="pLoc">
     <label class="lab" style="margin-top:10px">Link</label><input type="text" id="pUrl">
@@ -9704,7 +9734,24 @@ function pasteJobDialog(){
     j.location=d.querySelector('#pLoc').value.trim(); j.url=d.querySelector('#pUrl').value.trim();
     j.description=d.querySelector('#pDesc').value.trim(); j.source='Manual';
     if(!j.title){ alert('Needs a title at minimum.'); return; }
+    if(d.querySelector('#pPost').value.trim()) j.source='Shared post';
     addJobs([j]); await save(); render(); d.remove(); await autoScore(); };
+  const q=s=>d.querySelector(s), note=t=>{ q('#pReadNote').textContent=t; };
+  q('#pRead').onclick=async()=>{
+    const post=q('#pPost').value.trim(); if(!post) return note('Paste the post above first.');
+    q('#pRead').disabled=true; note('Reading it\u2026');
+    try{
+      const r=await readPost(post);
+      if(r.is_job===false) note('This does not read like a job post. Fill in below if it is one.');
+      else note('Filled in. Check it, then add it.');
+      [['#pTitle','title'],['#pCo','company'],['#pLoc','location'],['#pDesc','description']].forEach(([id,k])=>{ if(r[k] && !q(id).value.trim()) q(id).value=String(r[k]).slice(0,k==='description'?8000:160); });
+    }catch(e){ note('Could not read it just now. Fill in below.'); }
+    q('#pRead').disabled=false;
+  };
+  if(pre.url) q('#pUrl').value=pre.url;
+  if(pre.post){ q('#pPost').value=pre.post;
+    if(pre.post.replace(pre.url||'','').trim()) q('#pRead').click();
+    else note('Only the link came through (Instagram shares just that). Paste the caption above.'); }
 }
 
 /* Reveal a job wherever it lives. Called from the map, from the Dashboard's
