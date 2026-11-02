@@ -21,8 +21,8 @@
 # Files, and what losing each would cost:
 #   checks.json                 the liveness series (fatal, see above)
 #   jsonld.cache.json           pages already read; without it a night re-reads them
-#   sources.json                ATS slugs the harvest has found; the repo copy is the seed
-#   probe-boards.results.jsonl  boards already probed; the repo copy is the seed
+#   sources.json                ATS slugs the harvest has found, merged with the repo's on pull
+#   probe-boards.results.jsonl  boards already probed, merged with the repo's on pull
 set -euo pipefail
 cd "$(dirname "$0")"
 if [ -f ../../supabase/.env ]; then set -a; . ../../supabase/.env; set +a; fi
@@ -61,7 +61,12 @@ pull)
     else echo "  pull: no $f in the bucket; starting without it"; fi
   done
   for f in "${SMALL[@]}"; do
-    if curl -sS -f "${AUTH[@]}" "$API/object/$B/$f" -o "$f.pulled" 2>/dev/null; then mv "$f.pulled" "$f"; echo "  pulled $f"
+    # Merged, never replaced: the repo adds boards by hand, the bucket adds what
+    # the harvest finds, and both must reach the crawl (merge-state.js says why).
+    if curl -sS -f "${AUTH[@]}" "$API/object/$B/$f" -o "$f.pulled" 2>/dev/null; then
+      if [ -f "$f" ]; then node merge-state.js "$([ "$f" = sources.json ] && echo sources.json || echo lines)" "$f" "$f.pulled" > "$f.merged" && mv "$f.merged" "$f"; rm -f "$f.pulled"
+      else mv "$f.pulled" "$f"; fi
+      echo "  pulled $f (merged with the repo's)"
     else rm -f "$f.pulled"; echo "  pull: no $f in the bucket; using the repo's copy"; fi
   done ;;
 *) echo "usage: $0 init|push|pull" >&2; exit 2 ;;
