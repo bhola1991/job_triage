@@ -734,6 +734,7 @@
   .qrank.quiet{color:var(--muted)}
   .qt{font-size:14px;line-height:1.35}
   .qs{font-size:12px;color:var(--muted);margin-top:2px}
+  .qco{color:var(--dim);font-size:11.5px} .qitem.sel .qco{display:none}   /* company hiring facts: grey, a count is never an accent */
   /* The pipeline as one bar, so its shape reads before any of its rows do.
      Only the two stages that mean something take an accent (law: one
      instruction each); the rest are neutral. */
@@ -4277,7 +4278,7 @@ Return ONLY a JSON object, no preamble, no markdown fences, using these short ke
 For EACH job:
 - id: exactly as given
 - s (score): 0-100 FIT ONLY. How well does the described WORK match what this candidate can do and is targeting? Judge the work, not the title, and NOT whether they would win the process.
-- re (reachability): 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here.
+- re (reachability): 0-100, SEPARATELY. How likely is an application from THIS candidate to actually convert? Consider company prestige and applicant volume, whether credentials this candidate lacks are demanded, the seniority bar versus their level, signals of openness to non-traditional candidates, and company stage. A perfect-fit role at a famous employer scores HIGH on fit and LOW here. A job may carry "hiring": facts from the index about the company. Many roles open or new this week, or this role posted more than once, means more openings or a role that is hard to fill: better odds. A recruitment agency means a middleman between the candidate and the employer.
 - c (confidence): "h" (real job description) | "m" (short snippet) | "l" (title and company only)
 - f (flags): the codes that apply, [] if none. Each is an object: "code" from the set below, and "fact" -- the specific thing in THIS posting that makes the code true, max 10 words, lifted from what the posting actually says rather than generalised. "on-site Berlin, no remote" is a fact; "location mismatch" is just the code again in longer words. If you cannot point at something in the text, do not raise the flag.
   Codes: fit=strong fit, sen_hi=seniority too high, sen_lo=seniority too low, cred=credential gated, shape=wrong role shape, loc=location ineligible, thin=thin data, comp=high competition, open=non-traditional friendly, rare=rare combination fit
@@ -4351,6 +4352,46 @@ const CHECKS = new Map();        // job_key -> row from public.job_checks
 function liveOf(j){
   const c = CHECKS.get(keyOf(j));
   return c ? !c.closed_on : null;
+}
+/* Company hiring facts (2026-11-02): public.company_stats, rebuilt after every
+   nightly crawl from what the index already holds -- roles open, new this
+   week, the same title posted more than once, a recruitment agency or not.
+   The Mantiks idea turned round for the person looking: who is hiring now,
+   and where the odds are better. Facts, so grey: a count is never an accent.
+   Best effort: a company we know nothing about simply says nothing. */
+const COS = new Map();            // coKey(name) -> row, or null once asked and not found
+// The same spelling rule as public.company_key(): "Zeta Suite Pvt. Ltd." = "zeta suite".
+const coKey = s => String(s||'').toLowerCase().replace(/\b(private|pvt|limited|ltd|llp|inc|llc|gmbh|pte|corp|co)\b\.?/g,'').replace(/[^a-z0-9]+/g,'');
+async function fillCompanies(names){
+  try{
+    if(typeof SB==='undefined' || !SB || !cloudNow()) return false;
+    const ask=[...new Set((names||[]).map(String).filter(n=>coKey(n).length>=2 && !COS.has(coKey(n))))];
+    for(let i=0;i<ask.length;i+=300){
+      const part=ask.slice(i,i+300), r=await SB.rpc('company_stats_for',{ names:part });
+      if(r.error) return false;
+      part.forEach(n=>COS.set(coKey(n), null));
+      (r.data||[]).forEach(c=>COS.set(c.company_key, c));
+    }
+    return ask.length>0;
+  }catch(e){ return false; }
+}
+const coOf = j => COS.get(coKey(j.company)) || null;
+const repeatedHere = (j,c) => !!c && (c.repeated||[]).includes(String(j.title||'').toLowerCase().trim());
+/* The facts in words, for the row (short) and for the scorer (all of them). */
+function coFacts(j, short){
+  const c=coOf(j); if(!c) return '';
+  const bits=[];
+  if(c.is_agency) bits.push('a recruitment agency, not the employer');
+  if(repeatedHere(j,c)) bits.push('this role posted more than once');
+  if(c.new_7d>=3) bits.push(`${c.new_7d} new roles this week`);
+  else if(c.open_roles>=2) bits.push(`${c.open_roles} roles open`);
+  if(!short && c.days_open!=null) bits.push(`roles stay up about ${c.days_open} days`);
+  return (short ? bits.slice(0,2) : bits).join(', ');
+}
+let COS_ASKED=false;
+async function fillCompaniesOnce(){
+  const p=P(); if(COS_ASKED || !p) return; COS_ASKED=true;
+  if(await fillCompanies(p.jobs.filter(j=>isOpen(j)).map(j=>j.company).slice(0,900))) renderSoon();
 }
 /* Reachability is "is there a person to write to", which today we only know
    once contacts have been found. Absence means not-yet-looked, not nobody --
@@ -5077,6 +5118,7 @@ function addSpans(flags, desc){
 }
 
 async function scoreBatch(batch, prof, track, maxTok, tier){
+  await fillCompanies(batch.map(b=>b.j.company));     // best effort: what the index knows about each company's hiring
   const jobs = batch.map(b=>{
     const o={ id:String(b.i),
       title:String(b.j.title||''), company:String(b.j.company||''),
@@ -5085,6 +5127,7 @@ async function scoreBatch(batch, prof, track, maxTok, tier){
     // Anything a feed already dated is stated, not asked about — the model is
     // the last and least reliable source here, never a second opinion.
     if(saneDate(b.j.posted)) o.posted=b.j.posted;
+    const hiring=coFacts(b.j); if(hiring) o.hiring=hiring;
     return o;
   });
   const txt = await claude(sysPrompt(prof,track)+"\n\nJOBS TO SCORE:\n"+JSON.stringify(jobs), maxTok||TOK_CAP, tier);
@@ -6825,6 +6868,7 @@ function openSteps(){
   if(!resumePending()) fillDirection().then(()=>autoScore()).catch(e=>console.warn('open fill:', e && e.message));
   refreshExamRows();                  // not awaited: the shared exam dates, laid on known bodies' rows
   takeShare();                        // a post shared into the app from another one
+  fillCompaniesOnce();                // not awaited: what the index knows about each company's hiring
 }
 async function finishOnb(){
   if(ONB.editing){
@@ -7373,6 +7417,7 @@ function jobCard(j,i){
     : fact('state', 'closed', 'quiet') + (scored ? fact('fit / reach', `${f} · ${r}`, 'quiet') : fact('score','—','quiet'));
 
   const sub=dirMark(dirKey(j),dirLabel(dirKey(j)))+[j.company||'—', j.location, ch==='cold'?'cold approach':ch==='posted'?'posted role':OPP[ch].one].filter(Boolean).map(esc).join(' · ');
+  const hire=st==='new' && (ch==='posted'||ch==='cold') ? coFacts(j,true) : '';
   /* Where it sits, without leaving the list: a thumbnail of the map with this
      one dot on it. Shown on hover only, so a row at rest stays a row. */
   const mini = scored && !gone ? `<svg class="qmini" width="38" height="38" viewBox="0 0 38 38" aria-hidden="true"><path d="M3 3V35H35" fill="none" stroke="var(--line)" stroke-width="1"/><path d="M19 3V35M3 19H35" stroke="var(--hair)" stroke-width="1"/><circle cx="${(3+r/100*32).toFixed(1)}" cy="${(35-f/100*32).toFixed(1)}" r="3.2" fill="${st==='new'&&ch!=='cold'?`var(--dir-${dirIdx(dirKey(j))})`:'var(--text)'}"/></svg>` : '';
@@ -7384,7 +7429,7 @@ function jobCard(j,i){
     <div class="qrow">
       <i class="qbar"></i>
       <span class="qrank ${rankCls}">${gone?'—':(scored?Math.round(rankOf(j)):'—')}</span>
-      <div style="min-width:0"><div class="qt">${esc(j.title||'(untitled)')}</div><div class="qs">${sub}</div></div>
+      <div style="min-width:0"><div class="qt">${esc(j.title||'(untitled)')}</div><div class="qs">${sub}</div>${hire?`<div class="qs qco">${esc(hire)}</div>`:''}</div>
       <div class="qfacts">${facts}${mini}</div>
       <div class="qacts">${acts}</div>
     </div>${hist}

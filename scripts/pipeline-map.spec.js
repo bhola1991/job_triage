@@ -362,6 +362,9 @@ module.exports = {
     'st.exams':   { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'exam_deadlines \u2014 exam dates, read once for everyone',
       anchor: { file: 'schema.sql', sql: 'public.exam_deadlines' },
       note: 'Like job_checks, a fact about the thing and not the person: an exam\u2019s last date. Written every 4 days by the edge function\u2019s exam_refresh (service key only, from .github/workflows/exams.yml), one body per call, keeping only a date or a closed cycle whose quote passed _shared/deadline.js. The app lays it on deadline rows of known bodies (applyExamCorpus) and reads pages per person only for the rest.' },
+    'st.cos':     { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'company_stats \u2014 who is hiring, read once for everyone',
+      anchor: { file: 'schema.sql', sql: 'public.company_stats' },
+      note: 'Facts about a company\u2019s hiring that the index and job_checks already hold: roles open, new this week, how long roles stay up, titles posted more than once, a name-rule agency flag. Rebuilt after every nightly crawl (refresh_company_stats, from refresh.sh); the app reads it with company_stats_for(names) and hands the facts to the scorer as hiring.' },
     'st.checks':  { diagram: 'storage', group: 'Supabase', kind: 'db', label: 'job_checks \u2014 is the posting still listed',
       anchor: { file: 'schema.sql', sql: 'public.job_checks' },
       note: 'The one table here that is not per-user, and that is the point: whether a posting is still listed is a fact about the posting, so checking it once serves everyone who holds it. Written by scripts/index/verify.js through the service role; readable by any signed-in user and writable by none, since there is no user_id to scope by and a job_key is only a url. Liveness is a set difference over the boards\u2019 own daily indexes, never a fetch \u2014 every job url sampled returned 403, and naukri.com/robots.txt disallows AI crawlers outright.' },
@@ -499,6 +502,7 @@ module.exports = {
     ...['packs', 'board', 'report', 'llm', 'judge', 'judgeBatch', 'mantiks', 'fill', 'pulse', 'page', 'render', 'places', 'idxsearch', 'apStart', 'apStat', 'apItems', 'apAbort', 'order', 'verify']
       .map(a => ({ from: 'sv.switch', to: `sv.${a}` })),
     { from: 'st.index', to: 'st.checks', label: 'still listed?' },
+    { from: 'st.index', to: 'st.cos', label: 'nightly, by company' }, { from: 'st.checks', to: 'st.cos', label: 'how long, still open' },
     { from: 'sv.idxsearch', to: 'st.search', label: 'search_index()' },
     { from: 'st.search', to: 'st.index', label: 'title match, deduped' },
 
@@ -578,6 +582,9 @@ module.exports = {
      needs a reason: "we forgot" and "it does not belong" must not look alike. */
   outOfScope: {
     'schema.sql objects': {
+      'public.company_key': 'the spelling rule inside company_stats (st.cos), not a step of its own',
+      'public.refresh_company_stats': 'the nightly rebuild of company_stats (st.cos), drawn as its two incoming edges',
+      'public.company_stats_for': 'the app\u2019s read of company_stats (st.cos); it changes nothing',
       'public.delete_my_data': 'account deletion, not the job pipeline — and it is declared twice in schema.sql, so it could not be anchored unambiguously anyway',
       'public.handle_new_user': 'fires on account creation, never on a job',
       'public.username_available': 'sign-up, not ingestion',
