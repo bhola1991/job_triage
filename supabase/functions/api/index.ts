@@ -355,6 +355,7 @@ function noticeLinks(page: { url: string; links: { href: string; text: string; p
    compass's actor bills per place scraped ($0.004 at our tier) with a $0.50
    floor it insists on as the run's ceiling; 30 places is about $0.12. */
 const PLACES_ACTOR = "compass~crawler-google-places";
+const PLACES_OFF = true;   // see places_start
 /* A real browser for the official pages a plain fetch cannot read: IBPS, WBPSC
    and WBPRB refuse the connection, SSC is a script-built app (2026-10-24).
    apify~rag-web-browser bills per page fetched ($0.00228 at our tier); run
@@ -679,12 +680,19 @@ const SCRAPERS: Record<string, {
    the Google run costs per request, so a free search skips it. */
 // linkedin is gone (see SCRAPERS). pricing.html must not promise it.
 const FREE_SCRAPERS = ["indeed", "naukri"];
+/* Stopped 2026-11-02, by the owner's rule: no scraping a site whose terms forbid
+   it. Each of these reads a board that says no (Indeed, Naukri, Instahyre /
+   Cutshort / Foundit, Upwork). They stay defined so a run already started can
+   still be collected; none starts again. Permission was asked of the Indian
+   boards; one that says yes comes back through what it offers (a feed, an API),
+   not through these actors. */
+const STOPPED = new Set(["indeed", "naukri", "indiatech", "upwork"]);
 
 async function startScrapers(user: string, c: Ctx, only?: string[], maxRows?: number) {
   const errors: string[] = [];
   const started = await Promise.all(Object.entries(SCRAPERS)
     .map(([source, s]) => [source, s,
-      (!s.india || c.cc === "in") && (!only || only.includes(source))
+      !STOPPED.has(source) && (!s.india || c.cc === "in") && (!only || only.includes(source))
         ? Math.min(rowsFor(s.modes, c.mode), maxRows ?? Infinity) : 0] as const)
     // rows 0 = wrong country, a site this track's mode has nothing to find on,
     // or a free search. Not an error and not a failed source: it was never asked.
@@ -1817,6 +1825,11 @@ async function handle(req: Request): Promise<Response> {
          cover it; refunded if the run does not start. Polled and collected with
          apify_status / apify_items like any other run (source "places"). */
       case "places_start": {
+        /* Off since 2026-11-02: Google Maps' terms forbid scraping it. The app
+           now links each kind of place to a search on Google Maps itself; the
+           official Places API is the way back, if it is ever paid for. Refused
+           before spend(), so nobody is charged. */
+        if (PLACES_OFF) throw new Http(410, "Places near you are found on Google Maps itself now.");
         const kinds = (Array.isArray(b.kinds) ? b.kinds : []).map((k: unknown) => String(k).trim().slice(0, 60)).filter(Boolean).slice(0, 3);
         const where = String(b.where || "").trim().slice(0, 100);
         if (!kinds.length || !where) throw new Http(400, "kinds of place and where");

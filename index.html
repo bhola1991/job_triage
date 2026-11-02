@@ -4022,12 +4022,18 @@ Which kinds of PLACE near them hire for it, as Google Maps search words (for exa
 Return ONLY a JSON object, no preamble, no markdown fences: {"kinds":["", "", ""],"role":""}`, 2000, 'flash'));
   const kinds=(d.kinds||[]).map(String).filter(Boolean).slice(0,3);
   if(!kinds.length) return [];
-  const run=await hosted('places_start',{ kinds, where });
-  if(run && run.balance!=null) CREDITS=run;
-  const items=await apifyRun('', {}, { every:8000, cap:90, runId:run.id, source:'places', label:'Places near you' });
-  const seen=new Set();
-  return (items||[]).filter(x=>x && x.title && x.url && !x.permanentlyClosed && !seen.has(x.url) && seen.add(x.url))
-    .map(x=>placeRow(x, trk, String(d.role||'')));
+  /* Google Maps is not read for you any more (2026-11-02): its terms forbid
+     scraping it, and the official Places API is a decision not yet taken. So
+     each kind of place is one row whose link opens that search on Google Maps
+     itself, and the person picks the places they can walk to. No charge.
+     placeRow stays for the day places come back through the official API. */
+  const role=String(d.role||'').trim(), near=where.split(',')[0];
+  return kinds.map(k=>Object.assign(blank(), {
+    title: role||trk.label||'Work here', company: `${k} · near ${near}`.slice(0,120), location: where,
+    url: 'https://www.google.com/maps/search/?api=1&query='+encodeURIComponent(`${k} in ${where}`),
+    channel:'place', source:'Google Maps search', dir:trk.id,
+    description:`Open the map, pick the ${k} places you can walk to, and ask for ${role?'the '+role:'work'} in person or by phone.`,
+    ai_score:'60', ai_reachability:'60', ai_confidence:'low' }));
 }
 /* Once per direction and route, on its own and in the background, alongside
    the board fill: the routes a direction leans on fill themselves too. More
@@ -8095,8 +8101,8 @@ function renderApp(){
           ${busy?'<span class="spin"></span> Searching…':'Search the job boards'}</button>
         ${(trk.boards||[]).length
           ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>
-             <p class="hint">The shared index, LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork, job APIs, plus these specialist boards. New postings only, every job scored.</p>`
-          : `<p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs. New postings only, every job scored.</p>`}
+             <p class="hint">The shared index, company career pages and job APIs, plus these specialist boards. New postings only, every job scored.</p>`
+          : `<p class="hint">The shared index, company career pages and job APIs. New postings only, every job scored.</p>`}
         <div id="searchInfo" class="hint"></div>
         ${busy && STOP===false ? `<button class="btn-sm" id="btnStop" style="width:100%;margin-top:9px">Stop search — keep what's found so far</button>` : ''}
         ${offer
@@ -8104,7 +8110,7 @@ function renderApp(){
                Retry live boards — ${BOARD_COST} credits</button>
              ${(trk.boards||[]).length
                ? `<div class="chips" style="margin-top:8px">${trk.boards.slice(0,6).map(b=>`<span class="chip">${esc(b)}</span>`).join('')}</div>` : ''}
-             <p class="hint">LinkedIn, Indeed, Naukri, Instahyre, Foundit, Upwork and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
+             <p class="hint">Company career pages and job APIs${(trk.boards||[]).length?', plus these specialist boards':''}. Covers the last few days the index has not caught up with yet.</p>`
           : ''}
         <ol id="searchLive" class="hint" style="margin:6px 0 0;padding-left:18px"></ol>
 
