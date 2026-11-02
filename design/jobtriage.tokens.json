@@ -161,6 +161,16 @@
         "type": "color",
         "description": "Hints and eyebrow labels"
       },
+      "accent": {
+        "value": "#ECECE8",
+        "type": "color",
+        "description": "The one fill-weight button, and the focus ring. Hueless on purpose: ink in, so it can never be mistaken for a status colour. Not a status: a row may carry a status edge and this button together"
+      },
+      "on-accent": {
+        "value": "#111315",
+        "type": "color",
+        "description": "Text on an accent fill"
+      },
       "go": {
         "value": "#4CC76B",
         "type": "color",
@@ -314,6 +324,16 @@
         "value": "#6F5E53",
         "type": "color",
         "description": "Hints and eyebrow labels"
+      },
+      "accent": {
+        "value": "#211A16",
+        "type": "color",
+        "description": "The one fill-weight button, and the focus ring. Hueless on purpose: ink in, so it can never be mistaken for a status colour. Not a status: a row may carry a status edge and this button together"
+      },
+      "on-accent": {
+        "value": "#FCF1E7",
+        "type": "color",
+        "description": "Text on an accent fill"
       },
       "go": {
         "value": "#1C6B38",
