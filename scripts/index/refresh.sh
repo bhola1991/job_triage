@@ -104,6 +104,18 @@ node --max-old-space-size=4096 scripts/index/verify.js \
   scripts/index/naukri.jsonl scripts/index/index.jsonl "${JSONLD[@]}" \
   --expired scripts/index/expired.jsonl --prune 30 $PUSH
 
+# ── company hiring signals ───────────────────────────────────────────────────
+# public.company_stats, rebuilt from today's index and liveness (roles open,
+# new this week, the same title posted more than once). One SQL call, ~10s.
+# A failure keeps yesterday's table and does not fail the night.
+if [ -z "$DRY" ]; then
+  say "company signals"
+  curl -sS -f -m 240 -X POST "$SUPABASE_URL/rest/v1/rpc/refresh_company_stats" \
+    -H "apikey: $SUPABASE_SERVICE_ROLE_KEY" -H "Authorization: Bearer $SUPABASE_SERVICE_ROLE_KEY" \
+    -H 'Content-Type: application/json' -d '{}' && echo " companies" \
+    || echo "  company signals not rebuilt; yesterday's stay"
+fi
+
 # ── is the live system actually working? ────────────────────────────────────
 # Last, and it decides this script's exit code. Everything above reports its
 # own step; nothing until now asked whether the SYSTEM is healthy -- and on
