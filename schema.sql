@@ -714,6 +714,8 @@ create table if not exists public.job_index (
 -- of a 500 MB tier -- for one recorded scan in the table's lifetime.
 create index if not exists job_index_source  on public.job_index (source, posted desc nulls last);
 create index if not exists job_index_posted  on public.job_index (posted desc nulls last) where tier = 'full';
+-- heartbeat.js reads the newest row; without this it timed out (2026-11-11).
+create index if not exists job_index_updated on public.job_index (updated_at desc);
 
 -- Shared and non-personal, so the same policy shape as job_checks: readable by
 -- any signed-in user, written only by the service role, and the absence of the

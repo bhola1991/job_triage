@@ -145,6 +145,25 @@ const now = today();
 const first = store.runs === 0;
 store.runs++;
 
+/* The store forgets what the database forgets. --prune N deletes a posting from
+   job_index and job_checks once it has been closed N days; until 2026-11-13 this
+   file kept it anyway, so checks.json held every posting ever seen and on
+   2026-11-11 grew past the longest string V8 will build (RangeError: Invalid
+   string length at the write below). Three nights of liveness were lost to it.
+   Retired sources go too: a source nobody reads any more is never "covered" by
+   a run, so its rows would sit here open forever. naukri-sitemap was retired on
+   2026-11-13 because Naukri's terms forbid crawling it.
+   ponytail: one JSON string; if the live store ever nears ~500 MB again, write it
+   as JSONL instead. */
+const RETIRED = new Set(['naukri-sitemap']);
+const KEEP_DAYS = Number(arg('prune', '')) || 0;
+let forgot = 0;
+for (const [url, j] of Object.entries(store.jobs)) {
+  if (RETIRED.has(j.source) || (KEEP_DAYS && j.closed_on && days(j.closed_on, now) > Math.max(KEEP_DAYS, 7))) {
+    delete store.jobs[url]; forgot++;
+  }
+}
+
 /* How many consecutive absences close a posting. Two, not one: the second run
    is the cheapest evidence there is -- it costs a day -- and it is what tells
    an expiry apart from the index rotating under us. */
@@ -265,7 +284,7 @@ if (unseen) console.log(`  held       ${unseen} (their file or their page range 
 if (waiting) console.log(`  absent     ${waiting} (missing from a source we did read, and not closed until it has been absent ${ABSENT_RUNS_TO_CLOSE} runs running)`);
 if (declared.size) console.log(`  expired    ${expired} (declared by the board)`);
 console.log(`  reposted   ${reposted}`);
-console.log(`\nstore: ${total} job(s) known, ${live} currently listed`);
+console.log(`\nstore: ${total} job(s) known, ${live} currently listed${forgot ? `, ${forgot} forgotten (retired source, or closed over ${KEEP_DAYS}d)` : ''}`);
 console.log(`suspect: ${suspects.length} (open >= ${EVERGREEN_DAYS}d, or reposted >= ${REPOST_MIN}x) -> ${path.relative(ROOT, SUSPECT_OUT)}`);
 if (first) {
   console.log('\nFirst run: everything is "new" and nothing can be closed yet. That is not a');
