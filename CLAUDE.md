@@ -706,6 +706,7 @@ scripts/morning.sh                  heartbeat + read-feedback + insights, summar
 scripts/insights.js                 What each beta tester did and where they stopped, from the tables plus public.activity. Rules and counts, no model. Reads only.
 scripts/selfcheck-routes.js         Stories to pitch / people to ask, from a stubbed model: a person's name is written only when it is in their own network. Mutation-tested.
 scripts/selfcheck-linkedin.js       The LinkedIn archive read as the app reads it, over scripts/fixtures/linkedin-archive.zip (made-up people). Mutation-tested on the privacy rule.
+scripts/selfcheck-verify.js         The liveness store forgets what the database prunes, and every retired source. Mutation-tested.
 scripts/selfcheck-company.js        Company hiring signals: coKey vs public.company_key(), and the words a row shows. Mutation-tested.
 scripts/selfcheck-worker.js         The Worker's two public write routes, and pricing.html's prices against the code. Offline, stubbed env.
 scripts/eval-matcher.js             Matcher metrics against scripts/eval/baseline.json.
@@ -821,6 +822,7 @@ that skill with it rather than every machine being set up by hand.
    node scripts/selfcheck-routes.js     # pitch/people rows; a name only from their own network
    node scripts/selfcheck-linkedin.js   # the LinkedIn archive; message text is never kept
    node scripts/selfcheck-company.js    # company signals: the app and the database spell names alike
+   node scripts/selfcheck-verify.js     # checks.json stays bounded: pruned and retired rows go
    node scripts/selfcheck-tokens.js     # token drift across the four consumers
    node scripts/eval-matcher.js         # matcher metrics vs the committed baseline
    node scripts/eval-routes.js          # how each field's work is got, 12 recorded cases
