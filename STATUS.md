@@ -1,4 +1,164 @@
-# Where this stands — 2026-10-08
+# Where this stands — 2026-11-13
+
+Five weeks, 25 merged PRs. The app got a new look three times over (the drawn
+cast, salmon paper, then v3's ink button), learned to show real jobs before it
+asks for anything, and stopped scraping every site whose terms forbid it. The
+crawl then broke for three nights on a file nobody had ever pruned, and was
+fixed today. Every number below was measured on 2026-11-13; where something is
+not measured it says so.
+
+Project: `kgacahuzaxqkzdcpyboc` · app: <https://jobtriage.in/>
+
+---
+
+## Live in production
+
+| Layer | Version | How it was checked |
+| --- | --- | --- |
+| Frontend | **`3957df3`** (#54, v3) | `deploy.yml` compares the served `index.html` with the commit byte for byte; it passed. |
+| Edge function `api` | **v63**, deployed 2026-11-02 18:06 IST | After the last change to `supabase/functions/` (#59, merged the same day). Not byte-compared this time. |
+| Database | migration `retire_naukri` applied 2026-11-13 | Its delete is confirmed by count (below). That its index and history row exist is inferred, not seen: the Supabase connector timed out on every read. Confirm with the query in "Open items". |
+| `main` | **`3957df3`** | Every change since 2026-10-26 reached it through a PR (#47). |
+
+### The corpus, as it sits
+
+| | 2026-10-08 | 2026-11-13 |
+| --- | --- | --- |
+| `job_index` | 34,801 | **151,513** (151,238 `full`) |
+| ATS boards in `sources.json` | 324 | **367**: greenhouse 155, ashby 99, lever 48, smartrecruiters 38, recruitee 19, workable 8 |
+| `job_checks` | 429,018 | **70,445** (139 closed) after the Naukri rows went |
+| `company_stats` | -- | 25,086 companies (#60) |
+| `exam_deadlines` | -- | 26 exams |
+| `public.jobs` | 402 | **1,851**: 1,798 new, 26 sent, 25 closed, **2 replied** |
+| `profiles` | -- | 13 |
+| `matcher_outcomes` | 10 | **9** |
+
+The corpus grew because the nightly crawl moved to GitHub Actions on
+2026-10-19 (the laptop's timer missed nights asleep). Of 26 runs since then,
+22 succeeded; the four failures were 2026-10-20 (a harvest timeout, since
+made non-fatal) and 11-13 Nov (below).
+
+---
+
+## 2026-11-11 to 11-13: the crawl stopped on a file that only grew
+
+Three nights failed at the last step, `verify.js`, writing `checks.json`:
+`RangeError: Invalid string length`. The file had passed the longest string V8
+will build.
+
+`refresh.sh` passed `--prune 30`, and `prune_index` duly deleted postings
+closed a month from the database. Nothing ever deleted them from the file, so
+`checks.json` held every posting seen since September. And 731,715 of the
+802,000 checks were Naukri sitemap rows -- still crawled every night, although
+#59 had retired Naukri on 2026-11-02 for forbidding it. #59 changed the app,
+the edge function and `pricing.html`; it did not touch `scripts/index/`.
+
+Fixed in #61:
+
+- `refresh.sh` no longer reads Naukri's sitemaps (7 steps -> 5).
+- `verify.js` forgets what the database forgets (closed over `--prune` days,
+  floor 7, as `prune_index`) and every row of a retired source (`RETIRED`).
+- `scripts/selfcheck-verify.js` asserts both, and fails when the prune is
+  removed.
+- Migration `20261113_01_retire_naukri.sql`: deleted the untracked Naukri
+  checks (731,715 -> 160, the ones on someone's list) and indexed
+  `job_index(updated_at desc)`. `heartbeat.js` reads the newest row; that
+  query had been hitting the statement timeout since 11 Nov and now answers in
+  0.4s.
+
+**Two things worth keeping from it.** The Naukri rows never reached
+`job_index`: they are title-only and `push-index.js` refuses thin rows, so no
+user was ever shown one. They cost only the liveness file and the checks table.
+And retiring a source is a change in three places -- the app, the edge
+function, and the crawl -- and the PR that retired this one found two.
+
+**Not yet seen:** the first run of the fix against the real `checks.json`,
+which lives in the private bucket. Tonight's 05:00 run is that test.
+
+---
+
+## What reached users, 2026-10-08 to 11-13
+
+- **Look.** The opening page became the felt-pen drawing of three job seekers
+  and their car (#33-36, #40-46); salmon paper, blush and night (#37); v3 made
+  the one filled button ink instead of green (#54) -- the colour law kept, its
+  rules 1 and 2 amended in `CLAUDE.md`.
+- **First minutes.** Onboarding opens on real jobs before asking for a CV
+  (#48); signed-out visitors can search the index too (#52), rate-limited per
+  address in `usage_events` (#55 -- the first limit counted nothing in
+  production). After onboarding, the rest is asked one step at a time (#51).
+- **New inputs.** The LinkedIn data archive, read in the browser, message text
+  never kept (#53); posts shared in from WhatsApp, Instagram or Facebook (#56).
+- **Company hiring signals** (#60): roles open, new this week, re-posted
+  titles, agency or employer -- shown as one grey line and given to the scorer.
+- **Deploys.** Every change through a branch and a PR (#47); GitHub deploys on
+  every merge as well as Cloudflare, and checks the result (#50); Vercel off.
+
+---
+
+## Where jobs come from now
+
+**The nightly crawl** (the shared index): the 367 ATS boards; Remotive,
+RemoteOK, Arbeitnow, Himalayas and MyCareersFuture (sampled, not
+enumerated); and six sites that publish JobPosting data (placementindia.com,
+indgovtjobs.in, devnetjobsindia.org, devnetjobs.org, charityjob.co.uk,
+agfunder.com).
+
+**A live search**: the index first, then JSearch (Google for Jobs), Adzuna,
+Jooble, Careerjet, USAJOBS, ReliefWeb, Workable, Remotive, RemoteOK, Working
+Nomads, Jobicy and Arbeitnow (EU only); a Google run over specialist boards on
+paid searches. Each API is skipped when its key is not set -- **which keys are
+set was not checked** (`supabase secrets list` returned nothing usable here).
+
+**Stopped by the owner's rule** (no scraping a site whose terms forbid it):
+LinkedIn (2026-10-03); Indeed, Naukri, Instahyre/Cutshort/Foundit, Upwork and
+Google Maps (2026-11-02); Naukri's sitemaps in the crawl (2026-11-13).
+
+**The cost of that rule:** for non-tech work in India the index is now thin.
+Indian employers' own boards, placementindia.com, indgovtjobs.in and JSearch
+carry it. A large Indian board that offers a feed or an API is the biggest
+single gain available.
+
+---
+
+## Open items
+
+| Item | State |
+| --- | --- |
+| **Mantiks: 401** | "API access is not enabled for this user" on every heartbeat. An account setting on their side, not code. `mantiks_contact` has still never run live. |
+| **DeepSeek balance: $4.66** | Falling slowly ($0.08 in three days). When it reached 0 on 2026-10-08, scoring and drafting stopped and nothing said so. |
+| **The fix's first real run** | Tonight, 05:00 IST. `gh workflow run crawl.yml -f dry=false` runs it sooner. |
+| **Migration not read back** | Run: `select indexname from pg_indexes where indexname = 'job_index_updated' union all select version \|\| ' ' \|\| name from supabase_migrations.schema_migrations where name = 'retire_naukri';` -- two rows expected. |
+| **Supabase Preview check always fails** on a PR with a migration | It replays the migrations onto an empty database, and the oldest assumes `public.jobs` exists (the base schema is `schema.sql`, not a migration). #60 and #61 merged through it. Fix it or switch it off, so a red check means something again. |
+| **Two branches never had a PR** | `worktree-loading-states` (2026-10-17, the car driving during waits) and `claude/inspiring-brahmagupta-k0b4l7` (2026-09-14, remember rejected postings). Read each before deleting it: see `finished-work-sits-unmerged` in memory. |
+| `places_start` | Implemented in the edge function, never called by `index.html` since Google Maps was stopped. `pipeline-map --check` warns on it. |
+| From 2026-10-08, **not re-checked** | The reaper (`reap-apify`) inert; `kept_50` wrong on deferred scoring; `judge` with no caller; `handle_new_user()` callable by `anon`. See the old edition's "Drift and open items" below. |
+
+---
+
+## Next, in order
+
+1. **Watch tonight's crawl.** If it passes, the crawl is healthy again.
+2. **Top up DeepSeek** before it reaches zero.
+3. **Mantiks:** enable API access on the account, or drop it from the
+   heartbeat.
+4. **A source for Indian non-tech jobs** that is allowed: a board's own feed
+   or API, asked for, the way #59 left the door open.
+5. **Fix or retire the Supabase Preview check.**
+
+### The decision that is not a task
+
+The same as on 2026-10-08, and sharper: 13 profiles, 26 jobs sent, **2
+replies**, 9 matcher outcomes. The product has grown much faster than the
+evidence that it works. Every claim about the matcher is still agreement
+between models; two replies are the only ground truth in the database.
+
+---
+
+# The 2026-10-08 edition, kept as written
+
+Everything below this line is as it stood on 2026-10-08. Read it as of that
+date; the edition above supersedes it where they disagree.
 
 Six days in which the corpus stopped being a thing that sat in a table and
 became the cheapest source in the product, and in which four bugs were found by
